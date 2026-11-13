@@ -225,5 +225,18 @@
   "Report.Untrusted": "Niezaufane",
   "Report.Empty": "Brak raportów.",
   "Report.TrustNote": "Twój raport jest oznaczony jako niezaufany do czasu weryfikacji.",
-  "Report.Required": "Wybierz mod i wynik."
+  "Report.Required": "Wybierz mod i wynik.",
+  "Account.Title": "Konto",
+  "Account.Subtitle": "Zaloguj się przez Discord, aby korzystać z funkcji społecznościowych.",
+  "Account.Login": "Zaloguj przez Discord",
+  "Account.Logout": "Wyloguj",
+  "Account.LoggedIn": "Zalogowano jako",
+  "Account.NotLoggedIn": "Nie zalogowano",
+  "Account.Waiting": "Oczekiwanie na autoryzację w przeglądarce...",
+  "Account.Success": "Zalogowano przez Discord.",
+  "Account.LoggedOut": "Wylogowano.",
+  "Account.Error": "Nie udało się zalogować. Spróbuj ponownie.",
+  "Account.Cancelled": "Logowanie anulowano.",
+  "Account.Privacy": "Logowanie używa OAuth2 + PKCE (bez sekretu w aplikacji). Tokeny są szyfrowane lokalnie.",
+  "Account.Nav": "Konto"
 }

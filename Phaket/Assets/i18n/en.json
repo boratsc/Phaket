@@ -225,5 +225,18 @@
   "Report.Untrusted": "Untrusted",
   "Report.Empty": "No reports.",
   "Report.TrustNote": "Your report is marked untrusted until verified.",
-  "Report.Required": "Select a mod and a result."
+  "Report.Required": "Select a mod and a result.",
+  "Account.Title": "Account",
+  "Account.Subtitle": "Sign in with Discord to use community features.",
+  "Account.Login": "Sign in with Discord",
+  "Account.Logout": "Sign out",
+  "Account.LoggedIn": "Signed in as",
+  "Account.NotLoggedIn": "Not signed in",
+  "Account.Waiting": "Waiting for authorization in the browser...",
+  "Account.Success": "Signed in with Discord.",
+  "Account.LoggedOut": "Signed out.",
+  "Account.Error": "Sign-in failed. Please try again.",
+  "Account.Cancelled": "Sign-in cancelled.",
+  "Account.Privacy": "Sign-in uses OAuth2 + PKCE (no secret in the app). Tokens are encrypted locally.",
+  "Account.Nav": "Account"
 }

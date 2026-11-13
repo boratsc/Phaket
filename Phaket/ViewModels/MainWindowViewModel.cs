@@ -15,6 +15,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
     public HelpViewModel Help { get; } = new();
+    public AccountsViewModel Accounts { get; } = new();
     public GameViewModel? Game { get; private set; }
     public ModsViewModel? Mods { get; private set; }
     public ProfilesViewModel? Profiles { get; private set; }
@@ -143,6 +144,10 @@ public partial class MainWindowViewModel : ViewModelBase
             case "help":
                 CurrentPage = Help;
                 ActiveNav = "help";
+                break;
+            case "account":
+                CurrentPage = Accounts;
+                ActiveNav = "account";
                 break;
             case "mods":
                 currentGame ??= Library.Games.FirstOrDefault();

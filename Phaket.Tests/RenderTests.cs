@@ -27,6 +27,7 @@ public class RenderTests
     [InlineData("mods", "05-mods-from-library.png")]
     [InlineData("profiles", "06-profiles-from-library.png")]
     [InlineData("help", "08-help.png")]
+    [InlineData("account", "15-account.png")]
     public void Render_sidebar_navigation_from_library(string target, string filename)
     {
         var window = new MainWindow { Width = 1280, Height = 800 };
@@ -42,11 +43,12 @@ public class RenderTests
         Assert.Equal(target, vm.ActiveNav);
         if (target == "mods") Assert.IsType<ModsViewModel>(vm.CurrentPage);
         else if (target == "profiles") Assert.IsType<ProfilesViewModel>(vm.CurrentPage);
-        else Assert.IsType<HelpViewModel>(vm.CurrentPage);
+        else if (target == "help") Assert.IsType<HelpViewModel>(vm.CurrentPage);
+        else Assert.IsType<AccountsViewModel>(vm.CurrentPage);
         Save(window, filename);
         if (target == "mods") vm.Mods!.BackCommand.Execute(null);
         if (target == "profiles") vm.Profiles!.BackCommand.Execute(null);
-        if (target != "help")
+        if (target != "help" && target != "account")
         {
             Assert.IsType<GameViewModel>(vm.CurrentPage);
             Assert.Equal("library", vm.ActiveNav);
