@@ -28,6 +28,10 @@ i logowanie Discord.
 - Recipe Studio (round-trip YAML ↔ model, walidacja, podgląd planu),
 - Ustawienia (język pl-PL/en), Pomoc, Konto (logowanie Discord).
 
+Okładki i hero gier: oficjalne grafiki Steam CDN (`library_600x900_2x`, `library_hero`),
+prawa autorskie wydawców (Innersloth / Iron Gate Studio), wyświetlanie w launcherze.
+Na przyszłość: SteamGridDB / IGDB / RAWG (klucze API) dla gier spoza Steam.
+
 **Elementy MVP:**
 - katalog buildów z backendu (offline-honest, tylko metadane),
 - graf zależności (przechodniość, cykle, konflikty),
