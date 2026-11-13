@@ -33,7 +33,9 @@ public partial class LibraryViewModel : ViewModelBase
         {
             var cover = $"avares://Phaket/Assets/games/{definition.Slug}.png";
             var heroPath = $"avares://Phaket/Assets/games/{definition.Slug}-hero.png";
-            var hero = Avalonia.Platform.AssetLoader.Exists(new Uri(heroPath)) ? heroPath : cover;
+            string hero;
+            try { hero = Avalonia.Platform.AssetLoader.Exists(new Uri(heroPath)) ? heroPath : cover; }
+            catch { hero = cover; } // platform may be unavailable in plain unit tests
             var game = new GameCatalogItem(definition, cover, hero);
             catalog.Add(game);
             Games.Add(game);
