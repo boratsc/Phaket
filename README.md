@@ -3,7 +3,8 @@
 Aplikacja desktopowa **Phaket** (.NET 10 + Avalonia 12.1.6) na Windows i Linux.
 **PoC 0.0.1 „Zagłębie Dąbrowskie”** — lokalny, bezpieczny silnik modowania z wizualnym
 edytorem przepisów (Recipe Studio) oraz elementami MVP: katalog buildów, graf
-zależności, współdzielenie profili, zgłaszanie kompatybilności i wiedza ProtonDB.
+zależności, współdzielenie profili, zgłaszanie kompatybilności, wiedza ProtonDB
+i logowanie Discord.
 
 > PoC potwierdza *uniwersalność i bezpieczeństwo* lokalnego modowania, nie liczbę
 > obsługiwanych gier. Zestaw testowy: Among Us (Unity IL2CPP) i Valheim (Unity Mono).
@@ -25,14 +26,16 @@ zależności, współdzielenie profili, zgłaszanie kompatybilności i wiedza Pr
 - Widok gry (hero, status, Graj/Instaluj/Mody/Kopia/Szczegóły),
 - Mody, Profile, Kopie zapasowe, Kompatybilność (ProtonDB), Instalacja (stepper),
 - Recipe Studio (round-trip YAML ↔ model, walidacja, podgląd planu),
-- Ustawienia (język pl-PL/en), Pomoc.
+- Ustawienia (język pl-PL/en), Pomoc, Konto (logowanie Discord).
 
 **Elementy MVP:**
 - katalog buildów z backendu (offline-honest, tylko metadane),
 - graf zależności (przechodniość, cykle, konflikty),
 - współdzielenie profili (export/import z podglądem diff; import tworzy szkic),
 - zgłaszanie kompatybilności (zaufane/niezaufane rozdzielone),
-- import zrzutu ProtonDB (ODbL), bezpieczne opcje uruchomienia (plan → zgoda → backup → cofnij).
+- import zrzutu ProtonDB (ODbL), bezpieczne opcje uruchomienia (plan → zgoda → backup → cofnij),
+- logowanie Discord (OAuth2 + PKCE, publiczny klient bez sekretu w aplikacji; client_id
+  z publicznego config Clair; tokeny szyfrowane: Windows DPAPI / Linux AES-GCM).
 
 ## Wymagania
 
@@ -153,8 +156,9 @@ backups, compatibility, install stepper, Recipe Studio, settings, help) and MVP 
 (build catalog, dependency graph, profile sharing, compatibility reporting, ProtonDB
 ODbL import, safe launch options). .NET 10 + Avalonia 12.1.6, Windows + Linux (XWayland
 default, native Wayland opt-in without AT-SPI). pl-PL/en localization. ~210 tests +
-headless UI + Skia renders; CI on ubuntu-26.04 + windows-latest. Chat/accounts are MVP
-0.1 (out of PoC scope). Licensed LGPL-3.0-or-later; OMRL/ADR-038 approval pending
+headless UI + Skia renders; CI on ubuntu-26.04 + windows-latest. Chat is MVP 0.1 (out of
+PoC scope); Discord sign-in (OAuth2+PKCE, SUSModder/Clair pattern) is implemented.
+Licensed LGPL-3.0-or-later; OMRL/ADR-038 approval pending
 (blocks public release only).
 
 ## Licencja / License
