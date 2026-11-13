@@ -7,7 +7,8 @@ public sealed record PlanFacts(
     string Store,
     string? GameVersion,
     IReadOnlySet<string> Capabilities,
-    Func<string, bool> FileExists);
+    Func<string, bool> FileExists,
+    IReadOnlyDictionary<string, string>? LoaderVersions = null);
 
 public static class ConditionEvaluator
 {
