@@ -25,6 +25,7 @@ public partial class InstallViewModel : ViewModelBase
     private CancellationTokenSource? cancellation;
     private PlanExecutor? executor;
     private string? profileRoot;
+    private string? sandboxRoot;
     private ExecutionJournal? journal;
 
     public InstallViewModel(GameCatalogItem game, Action back)
@@ -52,13 +53,22 @@ public partial class InstallViewModel : ViewModelBase
         for (var i = 0; i < Steps.Length; i++) { Steps[i].IsComplete = i + 1 < CurrentStep; Steps[i].IsActive = i + 1 == CurrentStep; }
     }
 
-    [RelayCommand] private void Back() { if (!IsRunning) back(); }
-    [RelayCommand] private void Cancel() { if (IsRunning) cancellation?.Cancel(); else back(); }
+    [RelayCommand] private void Back() { if (!IsRunning) { CleanupSandbox(); back(); } }
+    [RelayCommand] private void Cancel() { if (IsRunning) cancellation?.Cancel(); else { CleanupSandbox(); back(); } }
+
+    private void CleanupSandbox()
+    {
+        if (sandboxRoot is null) return;
+        try { if (Directory.Exists(sandboxRoot)) Directory.Delete(sandboxRoot, recursive: true); }
+        catch { /* best effort: temp sandbox cleanup */ }
+        sandboxRoot = null; profileRoot = null; executor = null; journal = null;
+    }
 
     [RelayCommand]
     private async Task StartAsync()
     {
         if (!CanStart) return;
+        CleanupSandbox();
         IsRunning = true; IsDone = false; CurrentStep = 2; Progress = 0; StatusMessage = "";
         foreach (var item in Checklist) { item.IsComplete = false; item.IsActive = false; }
         Checklist[0].IsActive = true;
@@ -71,6 +81,7 @@ public partial class InstallViewModel : ViewModelBase
                 var definition = GameDefinitions.LoadAll().First(g => g.Slug == game.Definition.Slug);
                 token.ThrowIfCancellationRequested();
                 var root = Directory.CreateTempSubdirectory("phaket-install-").FullName;
+                sandboxRoot = root;
                 var gameRoot = Path.Combine(root, "game");
                 profileRoot = Path.Combine(root, "profile");
                 var staging = Path.Combine(root, "staging");
@@ -127,6 +138,7 @@ public partial class InstallViewModel : ViewModelBase
             await Task.Run(() => executor.Rollback(journal));
             journal = null; IsDone = false; CurrentStep = 2; Progress = 0; StatusMessage = "";
             foreach (var item in Checklist) { item.IsComplete = false; item.IsActive = false; }
+            CleanupSandbox();
         }
         catch (Exception ex) { StatusMessage = ex.Message; }
         finally { IsRunning = false; OnPropertyChanged(nameof(CanRollback)); OnPropertyChanged(nameof(CanStart)); }

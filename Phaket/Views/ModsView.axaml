@@ -39,7 +39,7 @@
                 <TextBlock Classes="muted" Text="{Binding [Mods.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
             </StackPanel>
             <TextBox Grid.Column="1" Width="220" Margin="0,0,12,0" VerticalAlignment="Center"
-                     Text="{Binding SearchText}" Watermark="{Binding [Mods.Search], Source={x:Static services:LocalizationService.Instance}}"
+                     Text="{Binding SearchText}" PlaceholderText="{Binding [Mods.Search], Source={x:Static services:LocalizationService.Instance}}"
                      AutomationProperties.Name="{Binding [Mods.Search], Source={x:Static services:LocalizationService.Instance}}" />
             <Button Grid.Column="2" Classes="outline" Command="{Binding AddModCommand}" VerticalAlignment="Center"
                     AutomationProperties.Name="{Binding [Mods.Add], Source={x:Static services:LocalizationService.Instance}}">

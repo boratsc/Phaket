@@ -112,8 +112,25 @@ public sealed class ProfileStore
         return profile;
     }
 
-    public void Save() =>
-        File.WriteAllText(profilesPath, JsonSerializer.Serialize(data, Options));
+    // Adds a profile with its mods in a single atomic save (import path), so a
+    // failure cannot leave an empty draft.
+    public GameProfile AddProfile(string gameId, string name, IEnumerable<ModEntry> mods)
+    {
+        var d = For(gameId);
+        var profile = new GameProfile { Name = name, Mods = mods.ToList() };
+        d.Profiles.Add(profile);
+        d.ActiveProfileId ??= profile.Id;
+        data[gameId] = d;
+        Save();
+        return profile;
+    }
+
+    public void Save()
+    {
+        var temp = profilesPath + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(data, Options));
+        File.Move(temp, profilesPath, overwrite: true);
+    }
 
     public IReadOnlyList<BackupEntry> Backups(string gameId)
     {

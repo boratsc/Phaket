@@ -104,9 +104,8 @@ public partial class ShareViewModel(GameCatalogItem game, Action back) : ViewMod
         try
         {
             var store = new ProfileStore();
-            var profile = store.AddProfile(game.Definition.Slug, incoming.ProfileName + " (import)");
-            profile.Mods.AddRange(incoming.Mods.Select(m => new ModEntry { Name = m.Name, Version = m.Version }));
-            store.Save();
+            store.AddProfile(game.Definition.Slug, incoming.ProfileName + " (import)",
+                incoming.Mods.Select(m => new ModEntry { Name = m.Name, Version = m.Version }));
             incoming = null;
             HasPreview = false;
             StatusMessage = LocalizationService.Instance["Share.Imported"];
