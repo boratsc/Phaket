@@ -1,6 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Pakhet.App"
+             x:Class="Phaket.App"
              RequestedThemeVariant="Default">
     <!-- "Default" follows the system light/dark variant; "Dark" and "Light" are also available. -->
     <Application.Styles>

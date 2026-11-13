@@ -2,11 +2,11 @@ using Avalonia;
 using Avalonia.Automation.Peers;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Pakhet;
+using Phaket;
 
-[assembly: AvaloniaTestApplication(typeof(Pakhet.Tests.TestAppBuilder))]
+[assembly: AvaloniaTestApplication(typeof(Phaket.Tests.TestAppBuilder))]
 
-namespace Pakhet.Tests;
+namespace Phaket.Tests;
 
 public class TestAppBuilder
 {
@@ -22,9 +22,9 @@ public class MainWindowTests
         var window = new MainWindow();
         window.Show();
 
-        Assert.Equal("Pakhet", window.Title);
+        Assert.Equal("Phaket", window.Title);
         // Czytniki ekranu widzą tytuł okna przez automation peer (UIA/AT-SPI).
-        Assert.Equal("Pakhet", new WindowAutomationPeer(window).GetName());
+        Assert.Equal("Phaket", new WindowAutomationPeer(window).GetName());
 
         window.Close();
     }

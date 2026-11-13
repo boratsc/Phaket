@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace Pakhet;
+namespace Phaket;
 
 internal static class Program
 {
@@ -15,10 +15,10 @@ internal static class Program
         var builder = AppBuilder.Configure<App>().UsePlatformDetect();
 
         // Natywny Wayland (Avalonia 12.1+) jest eksperymentalny i nie ma jeszcze backendu AT-SPI,
-        // więc domyślnie X11/XWayland z pełną dostępnością. Opt-in: PAKHET_NATIVE_WAYLAND=1;
+        // więc domyślnie X11/XWayland z pełną dostępnością. Opt-in: PHAKET_NATIVE_WAYLAND=1;
         // UseWaylandWithFallback wraca do X11, gdy kompozytor Wayland jest niedostępny.
         if (OperatingSystem.IsLinux() &&
-            Environment.GetEnvironmentVariable("PAKHET_NATIVE_WAYLAND") == "1")
+            Environment.GetEnvironmentVariable("PHAKET_NATIVE_WAYLAND") == "1")
         {
             builder = builder.UseWaylandWithFallback();
         }

@@ -1,6 +1,6 @@
-# Pakhet Desktop
+# Phaket Desktop
 
-Minimalny szkielet aplikacji desktopowej **Pakhet** (.NET 10 + Avalonia 12.1.6) na Windows
+Minimalny szkielet aplikacji desktopowej **Phaket** (.NET 10 + Avalonia 12.1.6) na Windows
 i Linux. Zakres PoC 0.0.1: sam szkielet okna — bez funkcji produktu (silnik przepisów
 i Recipe Studio powstaną osobno).
 
@@ -14,12 +14,12 @@ i Recipe Studio powstaną osobno).
 ## Uruchomienie lokalne
 
 ```bash
-dotnet run --project Pakhet          # uruchomienie aplikacji
+dotnet run --project Phaket          # uruchomienie aplikacji
 dotnet build                         # build całej solucji
 dotnet test                          # testy headless (nie wymagają sesji graficznej)
 ```
 
-Projekt aplikacji: `Pakhet/Pakhet.csproj`, testy: `Pakhet.Tests/Pakhet.Tests.csproj`.
+Projekt aplikacji: `Phaket/Phaket.csproj`, testy: `Phaket.Tests/Phaket.Tests.csproj`.
 
 ## Linux: Wayland vs XWayland
 
@@ -31,7 +31,7 @@ backendu AT-SPI** (zweryfikowane w źródłach 12.1.6: `WaylandPlatform` nie ini
 Natywny Wayland można włączyć warunkowo (opt-in):
 
 ```bash
-PAKHET_NATIVE_WAYLAND=1 dotnet run --project Pakhet
+PHAKET_NATIVE_WAYLAND=1 dotnet run --project Phaket
 ```
 
 Wtedy `UseWaylandWithFallback()` (z pakietu `Avalonia.Wayland`) łączy się bezpośrednio
@@ -78,9 +78,9 @@ pozostają niezależne od języka.
 ## Struktura
 
 ```
-Pakhet/            aplikacja (Program.cs, App.axaml, MainWindow.axaml, app.manifest)
-Pakhet.Tests/      testy headless xUnit v3 (Avalonia.Headless.XUnit)
-Pakhet.slnx        solucja (build/test z katalogu głównego)
+Phaket/            aplikacja (Program.cs, App.axaml, MainWindow.axaml, app.manifest)
+Phaket.Tests/      testy headless xUnit v3 (Avalonia.Headless.XUnit)
+Phaket.slnx        solucja (build/test z katalogu głównego)
 ```
 
 Licencja: plik `LICENSE` (bez zmian).

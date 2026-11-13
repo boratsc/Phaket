@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace Pakhet;
+namespace Phaket;
 
 public partial class MainWindow : Window
 {

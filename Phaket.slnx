@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Phaket.Tests/Phaket.Tests.csproj" />
+  <Project Path="Phaket/Phaket.csproj" />
+</Solution>
