@@ -34,7 +34,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void DeltaSyncAppliesUpsertsAndRevokes()
+    public async Task DeltaSyncAppliesUpsertsAndRevokes()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -44,7 +44,7 @@ public class CatalogClientTests
                   {"revision":1,"type":"upsert","buildId":"b-1","payload":{{BuildJson("b-1")}}},
                   {"revision":2,"type":"upsert","buildId":"b-2","payload":{{BuildJson("b-2")}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Equal(2, store.GetBuilds("among-us").Count);
             Assert.Equal(2, store.Revision);
 
@@ -52,7 +52,7 @@ public class CatalogClientTests
                 {"revision":3,"nextSince":3,"hasMore":false,"changes":[
                   {"revision":3,"type":"revoke","buildId":"b-1","payload":{}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Single(store.GetBuilds("among-us"));
             Assert.DoesNotContain(store.GetBuilds("among-us"), b => b.Id == "b-1");
             Assert.Equal(3, store.Revision);
@@ -61,7 +61,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void PaginationFollowsNextSince()
+    public async Task PaginationFollowsNextSince()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -74,7 +74,7 @@ public class CatalogClientTests
                 {"revision":2,"nextSince":2,"hasMore":false,"changes":[
                   {"revision":2,"type":"upsert","buildId":"b-2","payload":{{BuildJson("b-2")}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Equal(2, store.GetBuilds("among-us").Count);
             Assert.Contains(transport.Requests, r => r.Contains("since=1"));
         }
@@ -82,7 +82,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void ContinuityLossTriggersFullSnapshot()
+    public async Task ContinuityLossTriggersFullSnapshot()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -92,7 +92,7 @@ public class CatalogClientTests
             transport.Responses.Enqueue(new CatalogResponse(200, "\"9:cursor:100\"", $$"""
                 {"revision":9,"items":[{{BuildJson("b-9")}}],"nextCursor":null}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Single(store.GetBuilds("among-us"));
             Assert.Equal(9, store.Revision);
         }
@@ -100,7 +100,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void FullSyncStoresEtagAndDeltaSyncIsRevisionBased()
+    public async Task FullSyncStoresEtagAndDeltaSyncIsRevisionBased()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -108,7 +108,7 @@ public class CatalogClientTests
             transport.Responses.Enqueue(new CatalogResponse(200, "\"9::100\"", $$"""
                 {"revision":9,"items":[{{BuildJson("b-9")}}],"nextCursor":null}
                 """));
-            client.FullSyncAsync().Wait();
+            await client.FullSyncAsync();
             Assert.Equal("\"9::100\"", store.ETag);
             Assert.Equal(9, store.Revision);
 
@@ -116,14 +116,14 @@ public class CatalogClientTests
             transport.Responses.Enqueue(new CatalogResponse(200, null, """
                 {"revision":9,"nextSince":9,"hasMore":false,"changes":[]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.DoesNotContain(transport.Requests, r => r.Contains("etag="));
         }
         finally { store.Dispose(); Directory.Delete(dir, true); }
     }
 
     [Fact]
-    public void InterruptedFullSyncKeepsPreviousCatalog()
+    public async Task InterruptedFullSyncKeepsPreviousCatalog()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -133,7 +133,7 @@ public class CatalogClientTests
                 {"revision":1,"nextSince":1,"hasMore":false,"changes":[
                   {"revision":1,"type":"upsert","buildId":"b-old","payload":{{BuildJson("b-old")}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Single(store.GetBuilds("among-us"));
 
             // Full resync: first page ok, second page fails -> nothing committed.
@@ -141,7 +141,7 @@ public class CatalogClientTests
                 {"revision":2,"items":[{{BuildJson("b-new1")}}],"nextCursor":"b-new1"}
                 """));
             transport.Responses.Enqueue(new CatalogResponse(503, null, null));
-            Assert.Throws<HttpRequestException>(() => client.FullSyncAsync().GetAwaiter().GetResult());
+            await Assert.ThrowsAsync<HttpRequestException>(() => client.FullSyncAsync());
             Assert.Single(store.GetBuilds("among-us"));
             Assert.Equal("b-old", store.GetBuilds("among-us")[0].Id);
             Assert.Equal(1, store.Revision);
@@ -150,7 +150,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void OfflineReadsReturnCachedBuildsWithSyncDate()
+    public async Task OfflineReadsReturnCachedBuildsWithSyncDate()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -159,13 +159,13 @@ public class CatalogClientTests
                 {"revision":1,"nextSince":1,"hasMore":false,"changes":[
                   {"revision":1,"type":"upsert","buildId":"b-1","payload":{{BuildJson("b-1")}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             var syncedAt = store.LastSync;
             Assert.NotNull(syncedAt);
 
             // Network gone: sync throws, but cached data remains readable.
             transport.Responses.Enqueue(new CatalogResponse(503, null, null));
-            Assert.Throws<HttpRequestException>(() => client.SyncAsync().GetAwaiter().GetResult());
+            await Assert.ThrowsAsync<HttpRequestException>(() => client.SyncAsync());
             var builds = store.GetBuilds("among-us");
             Assert.Single(builds);
             Assert.Equal(syncedAt, store.LastSync);
@@ -174,7 +174,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void DownloadProposalsExcludeUnavailableBuilds()
+    public async Task DownloadProposalsExcludeUnavailableBuilds()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -184,7 +184,7 @@ public class CatalogClientTests
                   {"revision":1,"type":"upsert","buildId":"b-ok","payload":{{BuildJson("b-ok", "verified")}}},
                   {"revision":2,"type":"upsert","buildId":"b-no","payload":{{BuildJson("b-no", "unavailable")}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             var proposals = store.GetDownloadProposals("among-us");
             Assert.Single(proposals);
             Assert.Equal("b-ok", proposals[0].Id);
@@ -193,7 +193,7 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void StoreFilterWorks()
+    public async Task StoreFilterWorks()
     {
         var (transport, store, client, dir) = Setup();
         try
@@ -204,7 +204,7 @@ public class CatalogClientTests
                   {"revision":1,"type":"upsert","buildId":"b-steam","payload":{{BuildJson("b-steam")}}},
                   {"revision":2,"type":"upsert","buildId":"b-epic","payload":{{epic}}}]}
                 """));
-            client.SyncAsync().Wait();
+            await client.SyncAsync();
             Assert.Single(store.GetBuilds("among-us", "epic"));
             Assert.Equal("b-epic", store.GetBuilds("among-us", "epic")[0].Id);
         }

@@ -188,10 +188,10 @@ public class LegendaryTests
     }
 
     [Fact]
-    public void LaunchDryRunUsesTypedArgumentsNotShell()
+    public async Task LaunchDryRunUsesTypedArgumentsNotShell()
     {
         var cli = new FakeCli();
-        var output = cli.RunAsync(["launch", "AmongUsEpicId", "--dry-run", "--offline"], TimeSpan.FromSeconds(30), CancellationToken.None).Result;
+        var output = await cli.RunAsync(["launch", "AmongUsEpicId", "--dry-run", "--offline"], TimeSpan.FromSeconds(30), CancellationToken.None);
         Assert.Contains("ok", output);
         Assert.Equal(["launch", "AmongUsEpicId", "--dry-run", "--offline"], cli.LastArguments);
         // No shell metacharacters are interpreted: arguments are a typed list.

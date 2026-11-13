@@ -161,7 +161,7 @@ public class DefinitionTests
     }
 
     [Fact]
-    public void AdapterPlansDryAndExecutesThroughHost()
+    public async Task AdapterPlansDryAndExecutesThroughHost()
     {
         var definition = Load("among-us.yaml");
         using var fixture = new ExecutorFixture();
@@ -180,9 +180,9 @@ public class DefinitionTests
         Assert.Equal(before, fixture.TreeSnapshot()); // dry
 
         var host = new PlanExecutor(fixture.PlanExecutionContext("test.recipe"));
-        var journal = adapter.ApplyPlan(plan, host, CancellationToken.None).Result;
+        var journal = await adapter.ApplyPlan(plan, host, CancellationToken.None);
         Assert.Equal(JournalState.Completed, journal.State);
-        Assert.True(adapter.Verify(facts, profile, host, CancellationToken.None).Result.Succeeded);
+        Assert.True((await adapter.Verify(facts, profile, host, CancellationToken.None)).Succeeded);
         Assert.Equal("Among Us.exe", adapter.BuildLaunchSpec(profile, facts).Executable);
     }
 }
