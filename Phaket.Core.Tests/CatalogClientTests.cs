@@ -100,17 +100,51 @@ public class CatalogClientTests
     }
 
     [Fact]
-    public void ETag304KeepsCache()
+    public void FullSyncStoresEtagAndDeltaSyncIsRevisionBased()
     {
         var (transport, store, client, dir) = Setup();
         try
         {
-            store.SetMeta("revision", "2");
-            store.SetMeta("etag", "\"2::100\"");
-            transport.Responses.Enqueue(new CatalogResponse(304, "\"2::100\"", null));
+            transport.Responses.Enqueue(new CatalogResponse(200, "\"9::100\"", $$"""
+                {"revision":9,"items":[{{BuildJson("b-9")}}],"nextCursor":null}
+                """));
+            client.FullSyncAsync().Wait();
+            Assert.Equal("\"9::100\"", store.ETag);
+            Assert.Equal(9, store.Revision);
+
+            // Delta sync must not send the snapshot ETag to the changes endpoint.
+            transport.Responses.Enqueue(new CatalogResponse(200, null, """
+                {"revision":9,"nextSince":9,"hasMore":false,"changes":[]}
+                """));
             client.SyncAsync().Wait();
-            Assert.Contains(transport.Requests, r => r.Contains("etag="));
-            Assert.NotNull(store.LastSync);
+            Assert.DoesNotContain(transport.Requests, r => r.Contains("etag="));
+        }
+        finally { store.Dispose(); Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void InterruptedFullSyncKeepsPreviousCatalog()
+    {
+        var (transport, store, client, dir) = Setup();
+        try
+        {
+            // Seed an existing catalog at revision 1.
+            transport.Responses.Enqueue(new CatalogResponse(200, null, $$"""
+                {"revision":1,"nextSince":1,"hasMore":false,"changes":[
+                  {"revision":1,"type":"upsert","buildId":"b-old","payload":{{BuildJson("b-old")}}}]}
+                """));
+            client.SyncAsync().Wait();
+            Assert.Single(store.GetBuilds("among-us"));
+
+            // Full resync: first page ok, second page fails -> nothing committed.
+            transport.Responses.Enqueue(new CatalogResponse(200, "\"2:p1\"", $$"""
+                {"revision":2,"items":[{{BuildJson("b-new1")}}],"nextCursor":"b-new1"}
+                """));
+            transport.Responses.Enqueue(new CatalogResponse(503, null, null));
+            Assert.Throws<HttpRequestException>(() => client.FullSyncAsync().GetAwaiter().GetResult());
+            Assert.Single(store.GetBuilds("among-us"));
+            Assert.Equal("b-old", store.GetBuilds("among-us")[0].Id);
+            Assert.Equal(1, store.Revision);
         }
         finally { store.Dispose(); Directory.Delete(dir, true); }
     }

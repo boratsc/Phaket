@@ -64,6 +64,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     {
         if (journal.State is not (JournalState.Approved or JournalState.Interrupted or JournalState.Failed or JournalState.Executing))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"journal state {journal.State} cannot execute"));
+        using var gate = LockInstallation();
         try
         {
             journal = journal with { State = JournalState.Executing };
@@ -77,12 +78,16 @@ public sealed class PlanExecutor : IPlanExecutorHost
         }
         catch (OperationCanceledException)
         {
-            Persist(journal with { State = JournalState.Interrupted });
+            // Reload the latest persisted journal: ExecuteOperation may have
+            // recorded the current operation's intent/backup before failing.
+            var latest = LoadJournal(context.ProfileRoot) ?? journal;
+            Persist(latest with { State = JournalState.Interrupted });
             throw;
         }
         catch
         {
-            Persist(journal with { State = JournalState.Failed });
+            var latest = LoadJournal(context.ProfileRoot) ?? journal;
+            Persist(latest with { State = JournalState.Failed });
             throw;
         }
     }
@@ -159,6 +164,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     public ExecutionJournal Rollback(ExecutionJournal journal, DivergencePolicy policy = DivergencePolicy.Fail)
     {
         if (journal.State == JournalState.RolledBack) return journal;
+        using var gate = LockInstallation();
         var ledger = OwnershipLedger.Load(ledgerPath);
         foreach (var entry in journal.Entries.Reverse())
         {
@@ -219,6 +225,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     // Divergent user edits are detected and require an explicit policy.
     public void Uninstall(string recipeId, DivergencePolicy policy = DivergencePolicy.Fail)
     {
+        using var gate = LockInstallation();
         var ledger = OwnershipLedger.Load(ledgerPath);
         var affected = ledger.ForRecipe(recipeId).Select(e => e.Resource).ToArray();
         foreach (var resource in affected)
@@ -233,6 +240,13 @@ public sealed class PlanExecutor : IPlanExecutorHost
                 if (policy == DivergencePolicy.Skip && File.Exists(path)
                     && entry.CurrentHash is { } expected2 && HashFile(path) != expected2)
                     continue;
+            }
+            else if (policy == DivergencePolicy.Fail && entry.CurrentHash is { } cfgExpected)
+            {
+                // Config keys: detect user edits to the whole file before recompute.
+                var cfgPath = ResourcePath(resource.Split("::", 2)[0]);
+                if (File.Exists(cfgPath) && HashFile(cfgPath) != cfgExpected)
+                    throw new PhaketException(ErrorCodes.JournalDivergence, ("path", cfgPath));
             }
             var remaining = entry.Owners.Where(o => o.RecipeId != recipeId).ToArray();
             ledger.Set(entry with { Owners = remaining });
@@ -254,7 +268,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     private IReadOnlyList<string> PlanArchiveWrites(PlannedOperation operation)
     {
         var source = operation.Kind == "loader.ensure"
-            ? ResolvePackageArtifact(operation.Parameters?["artifact"] ?? "")
+            ? (operation.SourceRef is { Length: > 0 } r ? ResolveSource(r) : ResolvePackageArtifact(operation.Parameters?["artifact"] ?? ""))
             : ResolveSource(operation.SourceRef!);
         var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
         var strip = operation.Parameters?.TryGetValue("stripComponents", out var s) == true ? int.Parse(s) : 0;
@@ -284,6 +298,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
                         ("detail", $"target exists and overwrite policy is '{overwrite}': {target}"));
                 var relative = Relative(target);
                 var backup = CaptureBase(relative, target, ledger);
+                RevalidateWrite(target);
                 faultHook?.Invoke("before-file-write");
                 if (!File.Exists(target) || HashFile(target) != HashFile(source))
                     AtomicCopy(source, target);
@@ -323,7 +338,9 @@ public sealed class PlanExecutor : IPlanExecutorHost
             {
                 var artifactId = parameters.GetValueOrDefault("artifact")
                     ?? throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "loader.ensure missing artifact"));
-                var source = ResolvePackageArtifact(artifactId);
+                var source = operation.SourceRef is { Length: > 0 } srcRef
+                    ? ResolveSource(srcRef)
+                    : ResolvePackageArtifact(artifactId);
                 if (operation.Sha256 is { } expected && HashFile(source) != expected)
                     throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", artifactId));
                 var created = SafeArchive.Extract(source, context.GameRoot, artifactId, 0, destination =>
@@ -364,8 +381,10 @@ public sealed class PlanExecutor : IPlanExecutorHost
                 var layer = entry.Owners.Count == 0 ? 1 : entry.Owners.Max(o => o.Layer) + 1;
                 var updated = entry with { Owners = [.. entry.Owners.Where(o => o.RecipeId != context.RecipeId), NewOwner(operation.OpId, null, value) with { Layer = layer }] };
                 ledger.Set(updated);
+                RevalidateWrite(target);
                 faultHook?.Invoke("before-config-write");
                 WriteConfigValue(target, key, value, format);
+                ledger.Set(ledger.Get(resource)! with { CurrentHash = File.Exists(target) ? HashFile(target) : null });
                 ledger.Save(ledgerPath);
                 return (null, null, null);
             }
@@ -538,6 +557,26 @@ public sealed class PlanExecutor : IPlanExecutorHost
         throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", segments[0]));
     }
 
+    // Re-checks write boundaries immediately before a mutation (spec §3):
+    // narrows the plan->execute symlink-swap window. Residual TOCTOU between
+    // this check and the write is a documented PoC limitation (no openat-style
+    // dirfd operations yet).
+    private void RevalidateWrite(string target)
+    {
+        var gameRoot = Path.GetFullPath(context.GameRoot);
+        var full = Path.GetFullPath(target);
+        if (!PathBoundary.IsWithin(gameRoot, full)) return; // profile/staging handled by their own roots
+        var relative = Relative(target);
+        if (!context.Game.AllowsWrite(relative))
+            throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", target));
+        var real = PathBoundary.Resolve(gameRoot, relative);
+        var realRelative = real.StartsWith(Path.GetFullPath(gameRoot), StringComparison.Ordinal)
+            ? real[Path.GetFullPath(gameRoot).Length..].TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/')
+            : relative;
+        if (!context.Game.AllowsWrite(realRelative))
+            throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", target));
+    }
+
     private string Relative(string absolute)
     {
         var full = Path.GetFullPath(absolute);
@@ -644,6 +683,22 @@ public sealed class PlanExecutor : IPlanExecutorHost
         var temp = path + ".phaket-tmp";
         File.WriteAllText(temp, content);
         File.Move(temp, path, overwrite: true);
+    }
+
+    // Serializes transactions per installation (single-machine PoC guard).
+    private FileStream LockInstallation()
+    {
+        Directory.CreateDirectory(stateRoot);
+        var path = Path.Combine(stateRoot, ".lock");
+        try
+        {
+            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException)
+        {
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", "another transaction is active for this installation"));
+        }
     }
 
     private static string HashFile(string path) =>

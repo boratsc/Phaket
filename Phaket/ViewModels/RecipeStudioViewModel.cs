@@ -100,6 +100,11 @@ public partial class RecipeStudioViewModel : ViewModelBase
     }
 
     // One typed model for both views (spec §6.6: single source of truth).
+    // Full parsed recipe kept as the source of truth so visual editing never
+    // drops fields the UI does not expose (when, verify, metadata, hashes,
+    // constraints, extra parameters). Rebuilt on load; merged on save.
+    private Recipe? baseRecipe;
+
     public Recipe BuildRecipe()
     {
         var capabilities = Steps
@@ -107,25 +112,68 @@ public partial class RecipeStudioViewModel : ViewModelBase
             .SelectMany(c => c)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        var game = SelectedGame?.Slug ?? "among-us";
+        var baseMatches = baseRecipe is not null && baseRecipe.Target.Game == game;
+
+        var artifacts = Artifacts.Select(a =>
+        {
+            var orig = baseMatches ? baseRecipe!.Artifacts.FirstOrDefault(x => x.Id == a.Id) : null;
+            return new RecipeArtifact
+            {
+                Id = a.Id,
+                Source = a.Source,
+                Sha256 = orig?.Sha256,
+                SizeBytes = orig?.SizeBytes,
+                Format = orig?.Format ?? "zip",
+            };
+        }).ToArray();
+
+        var steps = Steps.Select(s =>
+        {
+            var orig = baseMatches ? baseRecipe!.Steps.FirstOrDefault(x => x.Id == s.Id) : null;
+            var merged = orig is null
+                ? BuildParameters(s)
+                : MergeParameters(orig.With, BuildParameters(s));
+            return new RecipeStep { Id = s.Id, Use = s.Use, With = merged, When = orig?.When };
+        }).ToArray();
+
+        if (baseMatches)
+        {
+            var b = baseRecipe!;
+            return b with
+            {
+                Id = RecipeId,
+                Version = RecipeVersion,
+                Target = b.Target with { Game = game },
+                Requires = new RecipeRequires
+                {
+                    Capabilities = capabilities.Union(b.Requires?.Capabilities ?? [], StringComparer.Ordinal).ToArray(),
+                    Loaders = b.Requires?.Loaders ?? [],
+                },
+                Artifacts = artifacts,
+                Steps = steps,
+            };
+        }
+
         return new Recipe
         {
             SchemaVersion = "omrl/v0alpha1",
             Id = RecipeId,
             Version = RecipeVersion,
-            Target = new RecipeTarget
-            {
-                Game = SelectedGame?.Slug ?? "among-us",
-                Systems = ["windows", "linux"],
-            },
+            Target = new RecipeTarget { Game = game, Systems = ["windows", "linux"] },
             Requires = new RecipeRequires { Capabilities = capabilities },
-            Artifacts = Artifacts.Select(a => new RecipeArtifact { Id = a.Id, Source = a.Source }).ToArray(),
-            Steps = Steps.Select(s => new RecipeStep
-            {
-                Id = s.Id,
-                Use = s.Use,
-                With = BuildParameters(s),
-            }).ToArray(),
+            Artifacts = artifacts,
+            Steps = steps,
         };
+    }
+
+    // UI-exposed parameters override the original; all other original keys survive.
+    private static IReadOnlyDictionary<string, JsonElement> MergeParameters(
+        IReadOnlyDictionary<string, JsonElement> original, IReadOnlyDictionary<string, JsonElement> exposed)
+    {
+        var merged = new Dictionary<string, JsonElement>(original, StringComparer.Ordinal);
+        foreach (var (key, value) in exposed) merged[key] = value;
+        return merged;
     }
 
     private static IReadOnlyDictionary<string, JsonElement> BuildParameters(StepViewModel step)
@@ -161,6 +209,7 @@ public partial class RecipeStudioViewModel : ViewModelBase
     public void LoadYamlCore(string yaml)
     {
         var recipe = RecipeParser.ParseYaml(yaml);
+        baseRecipe = recipe;
         RecipeId = recipe.Id;
         RecipeVersion = recipe.Version;
         SelectedGame = Games.FirstOrDefault(g => g.Slug == recipe.Target.Game) ?? SelectedGame;
@@ -174,6 +223,7 @@ public partial class RecipeStudioViewModel : ViewModelBase
             if (step.With.TryGetValue("key", out var key)) vm.Key = key.GetString() ?? "";
             if (step.With.TryGetValue("value", out var value)) vm.Value = value.GetString() ?? "";
             if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var artifact)) vm.From = artifact.GetString() ?? "";
+            if (step.Use == "loader.ensure" && step.With.TryGetValue("id", out var loaderId)) vm.Key = loaderId.GetString() ?? "";
             if (step.Use == "profile.activate" && step.With.TryGetValue("profile", out var profile)) vm.To = profile.GetString() ?? "";
             Steps.Add(vm);
         }
@@ -232,6 +282,12 @@ public partial class RecipeStudioViewModel : ViewModelBase
             foreach (var artifact in Artifacts.Where(a => a.Source.StartsWith("package://", StringComparison.Ordinal)))
             {
                 var fileName = artifact.Source["package://".Length..];
+                // Only create fixture files for safe, single-segment names; never
+                // write outside the sandbox package root (traversal/absolute rejected).
+                if (fileName.Length == 0 || fileName.Contains('/') || fileName.Contains('\\')
+                    || fileName.Contains("..") || Path.IsPathRooted(fileName)
+                    || fileName.Any(c => char.IsControl(c) || c == ':'))
+                    continue;
                 File.WriteAllBytes(Path.Combine(packageRoot, fileName), []);
             }
             var definition = SelectedGame ?? Games[0];

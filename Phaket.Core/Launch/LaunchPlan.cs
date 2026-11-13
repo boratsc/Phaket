@@ -71,9 +71,7 @@ public static class LaunchTranslator
 
         foreach (var requirement in strategy.Requirements.Where(r => r.Status != RequirementStatus.Unsupported))
         {
-            if (requirement.Value.Any(char.IsControl))
-                throw new PhaketException(ErrorCodes.ValidationFailed,
-                    ("detail", $"requirement {requirement.Name} contains control characters"));
+            ValidateRequirement(requirement, launcher);
             switch (requirement.Kind)
             {
                 case "dll-override":
@@ -85,23 +83,28 @@ public static class LaunchTranslator
                     {
                         if (current != proposed)
                             conflicts.Add(new LaunchConflict("WINEDLLOVERRIDES", current, proposed));
-                        // Existing user value is preserved; never silently replaced.
+                        // Existing user value is preserved; never silently replaced,
+                        // and not re-emitted into Steam options on conflict.
                     }
                     else
                     {
                         environment["WINEDLLOVERRIDES"] = proposed;
+                        if (launcher == LauncherKind.Steam)
+                            steamParts.Add($"WINEDLLOVERRIDES=\"{steamValue}\"");
                     }
-                    if (launcher == LauncherKind.Steam)
-                        steamParts.Add($"WINEDLLOVERRIDES=\"{steamValue}\"");
                     break;
                 }
                 case "env":
                     if (existing.Environment.TryGetValue(requirement.Name, out var currentEnv) && currentEnv != requirement.Value)
+                    {
                         conflicts.Add(new LaunchConflict(requirement.Name, currentEnv, requirement.Value));
+                    }
                     else
+                    {
                         environment[requirement.Name] = requirement.Value;
-                    if (launcher == LauncherKind.Steam)
-                        steamParts.Add($"{requirement.Name}=\"{requirement.Value}\"");
+                        if (launcher == LauncherKind.Steam)
+                            steamParts.Add($"{requirement.Name}=\"{requirement.Value}\"");
+                    }
                     break;
                 case "game-arg":
                     arguments.Add(requirement.Value);
@@ -120,14 +123,14 @@ public static class LaunchTranslator
         string? steamOptions = null;
         if (launcher == LauncherKind.Steam)
         {
-            // Steam requires %command%; preserve the user's existing options.
+            // Steam requires %command%. Preserve the user's existing options,
+            // including game arguments that appear AFTER %command%.
             var existingOptions = existing.SteamLaunchOptions ?? "";
-            var hasCommand = existingOptions.Contains("%command%", StringComparison.Ordinal);
-            var prefix = hasCommand
-                ? existingOptions.Replace("%command%", "", StringComparison.Ordinal).TrimEnd()
-                : existingOptions.TrimEnd();
+            var idx = existingOptions.IndexOf("%command%", StringComparison.Ordinal);
+            var prefix = idx >= 0 ? existingOptions[..idx].TrimEnd() : existingOptions.TrimEnd();
+            var suffix = idx >= 0 ? existingOptions[(idx + "%command%".Length)..].Trim() : "";
             var merged = string.Join(" ", new[] { prefix }.Concat(steamParts).Where(p => p.Length > 0));
-            steamOptions = (merged + " %command%").TrimStart();
+            steamOptions = (merged + " %command%" + (suffix.Length > 0 ? " " + suffix : "")).TrimStart();
         }
 
         var translation = new LaunchPlanTranslation(
@@ -135,6 +138,26 @@ public static class LaunchTranslator
             BuildCopyInstruction(launcher, environment, steamOptions));
         return new LaunchPlan(strategy.Id, strategy.Revision, strategy.Scope,
             [translation], conflicts, RequiresAcceptance: true);
+    }
+
+    // Untrusted values (e.g. ProtonDB hints) must never become shell code.
+    // Names are restricted to identifier syntax; Steam-bound values reject
+    // shell metacharacters so a copied launch option cannot escape its quotes
+    // or trigger command substitution. Rejected hints require manual review.
+    private static void ValidateRequirement(LaunchRequirement requirement, LauncherKind launcher)
+    {
+        var nameOk = requirement.Kind == "dll-override"
+            ? System.Text.RegularExpressions.Regex.IsMatch(requirement.Name, @"^[A-Za-z_][A-Za-z0-9_.]*$")
+            : System.Text.RegularExpressions.Regex.IsMatch(requirement.Name, @"^[A-Za-z_][A-Za-z0-9_]*$");
+        if (requirement.Kind is "env" or "dll-override" && !nameOk)
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"invalid requirement name: {requirement.Name}"));
+        if (requirement.Value.Any(char.IsControl))
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"requirement {requirement.Name} contains control characters"));
+        if (launcher == LauncherKind.Steam && requirement.Value.Any(c => "\"$`\\;|&<>()".Contains(c)))
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"requirement {requirement.Name} contains shell metacharacters and needs manual review"));
     }
 
     // Fallback when the launcher has no safe write API (ADR-045): the user

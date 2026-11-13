@@ -183,6 +183,67 @@ public class RecipeStudioFlowTests
     }
 
     [Fact]
+    public void RichYamlRoundTripPreservesUnexposedFields()
+    {
+        const string yaml = """
+            schemaVersion: omrl/v0alpha1
+            id: community.test.rich
+            version: 1.0.0
+            metadata:
+              title:
+                pl-PL: Bogaty przepis
+                en: Rich recipe
+            target:
+              game: among-us
+              systems: [windows, linux]
+              constraints:
+                gameVersion: ">=2026.1"
+            requires:
+              capabilities: [archive.extract, file.copy]
+              loaders:
+                - id: bepinex
+                  version: ">=6.0"
+            artifacts:
+              - id: mod-bundle
+                source: package://mod-bundle.zip
+                sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                sizeBytes: 100
+            steps:
+              - id: extract
+                use: archive.extract
+                with:
+                  from: package://mod-bundle
+                  to: staging://mod
+                  stripComponents: 1
+                when:
+                  os: [linux]
+              - id: copy
+                use: file.copy
+                with:
+                  from: staging://mod/Mod.dll
+                  to: game://BepInEx/plugins/Mod.dll
+                  overwrite: replace
+            verify:
+              - use: file.verify
+                with:
+                  path: game://BepInEx/plugins/Mod.dll
+            """;
+        var vm = new RecipeStudioViewModel();
+        vm.LoadYamlCore(yaml);
+        var saved = vm.SaveYamlCore();
+        // Fields the visual editor does not expose must survive the round-trip.
+        Assert.Contains("Bogaty przepis", saved);
+        Assert.Contains("gameVersion", saved);
+        Assert.Contains("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", saved);
+        Assert.Contains("stripComponents", saved);
+        Assert.Contains("overwrite: replace", saved);
+        Assert.Contains("when", saved);
+        Assert.Contains("verify", saved);
+        Assert.Contains("bepinex", saved);
+        Assert.True(vm.RoundTripIsLossless());
+    }
+
+    [Fact]
     public void YamlEditedExternallyLoadsIntoVisualModel()
     {
         const string yaml = """

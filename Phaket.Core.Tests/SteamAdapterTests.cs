@@ -141,6 +141,23 @@ public class SteamAdapterTests
     }
 
     [Fact]
+    public void InstallationIdIsStableAcrossAdapterInstances()
+    {
+        var home = Directory.CreateTempSubdirectory("phaket-steam-").FullName;
+        try
+        {
+            BuildFixtureSteam(home);
+            var id1 = new SteamAdapter([AmongUs]).DetectInstallations("linux", home)
+                .Single(i => i.Manifest.AppId == "945360").Installation.InstallationId;
+            var id2 = new SteamAdapter([AmongUs]).DetectInstallations("linux", home)
+                .Single(i => i.Manifest.AppId == "945360").Installation.InstallationId;
+            Assert.Equal(id1, id2);
+            Assert.StartsWith("steam-945360-", id1);
+        }
+        finally { Directory.Delete(home, recursive: true); }
+    }
+
+    [Fact]
     public void VdfParserHandlesCommentsEscapesAndNesting()
     {
         var node = VdfParser.Parse("""

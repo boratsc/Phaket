@@ -197,7 +197,7 @@ public static class OperationPlanner
                 if (loaderArtifact.Sha256 is { } declared
                     && !string.Equals(declared, observed, StringComparison.OrdinalIgnoreCase))
                     throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", loaderArtifact.Id));
-                return ($"package://{loaderArtifact.Id}", bytes.LongLength, loaderArtifact.Sha256 ?? observed, loaderPath);
+                return ($"package://{Path.GetFileName(loaderPath)}", bytes.LongLength, loaderArtifact.Sha256 ?? observed, loaderPath);
             }
             if (loaderArtifact.Source.StartsWith("https://", StringComparison.Ordinal))
                 return ($"package://{loaderArtifact.Id}", loaderArtifact.SizeBytes, loaderArtifact.Sha256, null);
@@ -222,7 +222,7 @@ public static class OperationPlanner
                 if (artifact.Sha256 is { } declared
                     && !string.Equals(declared, observed, StringComparison.OrdinalIgnoreCase))
                     throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", artifact.Id));
-                return (from, bytes.LongLength, artifact.Sha256 ?? observed, filePath);
+                return ($"package://{Path.GetFileName(filePath)}", bytes.LongLength, artifact.Sha256 ?? observed, filePath);
             }
             if (artifact.Source.StartsWith("https://", StringComparison.Ordinal))
                 return (from, artifact.SizeBytes, artifact.Sha256, null);

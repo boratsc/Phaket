@@ -86,11 +86,15 @@ public sealed class LegendaryCli : ILegendaryCli
         cts.CancelAfter(timeout);
         try
         {
-            var output = await process.StandardOutput.ReadToEndAsync(cts.Token);
+            // Read both streams concurrently: a full stderr buffer must not
+            // deadlock the process until timeout.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(cts.Token);
             await process.WaitForExitAsync(cts.Token);
+            var output = await stdoutTask;
             if (process.ExitCode != 0)
                 throw new PhaketException(ErrorCodes.ValidationFailed,
-                    ("detail", $"legendary exited with {process.ExitCode}: {await process.StandardError.ReadToEndAsync(CancellationToken.None)}"));
+                    ("detail", $"legendary exited with {process.ExitCode}: {await stderrTask}"));
             return output;
         }
         catch (OperationCanceledException)

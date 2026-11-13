@@ -111,19 +111,51 @@ public class LaunchPlanTests
     }
 
     [Fact]
-    public void ProtonDbCommandStringsAreDataNeverExecuted()
+    public void ProtonDbShellMetacharactersAreRejectedNotExecuted()
     {
-        // A malicious "hint" containing shell syntax must stay inert data.
+        // A malicious "hint" containing shell syntax must never become a launch
+        // option; it is rejected for manual review, not translated or executed.
         var strategy = new GameLaunchStrategy("evil-hint", 1,
             new LaunchScope("among-us-steam", null, "linux", LauncherKind.Steam, RuntimeKind.Proton, null, null, null),
             [new LaunchRequirement("env", "PROTON_LOG", "1; rm -rf /", RequirementStatus.Recommended, ProtonDbProvenance)]);
-        var plan = LaunchTranslator.Plan(strategy, LauncherKind.Steam, Empty, null);
-        var translation = plan.Translations.Single();
-        // The value is carried verbatim as data in the environment map...
-        Assert.Equal("1; rm -rf /", translation.Environment["PROTON_LOG"]);
-        // ...and the translator exposes no execution path: only strings out.
-        Assert.Contains("PROTON_LOG=\"1; rm -rf /\"", translation.SteamLaunchOptions);
-        Assert.Equal("protondb", strategy.Requirements[0].Provenance.Source);
+        var ex = Assert.Throws<PhaketException>(() => LaunchTranslator.Plan(strategy, LauncherKind.Steam, Empty, null));
+        Assert.Contains("manual review", ex.Error.Parameters["detail"]);
+    }
+
+    [Fact]
+    public void QuoteAndSubstitutionInSteamValueAreRejected()
+    {
+        foreach (var bad in new[] { "a\"b", "$(touch x)", "a`b", "a\\b" })
+        {
+            var strategy = new GameLaunchStrategy("bad", 1,
+                new LaunchScope("among-us-steam", null, "linux", LauncherKind.Steam, RuntimeKind.Proton, null, null, null),
+                [new LaunchRequirement("env", "X", bad, RequirementStatus.Required, ProtonDbProvenance)]);
+            Assert.Throws<PhaketException>(() => LaunchTranslator.Plan(strategy, LauncherKind.Steam, Empty, null));
+        }
+    }
+
+    [Fact]
+    public void GameArgumentsAfterPercentCommandArePreserved()
+    {
+        var existing = new ExistingLaunchSettings("mangohud %command% --fullscreen", new Dictionary<string, string>());
+        var plan = LaunchTranslator.Plan(BepInExStrategy(LauncherKind.Steam), LauncherKind.Steam, existing, null);
+        var options = plan.Translations.Single().SteamLaunchOptions!;
+        Assert.EndsWith("--fullscreen", options);
+        Assert.Contains("mangohud", options);
+        Assert.Equal(1, options.Split("%command%").Length - 1);
+        // The game argument stays AFTER %command%.
+        Assert.True(options.IndexOf("%command%") < options.IndexOf("--fullscreen"));
+    }
+
+    [Fact]
+    public void SteamEnvConflictIsNotReEmittedIntoOptions()
+    {
+        var existing = new ExistingLaunchSettings(null,
+            new Dictionary<string, string> { ["WINEDLLOVERRIDES"] = "winhttp=n" });
+        var plan = LaunchTranslator.Plan(BepInExStrategy(LauncherKind.Steam), LauncherKind.Steam, existing, null);
+        Assert.Single(plan.Conflicts);
+        // User value preserved; proposed override not injected into options.
+        Assert.DoesNotContain("winhttp.dll=n,b", plan.Translations.Single().SteamLaunchOptions!);
     }
 
     [Fact]

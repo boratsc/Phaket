@@ -210,7 +210,9 @@ public sealed class CatalogClient
         var since = store.Revision;
         while (true)
         {
-            var response = await transport.GetAsync($"/catalog/changes?since={since}&limit=100", store.ETag, cancellationToken);
+            // The changes endpoint is revision-based; the snapshot ETag does not
+            // apply to it, so do not send If-None-Match here.
+            var response = await transport.GetAsync($"/catalog/changes?since={since}&limit=100", null, cancellationToken);
             if (response.StatusCode == 304) { store.MarkSynced(); return; }
             if (response.StatusCode == 410)
             {
@@ -231,10 +233,12 @@ public sealed class CatalogClient
 
     public async Task FullSyncAsync(CancellationToken cancellationToken = default)
     {
+        // Accumulate every page before committing: an interrupted download must
+        // not leave a partially-replaced catalog or advance the revision early.
         string? cursor = null;
         long revision = 0;
         string? etag = null;
-        var first = true;
+        var all = new List<JsonElement>();
         while (true)
         {
             var path = "/catalog/index?limit=100" + (cursor is null ? "" : $"&cursor={Uri.EscapeDataString(cursor)}");
@@ -245,27 +249,13 @@ public sealed class CatalogClient
             var root = doc.RootElement;
             revision = root.GetProperty("revision").GetInt64();
             etag = response.ETag;
-            var items = root.GetProperty("items");
-            if (first)
-            {
-                store.ReplaceAll(items, revision, etag);
-                first = false;
-            }
-            else
-            {
-                store.ApplyChanges(WrapUpserts(items), revision, etag);
-            }
+            foreach (var item in root.GetProperty("items").EnumerateArray())
+                all.Add(item.Clone());
             cursor = root.TryGetProperty("nextCursor", out var c) && c.ValueKind != JsonValueKind.Null ? c.GetString() : null;
             if (cursor is null) break;
         }
+        var items = JsonSerializer.SerializeToElement(all);
+        store.ReplaceAll(items, revision, etag);
         store.MarkSynced();
-    }
-
-    private static JsonElement WrapUpserts(JsonElement items)
-    {
-        var changes = items.EnumerateArray()
-            .Select(item => JsonSerializer.SerializeToElement(new { type = "upsert", buildId = item.GetProperty("id").GetString(), payload = item }))
-            .ToArray();
-        return JsonSerializer.SerializeToElement(changes);
     }
 }

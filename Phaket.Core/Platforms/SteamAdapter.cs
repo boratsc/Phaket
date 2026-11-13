@@ -38,6 +38,11 @@ public sealed class SteamAdapter
         ];
     }
 
+    // Deterministic across processes/runs (string.GetHashCode is not stable).
+    private static string StablePathId(string path) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(path))))[..12];
+
     public static IReadOnlyList<SteamLibrary> ParseLibraries(string steamRoot, bool isFlatpak)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -98,7 +103,7 @@ public sealed class SteamAdapter
                         d.StoreIds?.TryGetValue("steam", out var appId) == true && appId == manifest.AppId);
                     var editionId = $"{definition?.Slug ?? manifest.AppId}-steam";
                     var installation = new Installation(
-                        $"steam-{manifest.AppId}-{library.Path.GetHashCode():x}",
+                        $"steam-{manifest.AppId}-{StablePathId(library.Path)}",
                         editionId, installDir);
                     var availability = Directory.Exists(installDir)
                         ? (definition is not null ? GameAvailability.Moddable : GameAvailability.Installed)
