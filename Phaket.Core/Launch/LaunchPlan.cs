@@ -1,0 +1,205 @@
+using System.Text.Json;
+using Phaket.Core.Omrl;
+
+namespace Phaket.Core.Launch;
+
+// Typed launch-strategy domain (spec §7.13.3, ADR-043/045/046). One semantic
+// requirement set translates to Steam / Heroic / Legendary forms. External
+// report content (ProtonDB) is DATA with provenance — never executed.
+public enum RequirementStatus { Required, Recommended, Optional, Unsupported }
+public enum LauncherKind { Steam, Heroic, Legendary }
+public enum RuntimeKind { Proton, GEProton, Wine, Native }
+
+public sealed record RuntimeInstallation(string Id, RuntimeKind Kind, string Version, string Path);
+
+public sealed record LaunchProvenance(
+    string Source, string SourceReference, DateTimeOffset ObservedAt, string Revision, string VerificationLevel);
+
+// Kind: "env" | "dll-override" | "game-arg" | "wrapper"
+public sealed record LaunchRequirement(
+    string Kind, string Name, string Value, RequirementStatus Status, LaunchProvenance Provenance);
+
+public sealed record LaunchScope(
+    string GameEdition, string? GameBuild, string Os, LauncherKind Launcher,
+    RuntimeKind Runtime, string? RuntimeVersion, string? ModLoader, string? LoaderVersion);
+
+public sealed record GameLaunchStrategy(
+    string Id, int Revision, LaunchScope Scope, IReadOnlyList<LaunchRequirement> Requirements);
+
+public sealed record ExistingLaunchSettings(
+    string? SteamLaunchOptions, IReadOnlyDictionary<string, string> Environment);
+
+public sealed record LaunchPlanTranslation(
+    LauncherKind Launcher,
+    IReadOnlyDictionary<string, string> Environment,
+    IReadOnlyList<string> Arguments,
+    string? SteamLaunchOptions,
+    string CopyInstruction);
+
+public sealed record LaunchConflict(string Name, string ExistingValue, string ProposedValue);
+
+public sealed record LaunchPlan(
+    string StrategyId, int StrategyRevision, LaunchScope Scope,
+    IReadOnlyList<LaunchPlanTranslation> Translations,
+    IReadOnlyList<LaunchConflict> Conflicts,
+    bool RequiresAcceptance);
+
+public sealed record AppliedLaunchConfig(
+    LauncherKind Launcher,
+    IReadOnlyDictionary<string, string> PreviousEnvironment,
+    string? PreviousSteamLaunchOptions,
+    DateTimeOffset AppliedAt);
+
+// Evidence kinds are distinct: process start != gameplay != mods working (ADR-046).
+public sealed record LaunchEvidence(string Kind, string Detail, DateTimeOffset ObservedAt);
+
+public static class LaunchTranslator
+{
+    public static LaunchPlan Plan(
+        GameLaunchStrategy strategy, LauncherKind launcher,
+        ExistingLaunchSettings existing, RuntimeInstallation? runtime)
+    {
+        if (runtime is not null && strategy.Scope.RuntimeVersion is { } required
+            && !string.Equals(required, runtime.Version, StringComparison.Ordinal))
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"runtime version mismatch: strategy requires {required}, installed {runtime.Version}. No verified alternative is available."));
+
+        var conflicts = new List<LaunchConflict>();
+        var environment = new Dictionary<string, string>(existing.Environment, StringComparer.Ordinal);
+        var arguments = new List<string>();
+        var steamParts = new List<string>();
+
+        foreach (var requirement in strategy.Requirements.Where(r => r.Status != RequirementStatus.Unsupported))
+        {
+            if (requirement.Value.Any(char.IsControl))
+                throw new PhaketException(ErrorCodes.ValidationFailed,
+                    ("detail", $"requirement {requirement.Name} contains control characters"));
+            switch (requirement.Kind)
+            {
+                case "dll-override":
+                {
+                    var steamValue = $"{requirement.Name}={requirement.Value}";
+                    var wineValue = $"{Path.GetFileNameWithoutExtension(requirement.Name)}={requirement.Value}";
+                    var proposed = launcher == LauncherKind.Steam ? steamValue : wineValue;
+                    if (existing.Environment.TryGetValue("WINEDLLOVERRIDES", out var current))
+                    {
+                        if (current != proposed)
+                            conflicts.Add(new LaunchConflict("WINEDLLOVERRIDES", current, proposed));
+                        // Existing user value is preserved; never silently replaced.
+                    }
+                    else
+                    {
+                        environment["WINEDLLOVERRIDES"] = proposed;
+                    }
+                    if (launcher == LauncherKind.Steam)
+                        steamParts.Add($"WINEDLLOVERRIDES=\"{steamValue}\"");
+                    break;
+                }
+                case "env":
+                    if (existing.Environment.TryGetValue(requirement.Name, out var currentEnv) && currentEnv != requirement.Value)
+                        conflicts.Add(new LaunchConflict(requirement.Name, currentEnv, requirement.Value));
+                    else
+                        environment[requirement.Name] = requirement.Value;
+                    if (launcher == LauncherKind.Steam)
+                        steamParts.Add($"{requirement.Name}=\"{requirement.Value}\"");
+                    break;
+                case "game-arg":
+                    arguments.Add(requirement.Value);
+                    if (launcher == LauncherKind.Steam)
+                        steamParts.Add(requirement.Value);
+                    break;
+                case "wrapper":
+                    arguments.Add(requirement.Value);
+                    break;
+                default:
+                    throw new PhaketException(ErrorCodes.ValidationFailed,
+                        ("detail", $"unknown requirement kind: {requirement.Kind}"));
+            }
+        }
+
+        string? steamOptions = null;
+        if (launcher == LauncherKind.Steam)
+        {
+            // Steam requires %command%; preserve the user's existing options.
+            var existingOptions = existing.SteamLaunchOptions ?? "";
+            var hasCommand = existingOptions.Contains("%command%", StringComparison.Ordinal);
+            var prefix = hasCommand
+                ? existingOptions.Replace("%command%", "", StringComparison.Ordinal).TrimEnd()
+                : existingOptions.TrimEnd();
+            var merged = string.Join(" ", new[] { prefix }.Concat(steamParts).Where(p => p.Length > 0));
+            steamOptions = (merged + " %command%").TrimStart();
+        }
+
+        var translation = new LaunchPlanTranslation(
+            launcher, environment, arguments, steamOptions,
+            BuildCopyInstruction(launcher, environment, steamOptions));
+        return new LaunchPlan(strategy.Id, strategy.Revision, strategy.Scope,
+            [translation], conflicts, RequiresAcceptance: true);
+    }
+
+    // Fallback when the launcher has no safe write API (ADR-045): the user
+    // copies the instruction; Phaket never patches launcher files blindly.
+    private static string BuildCopyInstruction(
+        LauncherKind launcher, IReadOnlyDictionary<string, string> environment, string? steamOptions) =>
+        launcher switch
+        {
+            LauncherKind.Steam => $"Steam → Properties → Launch Options: {steamOptions}",
+            LauncherKind.Heroic => $"Heroic → Settings → Environment: {string.Join(", ", environment.Select(kv => $"{kv.Key}={kv.Value}"))} (no %command%)",
+            LauncherKind.Legendary => $"Legendary → game config env: {string.Join(", ", environment.Select(kv => $"{kv.Key}={kv.Value}"))} (no %command%)",
+            _ => "",
+        };
+}
+
+// Phaket-managed settings store with rollback. This is NOT a launcher file
+// patcher: real launcher integration uses the copy-instruction fallback unless
+// a safe API exists. The store demonstrates apply/rollback semantics on fixtures.
+public sealed class LaunchConfigStore
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
+
+    private sealed record StoreState(Dictionary<string, string> Environment, string? SteamLaunchOptions);
+
+    public AppliedLaunchConfig Apply(LaunchPlan plan, LauncherKind launcher, string storePath, bool accepted)
+    {
+        if (!accepted || !plan.RequiresAcceptance)
+            throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "launch plan requires explicit acceptance"));
+        var translation = plan.Translations.Single(t => t.Launcher == launcher);
+        var previous = Load(storePath);
+        var applied = new AppliedLaunchConfig(launcher,
+            new Dictionary<string, string>(previous.Environment, StringComparer.Ordinal),
+            previous.SteamLaunchOptions, DateTimeOffset.UtcNow);
+        Save(storePath, new StoreState(
+            new Dictionary<string, string>(translation.Environment, StringComparer.Ordinal),
+            translation.SteamLaunchOptions));
+        File.WriteAllText(storePath + ".applied.json", JsonSerializer.Serialize(applied, Options));
+        return applied;
+    }
+
+    public void Rollback(string storePath)
+    {
+        var appliedPath = storePath + ".applied.json";
+        if (!File.Exists(appliedPath)) return;
+        var applied = JsonSerializer.Deserialize<AppliedLaunchConfig>(File.ReadAllText(appliedPath), Options)!;
+        Save(storePath, new StoreState(
+            new Dictionary<string, string>(applied.PreviousEnvironment, StringComparer.Ordinal),
+            applied.PreviousSteamLaunchOptions));
+        File.Delete(appliedPath);
+    }
+
+    private static StoreState Load(string path) =>
+        File.Exists(path)
+            ? JsonSerializer.Deserialize<StoreState>(File.ReadAllText(path), Options)!
+            : new StoreState([], null);
+
+    private static void Save(string path, StoreState state)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(state, Options));
+        File.Move(temp, path, overwrite: true);
+    }
+}
