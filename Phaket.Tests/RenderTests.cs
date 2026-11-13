@@ -92,6 +92,14 @@ public class RenderTests
         Dispatcher.UIThread.RunJobs();
         Save(window, "11-builds.png");
 
+        vm.OpenShare();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "12-share.png");
+
+        vm.OpenGraph();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "13-graph.png");
+
         vm.NavigateCommand.Execute("studio");
         vm.RecipeStudio.AddStepCommand.Execute("archive.extract");
         vm.RecipeStudio.AddStepCommand.Execute("file.copy");
