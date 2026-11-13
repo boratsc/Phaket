@@ -227,7 +227,7 @@
   "Report.TrustNote": "Twój raport jest oznaczony jako niezaufany do czasu weryfikacji.",
   "Report.Required": "Wybierz mod i wynik.",
   "Account.Title": "Konto",
-  "Account.Subtitle": "Zaloguj się przez Discord, aby korzystać z funkcji społecznościowych.",
+  "Account.Subtitle": "Zaloguj się przez Discord, Steam, Epic lub itch.io, aby korzystać z funkcji społecznościowych.",
   "Account.Login": "Zaloguj przez Discord",
   "Account.Logout": "Wyloguj",
   "Account.LoggedIn": "Zalogowano jako",

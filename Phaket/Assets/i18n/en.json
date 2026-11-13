@@ -227,7 +227,7 @@
   "Report.TrustNote": "Your report is marked untrusted until verified.",
   "Report.Required": "Select a mod and a result.",
   "Account.Title": "Account",
-  "Account.Subtitle": "Sign in with Discord to use community features.",
+  "Account.Subtitle": "Sign in with Discord, Steam, Epic or itch.io to use community features.",
   "Account.Login": "Sign in with Discord",
   "Account.Logout": "Sign out",
   "Account.LoggedIn": "Signed in as",

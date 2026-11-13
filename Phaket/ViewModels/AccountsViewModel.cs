@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Material.Icons;
 using Phaket.Core.Accounts;
 using Phaket.Services;
 
@@ -8,64 +9,111 @@ namespace Phaket.ViewModels;
 
 public partial class AccountsViewModel : ViewModelBase
 {
-    private readonly IAccountService service;
+    public ProviderAccountViewModel[] Providers { get; }
+
+    public AccountsViewModel()
+    {
+        string clientId = ProviderAccountViewModel.LoadClientId();
+        Providers =
+        [
+            new(new DiscordAccountService(), "Discord", nameof(MaterialIconKind.Chat), "Account.Login"),
+            new(new SteamAccountService(), "Steam", nameof(MaterialIconKind.Steam), "Account.LoginSteam"),
+            new(new EpicAccountService(), "Epic Games", nameof(MaterialIconKind.GamepadVariant), "Account.LoginEpic"),
+            new(new ItchAccountService(clientId), "itch.io", nameof(MaterialIconKind.Store), "Account.LoginItch", clientId)
+        ];
+    }
+}
+
+public partial class ProviderAccountViewModel : ViewModelBase
+{
+    private IAccountService service;
+    private static string ClientIdPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "itch-clientid.txt");
+    public string DisplayName { get; }
+    public MaterialIconKind IconKind { get; }
+    public string LoginKey { get; }
+    public string LoginText => LocalizationService.Instance[LoginKey];
+    public bool IsSteam => service.Provider == "steam";
+    public bool IsItch => service.Provider == "itch";
+    public string? LocalPersona { get; }
+    public bool HasLocal => LocalPersona is not null;
+    public bool CanLogin => !IsBusy && !IsLoggedIn;
+    public bool CanLogout => !IsBusy && IsLoggedIn;
 
     [ObservableProperty] private bool isLoggedIn;
     [ObservableProperty] private string username = "";
-    [ObservableProperty] private string userId = "";
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool needsCode;
+    [ObservableProperty] private string authorizationCode = "";
+    [ObservableProperty] private string clientId = "";
 
-    public bool CanLogin => !IsBusy;
-    public bool CanLogout => !IsBusy && IsLoggedIn;
+    public ProviderAccountViewModel(IAccountService service, string displayName, string iconKind, string loginKey)
+        : this(service, displayName, iconKind, loginKey, service.Provider == "itch" ? LoadClientId() : "") { }
 
-    public AccountsViewModel() : this(new DiscordAccountService()) { }
-
-    public AccountsViewModel(IAccountService service)
+    internal ProviderAccountViewModel(IAccountService service, string displayName, string iconKind, string loginKey, string clientId)
     {
         this.service = service;
+        DisplayName = displayName;
+        IconKind = Enum.Parse<MaterialIconKind>(iconKind);
+        LoginKey = loginKey;
+        this.clientId = clientId;
+        LocalPersona = IsSteam ? SteamAccountService.DetectLocal()?.Username : null;
         service.AccountChanged += OnAccountChanged;
         UpdateAccount();
     }
 
-    partial void OnIsBusyChanged(bool value)
+    internal static string LoadClientId()
     {
-        OnPropertyChanged(nameof(CanLogin));
-        OnPropertyChanged(nameof(CanLogout));
+        try { return File.ReadAllText(ClientIdPath).Trim(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return ""; }
     }
 
-    partial void OnIsLoggedInChanged(bool value) => OnPropertyChanged(nameof(CanLogout));
+    partial void OnClientIdChanged(string value)
+    {
+        if (!IsItch) return;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ClientIdPath)!);
+            string temp = Path.Combine(Path.GetDirectoryName(ClientIdPath)!, "." + Guid.NewGuid().ToString("N") + ".tmp");
+            try { File.WriteAllText(temp, value); File.Move(temp, ClientIdPath, true); }
+            finally { File.Delete(temp); }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { StatusMessage = LocalizationService.Instance["Account.Error"]; }
+    }
 
+    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanLogin)); OnPropertyChanged(nameof(CanLogout)); }
+    partial void OnIsLoggedInChanged(bool value) { OnPropertyChanged(nameof(CanLogin)); OnPropertyChanged(nameof(CanLogout)); }
     private void OnAccountChanged() => Dispatcher.UIThread.Post(UpdateAccount);
-
     private void UpdateAccount()
     {
-        var account = service.Current;
-        IsLoggedIn = account is not null;
-        Username = account?.Username ?? "";
-        UserId = account?.UserId ?? "";
+        IsLoggedIn = service.Current is not null;
+        Username = service.Current?.Username ?? "";
     }
 
     [RelayCommand]
     private async Task LoginAsync()
     {
+        if (IsItch && string.IsNullOrWhiteSpace(ClientId))
+        { StatusMessage = LocalizationService.Instance["Account.ItchNoClient"]; return; }
         IsBusy = true;
         StatusMessage = LocalizationService.Instance["Account.Waiting"];
         try
         {
+            if (IsItch)
+            {
+                service.AccountChanged -= OnAccountChanged;
+                service = new ItchAccountService(ClientId.Trim());
+                service.AccountChanged += OnAccountChanged;
+            }
+            NeedsCode = service is EpicAccountService && service.Current is null;
             await service.LoginAsync();
             UpdateAccount();
             StatusMessage = LocalizationService.Instance["Account.Success"];
         }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = LocalizationService.Instance["Account.Cancelled"];
-        }
-        catch (Exception)
-        {
-            StatusMessage = LocalizationService.Instance["Account.Error"];
-        }
-        finally { IsBusy = false; }
+        catch (OperationCanceledException) { StatusMessage = LocalizationService.Instance["Account.Cancelled"]; }
+        catch (Exception) { StatusMessage = LocalizationService.Instance["Account.Error"]; }
+        finally { NeedsCode = false; IsBusy = false; }
     }
 
     [RelayCommand]
@@ -78,14 +126,36 @@ public partial class AccountsViewModel : ViewModelBase
             UpdateAccount();
             StatusMessage = LocalizationService.Instance["Account.LoggedOut"];
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) { StatusMessage = LocalizationService.Instance["Account.Cancelled"]; }
+        catch (Exception) { StatusMessage = LocalizationService.Instance["Account.Error"]; }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand]
+    private void SubmitCode()
+    {
+        try
         {
-            StatusMessage = LocalizationService.Instance["Account.Cancelled"];
+            ((EpicAccountService)service).SubmitCode(AuthorizationCode);
+            AuthorizationCode = "";
+            NeedsCode = false;
+            StatusMessage = LocalizationService.Instance["Account.Waiting"];
         }
-        catch (Exception)
+        catch (Exception) { StatusMessage = LocalizationService.Instance["Account.Error"]; }
+    }
+
+    [RelayCommand]
+    private async Task UseLocalAsync()
+    {
+        IsBusy = true;
+        try
         {
-            StatusMessage = LocalizationService.Instance["Account.Error"];
+            var account = await ((SteamAccountService)service).AdoptLocalAsync();
+            UpdateAccount();
+            StatusMessage = LocalizationService.Instance[account is null ? "Account.SteamNoLocal" : "Account.Success"];
         }
+        catch (OperationCanceledException) { StatusMessage = LocalizationService.Instance["Account.Cancelled"]; }
+        catch (Exception) { StatusMessage = LocalizationService.Instance["Account.Error"]; }
         finally { IsBusy = false; }
     }
 }
