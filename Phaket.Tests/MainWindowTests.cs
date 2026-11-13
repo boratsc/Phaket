@@ -56,6 +56,36 @@ public class MainWindowTests
         window.Close();
     }
 
+    [AvaloniaFact]
+    public void Sidebar_without_games_shows_library_empty_state()
+    {
+        var vm = new MainWindowViewModel();
+        vm.Library.SearchText = "no matching game";
+        vm.NavigateCommand.Execute("mods");
+        Assert.Same(vm.Library, vm.CurrentPage);
+        Assert.Empty(vm.Library.Games);
+        Assert.Equal("library", vm.ActiveNav);
+        vm.NavigateCommand.Execute("profiles");
+        Assert.Same(vm.Library, vm.CurrentPage);
+    }
+
+    [AvaloniaFact]
+    public void Game_actions_select_correct_sidebar_section()
+    {
+        var vm = new MainWindowViewModel();
+        vm.Library.OpenGameCommand.Execute(vm.Library.Games.First());
+        vm.OpenMods();
+        Assert.Equal("mods", vm.ActiveNav);
+        vm.Mods!.BackCommand.Execute(null);
+        vm.OpenProfiles();
+        Assert.Equal("profiles", vm.ActiveNav);
+        vm.Profiles!.BackCommand.Execute(null);
+        vm.OpenBackup();
+        Assert.Equal("library", vm.ActiveNav);
+        vm.Backup!.BackCommand.Execute(null);
+        Assert.IsType<GameViewModel>(vm.CurrentPage);
+    }
+
     [Fact]
     public void Library_search_filters_and_restores_catalog()
     {

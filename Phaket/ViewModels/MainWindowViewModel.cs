@@ -14,6 +14,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public LibraryViewModel Library { get; }
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
+    public HelpViewModel Help { get; } = new();
     public GameViewModel? Game { get; private set; }
     public ModsViewModel? Mods { get; private set; }
     public ProfilesViewModel? Profiles { get; private set; }
@@ -44,6 +45,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (currentGame is null) return;
         Mods = new ModsViewModel(currentGame, () => OpenGame(currentGame));
         CurrentPage = Mods;
+        ActiveNav = "mods";
         OnPropertyChanged(nameof(Mods));
     }
 
@@ -52,6 +54,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (currentGame is null) return;
         Profiles = new ProfilesViewModel(currentGame, () => OpenGame(currentGame));
         CurrentPage = Profiles;
+        ActiveNav = "profiles";
         OnPropertyChanged(nameof(Profiles));
     }
 
@@ -60,6 +63,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (currentGame is null) return;
         Backup = new BackupViewModel(currentGame, () => OpenGame(currentGame));
         CurrentPage = Backup;
+        ActiveNav = "library";
         OnPropertyChanged(nameof(Backup));
     }
 
@@ -76,12 +80,18 @@ public partial class MainWindowViewModel : ViewModelBase
                 CurrentPage = Settings;
                 ActiveNav = "settings";
                 break;
+            case "help":
+                CurrentPage = Help;
+                ActiveNav = "help";
+                break;
             case "mods":
-                if (currentGame is not null) { OpenMods(); ActiveNav = "mods"; }
+                currentGame ??= Library.Games.FirstOrDefault();
+                if (currentGame is not null) OpenMods();
                 else { CurrentPage = Library; ActiveNav = "library"; }
                 break;
             case "profiles":
-                if (currentGame is not null) { OpenProfiles(); ActiveNav = "profiles"; }
+                currentGame ??= Library.Games.FirstOrDefault();
+                if (currentGame is not null) OpenProfiles();
                 else { CurrentPage = Library; ActiveNav = "library"; }
                 break;
             case "game":

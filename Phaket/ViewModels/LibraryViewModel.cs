@@ -32,7 +32,8 @@ public partial class LibraryViewModel : ViewModelBase
         foreach (var definition in definitions)
         {
             var cover = $"avares://Phaket/Assets/games/{definition.Slug}.png";
-            var hero = cover;
+            var heroPath = $"avares://Phaket/Assets/games/{definition.Slug}-hero.png";
+            var hero = Avalonia.Platform.AssetLoader.Exists(new Uri(heroPath)) ? heroPath : cover;
             var game = new GameCatalogItem(definition, cover, hero);
             catalog.Add(game);
             Games.Add(game);

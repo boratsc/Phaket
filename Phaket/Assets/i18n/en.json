@@ -118,5 +118,13 @@
   "Game.Apply": "Apply",
   "Game.Rollback": "Roll back",
   "Game.PrepareOptions": "Prepare mod settings",
-  "Game.LaunchOptions": "Launch options"
+  "Game.LaunchOptions": "Launch options",
+  "Help.Title": "Help",
+  "Help.About": "phaket PoC 0.0.1 “Zagłębie Dąbrowskie” helps manage games and mods.",
+  "Help.UsageTitle": "How to use",
+  "Help.Usage": "Choose a game in the library, then press Play.",
+  "Help.Studio": "In Recipe Studio, prepare and validate a recipe before using it.",
+  "Help.Management": "The game screen provides access to mods, profiles and backups.",
+  "Help.SafetyTitle": "Safety",
+  "Help.Safety": "Review the plan before writing changes. Create backups and restore the previous state (rollback) when needed."
 }

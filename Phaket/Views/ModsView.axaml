@@ -64,7 +64,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:ModItemViewModel}">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="8,10">
-                            <ToggleButton Grid.Column="0" IsChecked="{Binding IsEnabled}" Margin="0,0,14,0"
+                            <ToggleButton Classes="modToggle" Grid.Column="0" IsChecked="{Binding IsEnabled}" Margin="0,0,14,0"
                                           AutomationProperties.Name="{Binding Name}" />
                             <Border Grid.Column="1" Background="{StaticResource SurfaceRaisedBrush}" CornerRadius="8"
                                     Width="36" Height="36" Margin="0,0,14,0">

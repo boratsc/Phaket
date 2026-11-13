@@ -118,5 +118,13 @@
   "Game.Apply": "Zastosuj",
   "Game.Rollback": "Cofnij",
   "Game.PrepareOptions": "Przygotuj ustawienia moda",
-  "Game.LaunchOptions": "Ustawienia uruchomienia"
+  "Game.LaunchOptions": "Ustawienia uruchomienia",
+  "Help.Title": "Pomoc",
+  "Help.About": "phaket PoC 0.0.1 „Zagłębie Dąbrowskie” pomaga zarządzać grami i modyfikacjami.",
+  "Help.UsageTitle": "Jak korzystać",
+  "Help.Usage": "W bibliotece wybierz grę, a następnie naciśnij Graj.",
+  "Help.Studio": "W Recipe Studio przygotuj i sprawdź przepis przed jego użyciem.",
+  "Help.Management": "W widoku gry znajdziesz mody, profile i kopie zapasowe.",
+  "Help.SafetyTitle": "Bezpieczeństwo",
+  "Help.Safety": "Przed zapisem sprawdź plan zmian. Twórz kopie zapasowe; w razie potrzeby przywróć poprzedni stan (rollback)."
 }
