@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Phaket.Core.Omrl;
@@ -46,12 +45,24 @@ public partial class GameCatalogItem : ViewModelBase
 public partial class GameViewModel : ViewModelBase
 {
     private readonly LaunchService launch = new();
+    private readonly ProfileStore store = new();
     private readonly Action back;
+    private readonly Action openMods;
+    private readonly Action openProfiles;
+    private readonly Action openBackup;
+    private string? lastBackup;
 
-    public GameViewModel(GameCatalogItem game, Action back)
+    public GameViewModel(GameCatalogItem game, Action back,
+        Action? openMods = null, Action? openProfiles = null, Action? openBackup = null)
     {
         Game = game;
         this.back = back;
+        this.openMods = openMods ?? (() => { });
+        this.openProfiles = openProfiles ?? (() => { });
+        this.openBackup = openBackup ?? (() => { });
+        var profile = store.Active(game.Definition.Slug);
+        Game.ProfileName = profile?.Name ?? "Profil domyślny";
+        Game.ModCount = profile?.Mods.Count(m => m.Enabled) ?? 0;
     }
 
     public GameCatalogItem Game { get; }
@@ -60,15 +71,19 @@ public partial class GameViewModel : ViewModelBase
 
     [ObservableProperty] private bool showDetails;
     [ObservableProperty] private string statusMessage = "";
+    [ObservableProperty] private LaunchOptionsPlan? pendingPlan;
+    [ObservableProperty] private bool canRollback;
 
     public string StatusKey => Game.IsInstalled ? "Game.Ready" : "Game.NotDetected";
     public string StatusHint => Game.IsInstalled ? "Game.ReadyHint" : "Game.NotDetectedHint";
+    public string PlanSummary => PendingPlan is null ? ""
+        : $"{PendingPlan.Current ?? "(brak)"}  →  {PendingPlan.Proposed}";
 
-    [RelayCommand]
-    private void Back() => back();
-
-    [RelayCommand]
-    private void ToggleDetails() => ShowDetails = !ShowDetails;
+    [RelayCommand] private void Back() => back();
+    [RelayCommand] private void ToggleDetails() => ShowDetails = !ShowDetails;
+    [RelayCommand] private void OpenMods() => openMods();
+    [RelayCommand] private void OpenProfiles() => openProfiles();
+    [RelayCommand] private void OpenBackup() => openBackup();
 
     [RelayCommand]
     private void Play()
@@ -79,24 +94,51 @@ public partial class GameViewModel : ViewModelBase
             StatusMessage = loc["Game.NotDetectedHint"];
             return;
         }
-        // One click: launch through Steam. Mod launch options (if any) are applied
-        // separately with consent — never a manual copy box.
         var ok = launch.LaunchGame(Game.SteamAppId);
         StatusMessage = ok ? loc["Game.Launched"] : loc["Game.LaunchFailed"];
     }
 
+    // Shows a plan for a SINGLE Steam account; nothing is written until accepted.
     [RelayCommand]
-    private void ApplyModLaunchOptions()
+    private void PrepareLaunchOptions()
     {
         var loc = LocalizationService.Instance;
         var root = SteamLaunchOptionsService.FindSteamRoot();
-        if (root is null || !Game.IsInstalled)
+        if (root is null)
         {
             StatusMessage = loc["Game.NoSteam"];
             return;
         }
         var service = new SteamLaunchOptionsService(root);
-        var backups = service.Apply(Game.SteamAppId, "WINEDLLOVERRIDES=\"winhttp.dll=n,b\" %command%");
-        StatusMessage = backups.Count > 0 ? loc["Game.OptionsApplied"] : loc["Game.NoSteam"];
+        PendingPlan = service.BuildPlan(Game.SteamAppId, "WINEDLLOVERRIDES=\"winhttp.dll=n,b\" %command%");
+        OnPropertyChanged(nameof(PlanSummary));
+        StatusMessage = PendingPlan is null ? loc["Game.NoSteam"] : loc["Game.PlanReady"];
+        ShowDetails = true;
+    }
+
+    [RelayCommand]
+    private void ConfirmLaunchOptions()
+    {
+        if (PendingPlan is null) return;
+        var root = SteamLaunchOptionsService.FindSteamRoot();
+        if (root is null) return;
+        var service = new SteamLaunchOptionsService(root);
+        lastBackup = service.ApplyPlan(PendingPlan);
+        CanRollback = true;
+        PendingPlan = null;
+        OnPropertyChanged(nameof(PlanSummary));
+        StatusMessage = LocalizationService.Instance["Game.OptionsApplied"];
+    }
+
+    [RelayCommand]
+    private void RollbackLaunchOptions()
+    {
+        if (lastBackup is null) return;
+        var root = SteamLaunchOptionsService.FindSteamRoot();
+        if (root is null) return;
+        new SteamLaunchOptionsService(root).Rollback(lastBackup);
+        CanRollback = false;
+        lastBackup = null;
+        StatusMessage = LocalizationService.Instance["Game.OptionsRolledBack"];
     }
 }

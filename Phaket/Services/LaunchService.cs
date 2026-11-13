@@ -1,13 +1,13 @@
 using System.Diagnostics;
-using System.Text;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 
 namespace Phaket.Services;
 
 // One-click launch (simplicity): "Graj" opens the game through the Steam
-// protocol. Mod launch options are applied to Steam's localconfig.vdf only
-// after a single consent, with a backup and rollback — never a manual copy box.
+// protocol. Mod launch options are applied to a SINGLE Steam account's
+// localconfig.vdf only after the user accepts a shown plan, with a backup
+// and rollback — never a manual copy box, never a blind multi-account write.
 public sealed class LaunchService
 {
     public bool LaunchGame(string steamAppId)
@@ -29,9 +29,11 @@ public sealed class LaunchService
     }
 }
 
-// Reads/writes the Steam per-app LaunchOptions string with backup + rollback.
-// This is the "safe adapter" path (ADR-045): consented, reversible, scoped to
-// one app key — not a blind patch of the whole file.
+public sealed record SteamAccount(string Id, string ConfigPath);
+
+public sealed record LaunchOptionsPlan(
+    SteamAccount Account, string AppId, string? Current, string Proposed);
+
 public sealed class SteamLaunchOptionsService
 {
     private readonly string steamRoot;
@@ -47,58 +49,56 @@ public sealed class SteamLaunchOptionsService
         return null;
     }
 
-    private IEnumerable<string> LocalConfigPaths()
+    public IReadOnlyList<SteamAccount> Accounts()
     {
         var userdata = Path.Combine(steamRoot, "userdata");
-        if (!Directory.Exists(userdata)) yield break;
-        foreach (var dir in Directory.GetDirectories(userdata))
-        {
-            var path = Path.Combine(dir, "config", "localconfig.vdf");
-            if (File.Exists(path)) yield return path;
-        }
+        if (!Directory.Exists(userdata)) return [];
+        return Directory.GetDirectories(userdata)
+            .Select(dir => new SteamAccount(Path.GetFileName(dir), Path.Combine(dir, "config", "localconfig.vdf")))
+            .Where(a => File.Exists(a.ConfigPath))
+            .ToArray();
     }
 
-    public string? GetCurrent(string appId)
+    private static VdfNode? AppNode(VdfNode root, string appId) =>
+        root.Child("UserLocalConfigStore")?.Child("Software")?.Child("Valve")?
+            .Child("Steam")?.Child("Apps")?.Child(appId);
+
+    public string? GetCurrent(SteamAccount account, string appId)
     {
-        foreach (var path in LocalConfigPaths())
-        {
-            var node = VdfParser.Parse(File.ReadAllText(path));
-            var value = node.Child("UserLocalConfigStore")?.Child("Software")?.Child("Valve")?
-                .Child("Steam")?.Child("Apps")?.Child(appId)?.Get("LaunchOptions");
-            if (value is not null) return value;
-        }
-        return null;
+        var node = VdfParser.Parse(File.ReadAllText(account.ConfigPath));
+        return AppNode(node, appId)?.Get("LaunchOptions");
     }
 
-    // Applies options to every local user config; backs up each file first.
-    // Returns the backup paths so the caller can roll back.
-    public IReadOnlyList<string> Apply(string appId, string options)
+    // Builds a plan for one account; nothing is written here.
+    public LaunchOptionsPlan? BuildPlan(string appId, string proposed, SteamAccount? account = null)
     {
-        var backups = new List<string>();
-        foreach (var path in LocalConfigPaths())
-        {
-            var text = File.ReadAllText(path);
-            var node = VdfParser.Parse(text);
-            var apps = EnsurePath(node, "UserLocalConfigStore", "Software", "Valve", "Steam", "Apps");
-            var app = apps.Child(appId) ?? new VdfNode();
-            app.Values["LaunchOptions"] = options;
-            apps.Children[appId] = app;
-
-            var backup = path + $".phaket-bak-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-            File.Copy(path, backup, overwrite: true);
-            backups.Add(backup);
-            File.WriteAllText(path, VdfWriter.Write(node));
-        }
-        return backups;
+        var accounts = Accounts();
+        var chosen = account ?? accounts.FirstOrDefault();
+        if (chosen is null) return null;
+        return new LaunchOptionsPlan(chosen, appId, GetCurrent(chosen, appId), proposed);
     }
 
-    public void Rollback(IReadOnlyList<string> backups)
+    // Applies a previously accepted plan to its single account; backs up first.
+    public string ApplyPlan(LaunchOptionsPlan plan)
     {
-        foreach (var backup in backups)
-        {
-            var original = backup[..backup.IndexOf(".phaket-bak-", StringComparison.Ordinal)];
-            if (File.Exists(backup)) File.Copy(backup, original, overwrite: true);
-        }
+        var path = plan.Account.ConfigPath;
+        var node = VdfParser.Parse(File.ReadAllText(path));
+        var apps = EnsurePath(node, "UserLocalConfigStore", "Software", "Valve", "Steam", "Apps");
+        var app = apps.Child(plan.AppId) ?? new VdfNode();
+        app.Values["LaunchOptions"] = plan.Proposed;
+        apps.Children[plan.AppId] = app;
+
+        var backup = path + $".phaket-bak-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        File.Copy(path, backup, overwrite: true);
+        File.WriteAllText(path, VdfWriter.Write(node));
+        return backup;
+    }
+
+    public void Rollback(string backupPath)
+    {
+        var idx = backupPath.IndexOf(".phaket-bak-", StringComparison.Ordinal);
+        if (idx < 0 || !File.Exists(backupPath)) return;
+        File.Copy(backupPath, backupPath[..idx], overwrite: true);
     }
 
     private static VdfNode EnsurePath(VdfNode root, params string[] keys)
@@ -122,13 +122,13 @@ public static class VdfWriter
 {
     public static string Write(VdfNode root)
     {
-        var sb = new StringBuilder();
+        var sb = new System.Text.StringBuilder();
         foreach (var (key, value) in root.Values) WritePair(sb, key, value, 0);
         foreach (var (key, child) in root.Children) WriteObject(sb, key, child, 0);
         return sb.ToString();
     }
 
-    private static void WriteObject(StringBuilder sb, string key, VdfNode node, int depth)
+    private static void WriteObject(System.Text.StringBuilder sb, string key, VdfNode node, int depth)
     {
         var pad = new string('\t', depth);
         sb.Append(pad).Append('"').Append(Escape(key)).Append("\"\n");
@@ -138,7 +138,7 @@ public static class VdfWriter
         sb.Append(pad).Append("}\n");
     }
 
-    private static void WritePair(StringBuilder sb, string key, string value, int depth)
+    private static void WritePair(System.Text.StringBuilder sb, string key, string value, int depth)
     {
         sb.Append(new string('\t', depth)).Append('"').Append(Escape(key)).Append("\"\t\t\"")
             .Append(Escape(value)).Append("\"\n");

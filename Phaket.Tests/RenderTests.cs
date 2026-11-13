@@ -34,6 +34,19 @@ public class RenderTests
         Dispatcher.UIThread.RunJobs();
         Save(window, "02-game.png");
 
+        vm.OpenMods();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "05-mods.png");
+
+        vm.OpenProfiles();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "06-profiles.png");
+
+        vm.OpenBackup();
+        vm.Backup!.CreateCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "07-backup.png");
+
         vm.NavigateCommand.Execute("studio");
         vm.RecipeStudio.AddStepCommand.Execute("archive.extract");
         vm.RecipeStudio.AddStepCommand.Execute("file.copy");
