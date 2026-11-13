@@ -141,8 +141,8 @@ identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
 - Dane grafu/współdzielenia/ProtonDB w demo są przykładowe; import zrzutu ODbL pozwala
   wczytać realne dane.
 - Natywny Wayland bez AT-SPI; rzeczywisty Windows GUI i czytnik Orca niezweryfikowane.
-- Decyzja licencyjna (GPL → LGPL?) i zatwierdzenie specyfikacji OMRL/ADR-038 — otwarte,
-  blokują publiczne wydanie.
+- Zatwierdzenie specyfikacji OMRL/ADR-038 — otwarte, blokuje publiczne wydanie.
+  Licencja zdecydowana: LGPL-3.0-or-later (plik `LICENSE`, szczegóły w `NOTICE`).
 
 ## English summary
 
@@ -154,7 +154,17 @@ backups, compatibility, install stepper, Recipe Studio, settings, help) and MVP 
 ODbL import, safe launch options). .NET 10 + Avalonia 12.1.6, Windows + Linux (XWayland
 default, native Wayland opt-in without AT-SPI). pl-PL/en localization. ~210 tests +
 headless UI + Skia renders; CI on ubuntu-26.04 + windows-latest. Chat/accounts are MVP
-0.1 (out of PoC scope). License decision and OMRL/ADR-038 approval pending (block public
-release only).
+0.1 (out of PoC scope). Licensed LGPL-3.0-or-later; OMRL/ADR-038 approval pending
+(blocks public release only).
 
-Licencja: plik `LICENSE`.
+## Licencja / License
+
+**LGPL-3.0-or-later** — GNU Lesser General Public License v3 lub późniejsza.
+Pełny tekst: `LICENSE` (LGPL-3.0) + `COPYING` (GPL-3.0, włączony przez odniesienie).
+Prawa autorskie, zakres i zależności stron trzecich: `NOTICE`. Backend
+PhaketServer pozostaje zamknięty (all rights reserved).
+
+**LGPL-3.0-or-later** — GNU Lesser General Public License v3 or later.
+Full text: `LICENSE` (LGPL-3.0) + `COPYING` (GPL-3.0, incorporated by reference).
+Copyright, scope and third-party dependencies: `NOTICE`. The PhaketServer
+backend remains proprietary (all rights reserved).

@@ -1,0 +1,64 @@
+Phaket
+Copyright (C) 2026 Bartosz Gradzik
+
+== pl-PL ==
+
+Ten produkt obejmuje bibliotekę Phaket.Core oraz aplikację desktopową Phaket,
+licencjonowane na warunkach GNU Lesser General Public License, wersja 3 lub
+dowolna późniejsza (LGPL-3.0-or-later). Pełne teksty: LICENSE (LGPL-3.0)
+i COPYING (GPL-3.0 — LGPL-3.0 włącza jego warunki przez odniesienie).
+
+W praktyce:
+- możesz używać, kopiować i rozpowszechniać Phaket.Core,
+- możesz łączyć go z własnym oprogramowaniem (także zamkniętym), zachowując
+  możliwość wymiany biblioteki przez użytkownika (LGPL-3.0 §4),
+- modyfikacje samej biblioteki muszą pozostać na LGPL-3.0-or-later.
+
+Backend PhaketServer jest odrębnym produktem o licencji zamkniętej
+(all rights reserved) — LGPL nie obejmuje backendu.
+
+Zależności stron trzecich:
+- Avalonia 12.1.6 — MIT
+- CommunityToolkit.Mvvm 8.4.2 — MIT
+- Material.Icons.Avalonia 3.0.2 — MIT
+- Microsoft.Data.Sqlite 11.0.0 — MIT
+- YamlDotNet 18.1.0 — MIT
+- JsonSchema.Net 9.7.0 / JsonPointer.Net 7.1.0 (json-everything) — kod źródłowy
+  na MIT; binarne wydanie z NuGet jest dodatkowo objęte umową utrzymaniową
+  (OSMF EULA), której opłata dotyczy wyłącznie użytkowników komercyjnych
+  o rocznym przychodzie brutto >= 10 000 USD. Phaket jest obecnie poniżej
+  tego progu (cel: zerowe dodatkowe opłaty). Zgodnie z §4 tej umowy kod
+  można samodzielnie skompilować i rozpowszechniać na warunkach MIT bez
+  umowy; przed komercjalizacją powyżej progu należy opłacić utrzymanie
+  albo przejść na samodzielnie kompilowane binaria MIT.
+
+== en ==
+
+This product includes the Phaket.Core library and the Phaket desktop
+application, licensed under the GNU Lesser General Public License, version 3
+or any later version (LGPL-3.0-or-later). Full texts: LICENSE (LGPL-3.0) and
+COPYING (GPL-3.0 — LGPL-3.0 incorporates its terms by reference).
+
+In practice:
+- you may use, copy and redistribute Phaket.Core,
+- you may combine it with your own software (including proprietary software),
+  provided the user can replace the library (LGPL-3.0 §4),
+- modifications of the library itself must remain LGPL-3.0-or-later.
+
+The PhaketServer backend is a separate, proprietary product (all rights
+reserved) — the LGPL does not cover the backend.
+
+Third-party dependencies:
+- Avalonia 12.1.6 — MIT
+- CommunityToolkit.Mvvm 8.4.2 — MIT
+- Material.Icons.Avalonia 3.0.2 — MIT
+- Microsoft.Data.Sqlite 11.0.0 — MIT
+- YamlDotNet 18.1.0 — MIT
+- JsonSchema.Net 9.7.0 / JsonPointer.Net 7.1.0 (json-everything) — source code
+  is MIT; the NuGet binary release is additionally covered by a maintenance
+  agreement (OSMF EULA) whose fee applies only to commercial users with
+  annual gross revenue >= USD 10,000. Phaket is currently below that
+  threshold (goal: zero additional fees). Per §4 of that agreement the
+  source may be self-compiling and redistributed under MIT without the
+  agreement; before commercialising above the threshold, pay the maintenance
+  fee or switch to self-compiled MIT binaries.

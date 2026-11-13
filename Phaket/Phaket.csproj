@@ -9,6 +9,10 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <Version>0.0.1</Version>
     <InformationalVersion>0.0.1-Zagłębie Dąbrowskie</InformationalVersion>
+    <Authors>Bartosz Gradzik</Authors>
+    <Copyright>Copyright (C) 2026 Bartosz Gradzik</Copyright>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/boratsc/Phaket</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
