@@ -54,7 +54,7 @@ public class CatalogClientTests
                 """));
             client.SyncAsync().Wait();
             Assert.Single(store.GetBuilds("among-us"));
-            Assert.Empty(store.GetBuilds("among-us").Where(b => b.Id == "b-1"));
+            Assert.DoesNotContain(store.GetBuilds("among-us"), b => b.Id == "b-1");
             Assert.Equal(3, store.Revision);
         }
         finally { store.Dispose(); Directory.Delete(dir, true); }
