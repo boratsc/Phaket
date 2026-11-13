@@ -1,4 +1,5 @@
 using Phaket.Core.Profiles;
+using Phaket.Core.Platforms;
 
 namespace Phaket.Core.Tests;
 
@@ -31,6 +32,32 @@ public class ProfileShareTests
         Assert.Equal(["D"], diff.Added);
         Assert.Equal(["A"], diff.Removed);
         Assert.Equal(["B"], diff.Changed);
+    }
+}
+
+public class CompatibilityReportStoreTests
+{
+    [Fact]
+    public void KeepsTrustedAndUntrustedSeparate()
+    {
+        var dir = Directory.CreateTempSubdirectory("phaket-compat-reports-").FullName;
+        try
+        {
+            using var store = new CompatibilityReportStore(Path.Combine(dir, "reports.db"));
+            store.Add(new CompatibilityReportRecord("1", "among-us", "2026.3", "linux", "Proton 9", "ModA", "1.0",
+                CompatibilityResult.Working, ReporterTrust.TrustedTester, DateTimeOffset.UtcNow, null, "works"));
+            store.Add(new CompatibilityReportRecord("2", "among-us", "2026.3", "linux", "Proton 9", "ModA", "1.0",
+                CompatibilityResult.Working, ReporterTrust.Untrusted, DateTimeOffset.UtcNow, null, null));
+            store.Add(new CompatibilityReportRecord("3", "among-us", "2026.3", "linux", "Proton 9", "ModB", "1.0",
+                CompatibilityResult.Broken, ReporterTrust.Untrusted, DateTimeOffset.UtcNow, null, null));
+            var reports = store.GetReports("among-us");
+            Assert.Equal(3, reports.Count);
+            var (trusted, untrusted, positive) = store.Summarize("among-us");
+            Assert.Equal(1, trusted);
+            Assert.Equal(2, untrusted);
+            Assert.Equal(2, positive);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 }
 
