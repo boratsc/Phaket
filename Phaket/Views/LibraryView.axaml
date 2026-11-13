@@ -9,7 +9,7 @@
   <ScrollViewer><ItemsControl ItemsSource="{Binding Games}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:GameCatalogItem">
    <Border Classes="gameCard" Margin="0,0,0,16"><Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="20">
     <Button Background="Transparent" BorderThickness="0" Padding="0" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}">
-     <Border Width="120" Height="120" CornerRadius="12" ClipToBounds="True"><Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill"/></Border>
+     <Border Width="120" Height="180" CornerRadius="12" ClipToBounds="True"><Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill"/></Border>
     </Button>
     <StackPanel Grid.Column="1" Spacing="12" VerticalAlignment="Center">
      <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Left" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}"><TextBlock Text="{Binding Title}" FontSize="21" FontWeight="SemiBold"/></Button>

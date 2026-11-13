@@ -6,7 +6,7 @@ using Phaket.Core.Accounts;
 public sealed class AccountsTests
 {
     [Fact]
-    public void PkceMatchesRfc7636() => Assert.Equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", DiscordPkce.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+    public void PkceMatchesRfc7636() => Assert.Equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", AccountPkce.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
 
     [Fact]
     public void ProtectorRoundTrip()

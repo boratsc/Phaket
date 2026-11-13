@@ -12,21 +12,6 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Phaket.Core.Tests")]
 namespace Phaket.Core.Accounts;
 
-public sealed record DiscordAccount(string UserId, string Username, string? GlobalName, DateTimeOffset ObtainedAt);
-public interface IAccountService
-{
-    DiscordAccount? Current { get; }
-    event Action? AccountChanged;
-    Task<DiscordAccount> LoginAsync(CancellationToken ct = default);
-    Task LogoutAsync(CancellationToken ct = default);
-}
-
-internal static class DiscordPkce
-{
-    internal static string Encode(byte[] value) => Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    internal static string Challenge(string verifier) => Encode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-}
-
 public sealed class DiscordAccountService : IAccountService
 {
     private const string TokenUrl = "https://discord.com/api/oauth2/token";
@@ -36,12 +21,13 @@ public sealed class DiscordAccountService : IAccountService
     private readonly Action<string> openBrowser;
     private readonly string configEndpoint, storePath, redirectUri;
     private readonly Uri redirect;
-    private readonly ITokenProtector protector;
+    private readonly EncryptedStore store;
     private readonly SemaphoreSlim gate = new(1, 1);
     private string? clientId;
     private StoredAccount? stored;
 
-    public DiscordAccount? Current { get; private set; }
+    public string Provider => "discord";
+    public AccountInfo? Current { get; private set; }
     public event Action? AccountChanged;
 
     public DiscordAccountService(string? configEndpoint = null, string? storePath = null, string? redirectUri = null)
@@ -57,17 +43,18 @@ public sealed class DiscordAccountService : IAccountService
             throw new ArgumentException("Nieprawidłowy adres zwrotny / Invalid callback address.", nameof(redirectUri));
         http = handler is null ? SharedHttp : new HttpClient(handler);
         this.openBrowser = openBrowser;
-        protector = new TokenProtector(this.storePath);
+        store = new EncryptedStore(this.storePath);
         try
         {
-            stored = JsonSerializer.Deserialize<StoredAccount>(protector.Unprotect(Convert.FromBase64String(File.ReadAllText(this.storePath))), Json);
+            var plaintext = store.Load();
+            stored = plaintext is null ? null : JsonSerializer.Deserialize<StoredAccount>(plaintext, Json);
             if (stored is null || string.IsNullOrEmpty(stored.UserId) || string.IsNullOrEmpty(stored.Username) || string.IsNullOrEmpty(stored.RefreshToken) || string.IsNullOrEmpty(stored.AccessToken)) stored = null;
             Current = stored?.Account();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or CryptographicException or JsonException or ArgumentException) { stored = null; }
     }
 
-    public async Task<DiscordAccount> LoginAsync(CancellationToken ct = default)
+    public async Task<AccountInfo> LoginAsync(CancellationToken ct = default)
     {
         await gate.WaitAsync(ct);
         try
@@ -78,8 +65,8 @@ public sealed class DiscordAccountService : IAccountService
                 return Current!;
             }
             string id = await ClientIdAsync(ct);
-            string verifier = DiscordPkce.Encode(RandomNumberGenerator.GetBytes(64));
-            string state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+            string verifier = AccountPkce.NewVerifier();
+            string state = AccountPkce.NewState();
             var listener = new TcpListener(IPAddress.Loopback, redirect.Port);
             listener.Start();
             try
@@ -88,7 +75,7 @@ public sealed class DiscordAccountService : IAccountService
                 timeout.CancelAfter(TimeSpan.FromSeconds(120));
                 string url = "https://discord.com/api/oauth2/authorize?response_type=code&client_id=" + Uri.EscapeDataString(id) +
                     "&redirect_uri=" + Uri.EscapeDataString(redirectUri) + "&scope=identify+guilds&state=" + state +
-                    "&code_challenge=" + DiscordPkce.Challenge(verifier) + "&code_challenge_method=S256";
+                    "&code_challenge=" + AccountPkce.Challenge(verifier) + "&code_challenge_method=S256";
                 openBrowser(url);
                 string code = await ReceiveCallbackAsync(listener, state, timeout.Token);
                 TokenResponse token = await TokenAsync(new() { ["client_id"] = id, ["grant_type"] = "authorization_code", ["code"] = code, ["redirect_uri"] = redirectUri, ["code_verifier"] = verifier }, ct);
@@ -143,7 +130,7 @@ public sealed class DiscordAccountService : IAccountService
                 }
                 catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException or JsonException) { error = ex; }
             }
-            File.Delete(storePath);
+            store.Delete();
             changed = Current is not null;
             stored = null; Current = null;
         }
@@ -171,52 +158,15 @@ public sealed class DiscordAccountService : IAccountService
         return token;
     }
 
-    private async Task SaveAsync(StoredAccount data, CancellationToken ct)
-    {
-        byte[] encrypted = protector.Protect(JsonSerializer.SerializeToUtf8Bytes(data, Json));
-        string directory = Path.GetDirectoryName(storePath)!;
-        Directory.CreateDirectory(directory);
-        string temp = Path.Combine(directory, "." + Guid.NewGuid().ToString("N") + ".tmp");
-        try
-        {
-            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
-            if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            await using (var stream = new FileStream(temp, options))
-            {
-                byte[] bytes = Encoding.ASCII.GetBytes(Convert.ToBase64String(encrypted));
-                await stream.WriteAsync(bytes, ct);
-                await stream.FlushAsync(ct);
-            }
-            File.Move(temp, storePath, true);
-        }
-        finally { File.Delete(temp); }
-    }
+    private Task SaveAsync(StoredAccount data, CancellationToken ct) =>
+        store.SaveAsync(JsonSerializer.SerializeToUtf8Bytes(data, Json), ct);
 
     private async Task<string> ReceiveCallbackAsync(TcpListener listener, string state, CancellationToken ct)
     {
-        using var client = await listener.AcceptTcpClientAsync(ct);
-        using var stream = client.GetStream();
-        using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
-        var line = new StringBuilder();
-        var character = new char[1];
-        while (line.Length < 8192 && await reader.ReadAsync(character.AsMemory(), ct) != 0 && character[0] != '\n') line.Append(character[0]);
-        var parts = line.ToString().TrimEnd('\r').Split(' ');
-        if (parts.Length != 3 || parts[0] != "GET" || !parts[1].StartsWith('/') || !Uri.TryCreate("http://127.0.0.1" + parts[1], UriKind.Absolute, out var callback) || callback.AbsolutePath != redirect.AbsolutePath)
-            throw new InvalidOperationException("Nieprawidłowy callback / Invalid callback.");
-        var values = new Dictionary<string, string>();
-        foreach (var part in callback.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var pair = part.Split('=', 2);
-            string key = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
-            if (!values.TryAdd(key, pair.Length == 2 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : ""))
-                throw new InvalidOperationException("Powtórzony parametr callbacku / Duplicate callback parameter.");
-        }
-        if (!values.TryGetValue("state", out string? received) || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(state), Encoding.UTF8.GetBytes(received)) || !values.TryGetValue("code", out string? code) || string.IsNullOrEmpty(code))
+        var values = await LoopbackCallback.ReceiveQueryAsync(listener, redirect.AbsolutePath, ct);
+        LoopbackCallback.ValidateState(values, state);
+        if (!values.TryGetValue("code", out string? code) || string.IsNullOrEmpty(code))
             throw new InvalidOperationException("Autoryzacja odrzucona / Authorization rejected.");
-        const string html = "<!doctype html><html><head><meta charset=\"utf-8\"></head><body><p lang=\"pl\">Autoryzacja zakończona, możesz zamknąć to okno.</p><p lang=\"en\">Authorization complete, you can close this window.</p></body></html>";
-        byte[] body = Encoding.UTF8.GetBytes(html);
-        byte[] header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
-        await stream.WriteAsync(header, ct); await stream.WriteAsync(body, ct);
         return code;
     }
 
@@ -225,6 +175,6 @@ public sealed class DiscordAccountService : IAccountService
     private sealed record UserResponse(string Id, string Username, string? GlobalName);
     private sealed record StoredAccount(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt, string UserId, string Username, string? GlobalName, DateTimeOffset ObtainedAt)
     {
-        public DiscordAccount Account() => new(UserId, Username, GlobalName, ObtainedAt);
+        public AccountInfo Account() => new("discord", UserId, Username, GlobalName, ObtainedAt);
     }
 }
