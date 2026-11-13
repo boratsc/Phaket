@@ -238,5 +238,18 @@
   "Account.Error": "Sign-in failed. Please try again.",
   "Account.Cancelled": "Sign-in cancelled.",
   "Account.Privacy": "Sign-in uses OAuth2 + PKCE (no secret in the app). Tokens are encrypted locally.",
-  "Account.Nav": "Account"
+  "Account.Nav": "Account",
+  "Account.LoginSteam": "Sign in with Steam",
+  "Account.LoginEpic": "Sign in with Epic",
+  "Account.LoginItch": "Sign in with itch.io",
+  "Account.SteamLocal": "Local Steam account detected:",
+  "Account.SteamUseLocal": "Use local account",
+  "Account.SteamNoLocal": "No local Steam account detected.",
+  "Account.EpicCode": "Authorization code from the browser",
+  "Account.EpicSubmit": "Confirm code",
+  "Account.EpicHint": "Sign in in the browser, copy the code from the page and paste it here.",
+  "Account.ItchClientId": "itch.io OAuth app Client ID",
+  "Account.ItchHint": "Register an app at itch.io/user/settings/oauth-apps (redirect: http://127.0.0.1/callback).",
+  "Account.ItchNoClient": "Enter the itch.io OAuth app client_id.",
+  "Account.Connected": "Connected"
 }

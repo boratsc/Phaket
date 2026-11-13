@@ -238,5 +238,18 @@
   "Account.Error": "Nie udało się zalogować. Spróbuj ponownie.",
   "Account.Cancelled": "Logowanie anulowano.",
   "Account.Privacy": "Logowanie używa OAuth2 + PKCE (bez sekretu w aplikacji). Tokeny są szyfrowane lokalnie.",
-  "Account.Nav": "Konto"
+  "Account.Nav": "Konto",
+  "Account.LoginSteam": "Zaloguj przez Steam",
+  "Account.LoginEpic": "Zaloguj przez Epic",
+  "Account.LoginItch": "Zaloguj przez itch.io",
+  "Account.SteamLocal": "Wykryto lokalne konto Steam:",
+  "Account.SteamUseLocal": "Użyj lokalnego konta",
+  "Account.SteamNoLocal": "Nie wykryto lokalnego konta Steam.",
+  "Account.EpicCode": "Kod autoryzacji z przeglądarki",
+  "Account.EpicSubmit": "Potwierdź kod",
+  "Account.EpicHint": "Zaloguj się w przeglądarce, skopiuj kod ze strony i wklej tutaj.",
+  "Account.ItchClientId": "Client ID aplikacji OAuth itch.io",
+  "Account.ItchHint": "Zarejestruj aplikację na itch.io/user/settings/oauth-apps (redirect: http://127.0.0.1/callback).",
+  "Account.ItchNoClient": "Podaj client_id aplikacji OAuth itch.io.",
+  "Account.Connected": "Połączono"
 }
