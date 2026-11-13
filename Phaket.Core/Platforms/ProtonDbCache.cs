@@ -26,7 +26,7 @@ public sealed class ProtonDbCache : IDisposable
     public ProtonDbCache(string databasePath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
-        connection = new SqliteConnection($"Data Source={databasePath}");
+        connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
         connection.Open();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """

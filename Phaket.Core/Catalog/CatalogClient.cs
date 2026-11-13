@@ -41,7 +41,7 @@ public sealed class CatalogStore : IDisposable
     public CatalogStore(string databasePath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
-        connection = new SqliteConnection($"Data Source={databasePath}");
+        connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
         connection.Open();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """

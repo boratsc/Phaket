@@ -84,7 +84,7 @@ public sealed class SteamAdapter
         foreach (var root in DefaultSteamRoots(os, home))
         {
             if (!Directory.Exists(root)) continue;
-            var isFlatpak = root.Contains(".var/app/com.valvesoftware.Steam", StringComparison.Ordinal);
+            var isFlatpak = root.Replace('\\', '/').Contains(".var/app/com.valvesoftware.Steam", StringComparison.Ordinal);
             foreach (var library in ParseLibraries(root, isFlatpak))
             {
                 var steamapps = Path.Combine(library.Path, "steamapps");
