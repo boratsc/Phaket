@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.RecipeStudioView"
+             x:DataType="vm:RecipeStudioViewModel">
+    <DockPanel>
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top" Spacing="12" Margin="0,0,0,16">
+            <TextBlock Classes="pageTitle" Text="{Binding [Studio.Title], Source={x:Static services:LocalizationService.Instance}}" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Text="{Binding [Studio.Game], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Games}" SelectedItem="{Binding SelectedGame}" MinWidth="180"
+                          AutomationProperties.Name="{Binding [Studio.Game], Source={x:Static services:LocalizationService.Instance}}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Slug}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{Binding [Studio.RecipeId], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+                <TextBox Text="{Binding RecipeId}" MinWidth="220"
+                         AutomationProperties.Name="{Binding [Studio.RecipeId], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding [Studio.RecipeVersion], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+                <TextBox Text="{Binding RecipeVersion}" MinWidth="80"
+                         AutomationProperties.Name="{Binding [Studio.RecipeVersion], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <!-- Toolbar -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ComboBox x:Name="PaletteBox" ItemsSource="{Binding Palette}" MinWidth="180" SelectedIndex="0"
+                          AutomationProperties.Name="{Binding [Studio.Operation], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding AddStepCommand}" CommandParameter="{Binding #PaletteBox.SelectedItem}"
+                        Content="{Binding [Studio.AddStep], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.AddStep], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Classes="cta" Command="{Binding SaveYamlCommand}"
+                        Content="{Binding [Studio.SaveYaml], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.SaveYaml], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding LoadYamlCommand}"
+                        Content="{Binding [Studio.LoadYaml], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.LoadYaml], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding ValidateCommand}"
+                        Content="{Binding [Studio.Validate], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.Validate], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding PlanCommand}"
+                        Content="{Binding [Studio.Plan], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.Plan], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding SwitchViewCommand}"
+                        Content="{Binding [Studio.YamlView], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Studio.YamlView], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" Classes="muted" Margin="0,8,0,0" Text="{Binding Status}" />
+        <!-- Main: steps/YAML + results -->
+        <Grid ColumnDefinitions="*,360">
+            <Border Grid.Column="0" Classes="card" Margin="0,0,12,0">
+                <Grid>
+                    <!-- Visual view -->
+                    <DockPanel IsVisible="{Binding !IsYamlView}">
+                        <TextBlock DockPanel.Dock="Top" Classes="sectionTitle" Margin="0,0,0,8"
+                                   Text="{Binding [Studio.Steps], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="0,0,0,8"
+                                   Text="{Binding [Studio.NoSteps], Source={x:Static services:LocalizationService.Instance}}"
+                                   IsVisible="{Binding Steps.Count, Converter={x:Static services:CountToVisibilityConverter.Instance}}" />
+                        <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}"
+                                 Background="Transparent" BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:StepViewModel}">
+                                    <Border Background="{StaticResource SurfaceRaisedBrush}" CornerRadius="10"
+                                            Padding="12" Margin="0,0,0,8">
+                                        <StackPanel Spacing="6">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Use}" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource AmberBrush}" />
+                                                <TextBlock Classes="muted" Text="{Binding Id}" />
+                                                <Button Content="✕" Padding="6,2"
+                                                        Command="{Binding $parent[ItemsControl].((vm:RecipeStudioViewModel)DataContext).RemoveStepCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        AutomationProperties.Name="Remove step" />
+                                            </StackPanel>
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto">
+                                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                           Text="{Binding [Studio.From], Source={x:Static services:LocalizationService.Instance}}" />
+                                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding From}" Margin="0,0,8,4" />
+                                                <TextBlock Grid.Row="0" Grid.Column="2" Classes="muted" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                           Text="{Binding [Studio.To], Source={x:Static services:LocalizationService.Instance}}" />
+                                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding To}" Margin="0,0,0,4" />
+                                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" Margin="0,0,8,0" VerticalAlignment="Center" Text="key" />
+                                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Key}" Margin="0,0,8,0" />
+                                                <TextBlock Grid.Row="1" Grid.Column="2" Classes="muted" Margin="0,0,8,0" VerticalAlignment="Center" Text="value" />
+                                                <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding Value}" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                    <!-- YAML view: same model -->
+                    <TextBox IsVisible="{Binding IsYamlView}" Text="{Binding YamlText}"
+                             AcceptsReturn="True" TextWrapping="NoWrap"
+                             FontFamily="Cascadia Code, Consolas, monospace"
+                             AutomationProperties.Name="{Binding [Studio.YamlView], Source={x:Static services:LocalizationService.Instance}}" />
+                </Grid>
+            </Border>
+            <!-- Results -->
+            <Grid Grid.Column="1" RowDefinitions="*,*">
+                <Border Grid.Row="0" Classes="card" Margin="0,0,0,12">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="sectionTitle" Margin="0,0,0,8"
+                                   Text="{Binding [Studio.ValidationResults], Source={x:Static services:LocalizationService.Instance}}" />
+                        <ItemsControl ItemsSource="{Binding ValidationResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+                </Border>
+                <Border Grid.Row="1" Classes="card">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="sectionTitle" Margin="0,0,0,8"
+                                   Text="{Binding [Studio.PlanPreview], Source={x:Static services:LocalizationService.Instance}}" />
+                        <ItemsControl ItemsSource="{Binding PlanLines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                               FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</UserControl>

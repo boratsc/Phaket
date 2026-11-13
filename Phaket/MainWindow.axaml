@@ -1,14 +1,51 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Phaket.ViewModels"
+        xmlns:views="using:Phaket.Views"
+        xmlns:services="using:Phaket.Services"
         x:Class="Phaket.MainWindow"
-        Title="Phaket"
-        Width="640" Height="400"
-        MinWidth="320" MinHeight="240">
-    <!-- Teksty celowo neutralne językowo (nazwa produktu + stack); przyszłe komunikaty
-         użytkownika muszą trafiać do zasobów pl-PL/en. TextBlock automatycznie expose'uje
-         tekst do czytników ekranu przez automation peer. -->
-    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-        <TextBlock Text="Phaket" FontSize="28" HorizontalAlignment="Center" />
-        <TextBlock Text=".NET 10 · Avalonia" HorizontalAlignment="Center" />
-    </StackPanel>
+        x:DataType="vm:MainWindowViewModel"
+        Title="phaket"
+        Width="1280" Height="800"
+        MinWidth="900" MinHeight="600">
+    <Window.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:LibraryViewModel}">
+            <views:LibraryView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RecipeStudioViewModel}">
+            <views:RecipeStudioView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView />
+        </DataTemplate>
+    </Window.DataTemplates>
+    <Grid ColumnDefinitions="250,*">
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="{StaticResource SidebarBrush}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="16,20,16,24">
+                    <Image Source="/Assets/lioness.png" Width="36" Height="36"
+                           AutomationProperties.Name="phaket" />
+                    <TextBlock Text="phaket" FontSize="22" FontWeight="SemiBold"
+                               Foreground="{StaticResource AmberBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Bottom" Classes="muted" Margin="16,12"
+                           Text="{Binding [App.Footer], Source={x:Static services:LocalizationService.Instance}}"
+                           TextWrapping="Wrap" />
+                <StackPanel Spacing="2">
+                    <Button Classes="nav" Command="{Binding NavigateCommand}" CommandParameter="library"
+                            Content="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Classes="nav" Command="{Binding NavigateCommand}" CommandParameter="studio"
+                            Content="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Classes="nav" Command="{Binding NavigateCommand}" CommandParameter="settings"
+                            Content="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <!-- Content -->
+        <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" Margin="24" />
+    </Grid>
 </Window>

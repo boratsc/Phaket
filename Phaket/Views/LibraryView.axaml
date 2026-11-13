@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.LibraryView"
+             x:DataType="vm:LibraryViewModel">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
+            <TextBlock Classes="pageTitle" Text="{Binding [Library.Title], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="cta" Command="{Binding ScanCommand}"
+                    Content="{Binding [Library.Scan], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Library.Scan], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Command="{Binding AddFolderCommand}"
+                    Content="{Binding [Library.AddFolder], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Library.AddFolder], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="0,0,0,12"
+                   Text="{Binding [Library.Empty], Source={x:Static services:LocalizationService.Instance}}"
+                   IsVisible="{Binding Games.Count, Converter={x:Static services:CountToVisibilityConverter.Instance}}" />
+        <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,16,0,0"
+                IsVisible="{Binding SelectedGame, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="8">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Library.LaunchTitle], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding [Library.LaunchHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <TextBox Text="{Binding LaunchInstructions}" IsReadOnly="True"
+                         AutomationProperties.Name="{Binding [Library.LaunchTitle], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+        </Border>
+        <ListBox ItemsSource="{Binding Games}" SelectedItem="{Binding SelectedGame}"
+                 Background="Transparent" BorderThickness="0">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:DetectedGameViewModel}">
+                    <Border Classes="card" Margin="0,0,0,12" Padding="16">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
+                                <TextBlock Classes="muted">
+                                    <Run Text="{Binding [Library.Build], Source={x:Static services:LocalizationService.Instance}}" />:
+                                    <Run Text="{Binding Build}" />
+                                </TextBlock>
+                                <TextBlock Classes="muted" Text="{Binding RootPath}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="cta" VerticalAlignment="Center"
+                                    Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).PrepareLaunchCommand}"
+                                    CommandParameter="{Binding}"
+                                    Content="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}"
+                                    AutomationProperties.Name="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>
