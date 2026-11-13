@@ -55,6 +55,27 @@ public class InstallOrchestratorTests
 public class CompatibilityAnalyzerTests
 {
     [Fact]
+    public void ReimportDoesNotDuplicateReports()
+    {
+        var dir = Directory.CreateTempSubdirectory("phaket-protondb-dedup-").FullName;
+        try
+        {
+            var definitions = new Dictionary<string, GameDefinition>
+            {
+                ["945360"] = new("among-us", ["BepInEx/**"], new Dictionary<string, string> { ["steam"] = "945360" }),
+            };
+            const string dump = """
+                [{"app":{"steam":{"appId":"945360"},"title":"Among Us"},"responses":{"variant":"official","verdict":"yes"},"timestamp":1730000000}]
+                """;
+            using var cache = new ProtonDbCache(Path.Combine(dir, "cache.db"));
+            cache.Import(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(dump)), definitions, "fixture", "2026-11-01");
+            cache.Import(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(dump)), definitions, "fixture", "2026-11-01");
+            Assert.Single(cache.GetReports("945360"));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
     public void SeparatesRuntimeFromModCompatibility()
     {
         var report = CompatibilityAnalyzer.Analyze("among-us", null,

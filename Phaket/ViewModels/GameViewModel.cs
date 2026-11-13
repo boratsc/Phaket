@@ -52,11 +52,12 @@ public partial class GameViewModel : ViewModelBase
     private readonly Action openBackup;
     private readonly Action openCompatibility;
     private readonly Action openInstall;
+    private readonly Action openBuilds;
     private string? lastBackup;
 
     public GameViewModel(GameCatalogItem game, Action back,
         Action? openMods = null, Action? openProfiles = null, Action? openBackup = null,
-        Action? openCompatibility = null, Action? openInstall = null)
+        Action? openCompatibility = null, Action? openInstall = null, Action? openBuilds = null)
     {
         Game = game;
         this.back = back;
@@ -65,6 +66,7 @@ public partial class GameViewModel : ViewModelBase
         this.openBackup = openBackup ?? (() => { });
         this.openCompatibility = openCompatibility ?? (() => { });
         this.openInstall = openInstall ?? (() => { });
+        this.openBuilds = openBuilds ?? (() => { });
         var profile = store.Active(game.Definition.Slug);
         Game.ProfileName = profile?.Name ?? "Profil domyślny";
         Game.ModCount = profile?.Mods.Count(m => m.Enabled) ?? 0;
@@ -91,6 +93,7 @@ public partial class GameViewModel : ViewModelBase
     [RelayCommand] private void OpenBackup() => openBackup();
     [RelayCommand] private void OpenCompatibility() => openCompatibility();
     [RelayCommand] private void OpenInstall() => openInstall();
+    [RelayCommand] private void OpenBuilds() => openBuilds();
 
     [RelayCommand]
     private void Play()

@@ -51,6 +51,16 @@ public sealed class ProtonDbCache : IDisposable
         var fetchedAt = DateTimeOffset.UtcNow;
         var count = 0;
         using var tx = connection.BeginTransaction();
+        // Idempotent import: replace existing reports for the imported appIds
+        // so re-importing the same dump does not accumulate duplicates.
+        foreach (var appId in definitionsBySteamAppId.Keys)
+        {
+            using var del = connection.CreateCommand();
+            del.Transaction = tx;
+            del.CommandText = "DELETE FROM protondb_reports WHERE app_id=$app";
+            del.Parameters.AddWithValue("$app", appId);
+            del.ExecuteNonQuery();
+        }
         foreach (var element in doc.RootElement.EnumerateArray())
         {
             var appId = element.GetProperty("app").GetProperty("steam").GetProperty("appId").GetString();
