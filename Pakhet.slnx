@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Pakhet.Tests/Pakhet.Tests.csproj" />
+  <Project Path="Pakhet/Pakhet.csproj" />
+</Solution>
