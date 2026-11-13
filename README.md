@@ -1,32 +1,91 @@
 # Phaket Desktop
 
-Minimalny szkielet aplikacji desktopowej **Phaket** (.NET 10 + Avalonia 12.1.6) na Windows
-i Linux. Zakres PoC 0.0.1: sam szkielet okna — bez funkcji produktu (silnik przepisów
-i Recipe Studio powstaną osobno).
+Aplikacja desktopowa **Phaket** (.NET 10 + Avalonia 12.1.6) na Windows i Linux.
+**PoC 0.0.1 „Zagłębie Dąbrowskie”** — lokalny, bezpieczny silnik modowania z wizualnym
+edytorem przepisów (Recipe Studio) oraz elementami MVP: katalog buildów, graf
+zależności, współdzielenie profili, zgłaszanie kompatybilności i wiedza ProtonDB.
+
+> PoC potwierdza *uniwersalność i bezpieczeństwo* lokalnego modowania, nie liczbę
+> obsługiwanych gier. Zestaw testowy: Among Us (Unity IL2CPP) i Valheim (Unity Mono).
+> Czat i konta online to MVP 0.1 — poza zakresem PoC.
+
+## Zakres PoC
+
+**Silnik przepisów OMRL** (`Phaket.Core`):
+- parser YAML/JSON + JSON Schema + walidator semantyczny (zamknięty katalog operacji),
+- deterministyczny planner (dry-run, `OperationPlan` bez mutacji),
+- transakcyjny executor: journal przed mutacjami, atomowe zapisy, staging, rollback,
+  wznowienie po awarii z detekcją rozbieżności,
+- model własności zasobów (odinstalowanie moda A nie niszczy zmian moda B),
+- bezpieczeństwo: granice ścieżek (także symlinki), zip-slip, bomby dekompresyjne,
+  weryfikacja SHA-256, allowlista źródeł.
+
+**UI (zgodny z makietami `phaket_makiety_v1`):**
+- Biblioteka gier (karty z okładkami, „Graj" 1 klik przez `steam://rungameid`),
+- Widok gry (hero, status, Graj/Instaluj/Mody/Kopia/Szczegóły),
+- Mody, Profile, Kopie zapasowe, Kompatybilność (ProtonDB), Instalacja (stepper),
+- Recipe Studio (round-trip YAML ↔ model, walidacja, podgląd planu),
+- Ustawienia (język pl-PL/en), Pomoc.
+
+**Elementy MVP:**
+- katalog buildów z backendu (offline-honest, tylko metadane),
+- graf zależności (przechodniość, cykle, konflikty),
+- współdzielenie profili (export/import z podglądem diff; import tworzy szkic),
+- zgłaszanie kompatybilności (zaufane/niezaufane rozdzielone),
+- import zrzutu ProtonDB (ODbL), bezpieczne opcje uruchomienia (plan → zgoda → backup → cofnij).
 
 ## Wymagania
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0)
-- Windows 10/11 albo Linux z sesją X11. W sesji Wayland domyślny tryb wymaga działającego XWayland; bez niego można wypróbować opisany niżej natywny Wayland, z podanymi ograniczeniami dostępności.
-- Opcjonalnie (opt-in natywnego Wayland): `libwayland-client` oraz sterownik EGL/OpenGL —
-  standardowo obecne na desktopach Wayland
+- Windows 10/11 albo Linux z sesją X11/XWayland (natywny Wayland opt-in, niżej).
+- Opcjonalnie: backend `PhaketServer` (osobne repo) dla katalogu buildów; aplikacja
+  działa offline na lokalnym cache.
 
 ## Uruchomienie lokalne
 
 ```bash
 dotnet run --project Phaket          # uruchomienie aplikacji
-dotnet build                         # build całej solucji
-dotnet test                          # testy headless (nie wymagają sesji graficznej)
+dotnet build Phaket.slnx             # build całej solucji
+dotnet test Phaket.slnx              # testy (Core + headless UI, bez sesji graficznej)
 ```
 
-Projekt aplikacji: `Phaket/Phaket.csproj`, testy: `Phaket.Tests/Phaket.Tests.csproj`.
+Build PoC (self-contained):
+
+```bash
+dotnet publish Phaket/Phaket.csproj -c Release -r linux-x64 --self-contained true
+dotnet publish Phaket/Phaket.csproj -c Release -r win-x64  --self-contained true
+```
+
+## Architektura
+
+```
+Phaket.Core/       logika lokalna (bez zależności UI):
+  Domain/          model domeny (Game/GameEdition/Installation/Profile/OperationPlan/Journal)
+  Omrl/            parser, schema, walidator, planner, katalog operacji, URI, i18n błędów
+  Execution/       executor, journal, ledger własności, SafeArchive, InstallOrchestrator
+  Platforms/       Steam (VDF/ACF), Legendary, ProtonDB cache, CompatibilityReportStore
+  Catalog/         CatalogClient + CatalogStore (SQLite, snapshot/delty/ETag/offline)
+  Profiles/        ProfileLockfile, ProfileShareService, DependencyGraph
+Phaket/            aplikacja Avalonia (MVVM, CommunityToolkit.Mvvm):
+  ViewModels/      MainWindow, Library, Game, Mods, Profiles, Backup, Compatibility,
+                   Install, Builds, Share, Graph, Report, RecipeStudio, Settings, Help
+  Views/           widoki XAML (design: grafit + bursztyn, Material.Icons)
+  Services/        LocalizationService (pl-PL/en), ProfileStore, LaunchService, SteamLaunchOptions
+  Assets/          okładki/hero gier, lwica (branding), zasoby i18n
+Phaket.Core.Tests/ testy jednostkowe silnika (xUnit v3)
+Phaket.Tests/      testy headless UI (Avalonia.Headless.XUnit) + rendery Skia
+```
+
+Zasada: **jedno źródło prawdy** — edytor wizualny i YAML operują na tym samym typowanym
+modelu; plan jest deterministyczny i niezależny od locale; backend jest źródłem prawdy
+dla katalogu, graf jest odbudowywalną projekcją.
 
 ## Linux: Wayland vs XWayland
 
 Domyślnie aplikacja używa backendu **X11** — w sesji Wayland działa przez **XWayland**.
 Świadomy wybór: backend X11 ma pełną dostępność (AT-SPI2, czytniki ekranu, np. Orca),
 a natywny backend Wayland w Avalonia 12.1 jest **eksperymentalny i nie ma jeszcze
-backendu AT-SPI** (zweryfikowane w źródłach 12.1.6: `WaylandPlatform` nie inicjuje AT-SPI).
+backendu AT-SPI**.
 
 Natywny Wayland można włączyć warunkowo (opt-in):
 
@@ -34,53 +93,68 @@ Natywny Wayland można włączyć warunkowo (opt-in):
 PHAKET_NATIVE_WAYLAND=1 dotnet run --project Phaket
 ```
 
-Wtedy `UseWaylandWithFallback()` (z pakietu `Avalonia.Wayland`) łączy się bezpośrednio
-z kompozytorem Wayland, a gdy jest niedostępny — automatycznie wraca do X11.
-Na Windows zmienna nie ma żadnego efektu.
+`UseWaylandWithFallback()` łączy się bezpośrednio z kompozytorem Wayland, a gdy jest
+niedostępny — wraca do X11. Na Windows zmienna nie ma efektu.
 
-Ograniczenia natywnego Wayland (Avalonia 12.1):
+Ograniczenia natywnego Wayland (Avalonia 12.1): brak AT-SPI (czytniki ekranu), brak
+integracji KDE (globalne menu, ikony okien, blur-behind), renderowanie przez EGL.
 
-- brak AT-SPI → brak obsługi czytników ekranu (dlatego nie jest domyślny),
-- brak integracji KDE: globalne menu aplikacji, ikony okien, blur-behind,
-- renderowanie przez EGL (OpenGL / OpenGL ES), opcjonalnie dma-buf,
-- backend oznaczony jako eksperymentalny; `UsePlatformDetect()` go nie wybiera.
-
-Weryfikacja, który backend faktycznie działa (gniazda procesu): znajdź PID działającej
-aplikacji w monitorze systemu lub za pomocą `ps -ef`, a następnie podstaw go poniżej.
-Nie używaj PID procesu `dotnet run`, który może być tylko procesem nadrzędnym.
+Weryfikacja backendu (gniazda procesu):
 
 ```bash
-lsof -p 12345 | grep -E 'wayland|X11' # 12345 zastąp PID-em aplikacji
+lsof -p <PID> | grep -E 'wayland|X11'
 # natywny Wayland: socket do $XDG_RUNTIME_DIR/wayland-*
 # X11/XWayland:    socket do /tmp/.X11-unix/X*
 ```
 
 ## Dostępność
 
-- Avalonia automatycznie tworzy *automation peers* dla standardowych kontrolek:
-  Windows → UI Automation, Linux (X11/XWayland) → AT-SPI2 po D-Bus (bez konfiguracji,
-  gdy działa usługa dostępności).
-- `TextBlock`/`Button` z tekstem udostępniają go czytnikom automatycznie; dla ikon
-  i niejednoznacznych kontrolek ustawiaj `AutomationProperties.Name`, etykiety pól
-  przez `AutomationProperties.LabeledBy`.
-- Motyw `FluentTheme` z `RequestedThemeVariant="Default"` podąża za jasnym/ciemnym
-  motywem systemu; wskaźnik fokusu jest widoczny domyślnie.
-- Test headless sprawdza m.in. nazwę dostępną okna (`WindowAutomationPeer`).
-- Test headless i CI nie uruchamiają rzeczywistego backendu okien ani czytnika ekranu. Lokalne uruchomienie XWayland, natywnego Wayland i fallbacku sprawdzono w KDE; rzeczywistego Windows i czytnika ekranu jeszcze nie sprawdzono.
+- Avalonia tworzy *automation peers*: Windows → UI Automation, Linux (X11/XWayland) →
+  AT-SPI2 po D-Bus. Teksty kontrolek są udostępniane automatycznie; ikony i niejednoznaczne
+  kontrolki mają `AutomationProperties.Name`.
+- Motyw ciemny (grafit) z bursztynowym akcentem; wskaźnik fokusu widoczny; kontrast zgodny
+  z tokenami `phaket_makiety_v1/spec/tokens.json`.
+- Testy headless sprawdzają nazwy dostępne (WindowAutomationPeer, nawigacja). Zweryfikowano
+  AT-SPI na XWayland (KDE); **rzeczywisty Windows i słyszalny test Orca — do wykonania**.
 
 ## Lokalizacja (pl-PL / en)
 
-Szkielet nie zawiera jeszcze komunikatów użytkownika — widoczne teksty są neutralne
-językowo (nazwa produktu i stack). Każdy przyszły tekst UI musi trafiać do zasobów
-pl-PL/en; identyfikatory (`AutomationProperties.AutomationId`, klucze zasobów)
-pozostają niezależne od języka.
+Wszystkie teksty UI pochodzą z zasobów `Phaket/Assets/i18n/{pl-PL,en}.json`
+(`LocalizationService`, przełączanie bez przebudowy). Polski pierwszy, angielski pełny.
+Identyfikatory, klucze, kody błędów i formaty danych pozostają niezależne od języka.
+Błędy silnika: stabilny kod + parametry + komunikat pl/en; ten sam przepis w pl/en daje
+identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
 
-## Struktura
+## Testy i weryfikacja
 
-```
-Phaket/            aplikacja (Program.cs, App.axaml, MainWindow.axaml, app.manifest)
-Phaket.Tests/      testy headless xUnit v3 (Avalonia.Headless.XUnit)
-Phaket.slnx        solucja (build/test z katalogu głównego)
-```
+- `Phaket.Core.Tests`: silnik (walidator, planner, executor, rollback, własność,
+  bezpieczeństwo, katalog, graf, współdzielenie, raporty) — ~192 testy.
+- `Phaket.Tests`: headless UI (nawigacja, lokalizacja, dostępność, round-trip Studio)
+  + `RenderTests` (zrzuty Skia 1280×800 do `/tmp/opencode/phaket-render`).
+- CI (GitHub Actions): build + testy na `ubuntu-26.04` i `windows-latest`.
+- E2E: install→verify→uninstall (sandbox), katalog desktop→backend, share round-trip.
 
-Licencja: plik `LICENSE` (bez zmian).
+## Znane ograniczenia PoC
+
+- Instalacja w UI działa na **sandbox fixture** (nie na prawdziwej grze); E2E na realnej
+  instalacji wymaga zgody i zasobów użytkownika.
+- Dane grafu/współdzielenia/ProtonDB w demo są przykładowe; import zrzutu ODbL pozwala
+  wczytać realne dane.
+- Natywny Wayland bez AT-SPI; rzeczywisty Windows GUI i czytnik Orca niezweryfikowane.
+- Decyzja licencyjna (GPL → LGPL?) i zatwierdzenie specyfikacji OMRL/ADR-038 — otwarte,
+  blokują publiczne wydanie.
+
+## English summary
+
+Phaket desktop PoC 0.0.1 "Zagłębie Dąbrowskie": a local, safe modding engine (OMRL
+parser/validator, deterministic dry-run planner, transactional executor with journal +
+rollback + ownership) with a mockup-matching UI (library, game hub, mods, profiles,
+backups, compatibility, install stepper, Recipe Studio, settings, help) and MVP bridges
+(build catalog, dependency graph, profile sharing, compatibility reporting, ProtonDB
+ODbL import, safe launch options). .NET 10 + Avalonia 12.1.6, Windows + Linux (XWayland
+default, native Wayland opt-in without AT-SPI). pl-PL/en localization. ~210 tests +
+headless UI + Skia renders; CI on ubuntu-26.04 + windows-latest. Chat/accounts are MVP
+0.1 (out of PoC scope). License decision and OMRL/ADR-038 approval pending (block public
+release only).
+
+Licencja: plik `LICENSE`.
