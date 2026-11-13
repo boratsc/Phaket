@@ -11,15 +11,21 @@ public sealed record GameDefinition(string Slug, IReadOnlyList<string> WritableA
 
 public static class SourcePolicy
 {
-    // PoC allowlist (spec §9): GitHub release assets of concrete repos + Thunderstore API.
-    // Redirects beyond the allowlist are forbidden at execution time.
+    // PoC allowlist (spec §9): concrete GitHub repositories (owner/repo) and the
+    // Thunderstore API host only. Redirects beyond the allowlist are forbidden.
+    private static readonly HashSet<string> GitHubRepos = new(StringComparer.OrdinalIgnoreCase);
+
+    public static void AllowGitHubRepository(string ownerAndRepo) => GitHubRepos.Add(ownerAndRepo);
+
     public static bool IsAllowedHttpsSource(string source)
     {
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
         if (uri.Scheme != "https") return false;
         if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
-            return uri.AbsolutePath.Contains("/releases/download/", StringComparison.Ordinal);
-        return uri.Host.Equals("api.thunderstore.io", StringComparison.OrdinalIgnoreCase)
-            || uri.Host.EndsWith(".thunderstore.io", StringComparison.OrdinalIgnoreCase);
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, "^/([^/]+/[^/]+)/releases/download/");
+            return match.Success && GitHubRepos.Contains(match.Groups[1].Value);
+        }
+        return uri.Host.Equals("api.thunderstore.io", StringComparison.OrdinalIgnoreCase);
     }
 }

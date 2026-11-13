@@ -41,12 +41,33 @@ public static class RecipeParser
         try
         {
             element = JsonDocument.Parse(json).RootElement;
+            EnsureNoDuplicateKeys(element);
         }
+        catch (PhaketException) { throw; }
         catch (Exception ex)
         {
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", ex.Message));
         }
         return Deserialize(element);
+    }
+
+    private static void EnsureNoDuplicateKeys(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (!seen.Add(property.Name))
+                        throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"duplicate key: {property.Name}"));
+                    EnsureNoDuplicateKeys(property.Value);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray()) EnsureNoDuplicateKeys(item);
+                break;
+        }
     }
 
     public static string ToJson(Recipe recipe) =>

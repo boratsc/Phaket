@@ -110,7 +110,10 @@ public static class RecipeValidator
         var element = JsonSerializer.SerializeToElement(with);
         var results = ParameterSchemas[use].Evaluate(element, new EvaluationOptions { OutputFormat = OutputFormat.List });
         if (!results.IsValid)
+        {
             add(ErrorCodes.ValidationFailed, [("detail", $"step '{stepId}' ({use}): invalid parameters")]);
+            return; // do not interpret parameters that failed their schema
+        }
 
         if (use == "loader.ensure" && with.TryGetValue("artifact", out var artifactRef)
             && !artifactIds.Contains(artifactRef.GetString() ?? ""))

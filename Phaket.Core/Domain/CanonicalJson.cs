@@ -23,6 +23,18 @@ public static class CanonicalJson
     public static string Sha256(OperationPlan plan) =>
         Convert.ToHexStringLower(SHA256.HashData(Serialize(plan)));
 
+    // Exchange representation: canonical content PLUS the planId. The hash
+    // itself is always computed over the content without the identifier.
+    public static byte[] SerializeWithId(OperationPlan plan)
+    {
+        var element = JsonSerializer.SerializeToElement(plan, Options);
+        var map = element.EnumerateObject().ToDictionary(p => p.Name, p => p.Value, StringComparer.Ordinal);
+        map["planId"] = JsonSerializer.SerializeToElement(plan.PlanId, Options);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream)) Write(writer, JsonSerializer.SerializeToElement(map, Options));
+        return stream.ToArray();
+    }
+
     private static void Write(Utf8JsonWriter writer, JsonElement value)
     {
         switch (value.ValueKind)

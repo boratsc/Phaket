@@ -53,10 +53,16 @@ public static class OperationPlanner
                 && NumericVersion.TryParse(installed, out var installedVersion)
                 && (loader.Version is null || (VersionRange.TryParse([loader.Version], out var loaderRange) && loaderRange!.Contains(installedVersion!)));
             var willBeInstalled = recipe.Steps.Any(s => s.Use == "loader.ensure"
-                && s.With.TryGetValue("id", out var id) && id.GetString() == loader.Id);
+                && s.With.TryGetValue("id", out var id) && id.GetString() == loader.Id
+                && ConditionEvaluator.Evaluate(s.When, facts)
+                && LoaderVersionCompatible(s, loader.Version));
             if (!satisfied && !willBeInstalled)
                 throw new PhaketException(ErrorCodes.LoaderUnavailable, ("loader", loader.Id), ("range", loader.Version ?? "*"));
         }
+
+        // A gameVersion condition requires a known, valid build fact (spec §5).
+        foreach (var step in recipe.Steps)
+            RequireVersionFact(step.When, facts);
 
         var artifacts = recipe.Artifacts.ToDictionary(a => a.Id, StringComparer.Ordinal);
         var operations = new List<PlannedOperation>();
@@ -81,7 +87,9 @@ public static class OperationPlanner
             operations.Add(new PlannedOperation(
                 step.Id, step.Use, targetPath ?? context.ProfileRoot, sourceRef, sizeBytes, sha256,
                 preconditions, operation.Recovery, operation.Recovery,
-                IsWrite(step.Use) ? "record-owner" : "none", operation.Permissions));
+                IsWrite(step.Use) ? "record-owner" : "none", operation.Permissions,
+                step.With.ToDictionary(kv => kv.Key, kv => kv.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? kv.Value.GetString()! : kv.Value.GetRawText())));
 
             if (targetPath is not null)
             {
@@ -112,6 +120,31 @@ public static class OperationPlanner
             ExecutableWarnings(operations),
             recipe.Artifacts.Any(a => a.Source.StartsWith("https://", StringComparison.Ordinal)),
             verification);
+    }
+
+    private static bool LoaderVersionCompatible(RecipeStep step, string? requiredRange)
+    {
+        if (requiredRange is null) return true;
+        if (!step.With.TryGetValue("version", out var declared)
+            || declared.ValueKind != System.Text.Json.JsonValueKind.String) return true;
+        return NumericVersion.TryParse(declared.GetString(), out var version)
+            && VersionRange.TryParse([requiredRange], out var range)
+            && range!.Contains(version!);
+    }
+
+    private static void RequireVersionFact(RecipeCondition? condition, PlanFacts facts)
+    {
+        if (condition is null) return;
+        if (condition.GameVersion is not null)
+        {
+            if (facts.GameVersion is null)
+                throw new PhaketException(ErrorCodes.GameBuildUnavailable);
+            if (!NumericVersion.TryParse(facts.GameVersion, out _))
+                throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
+        }
+        if (condition.All is { } all) foreach (var c in all) RequireVersionFact(c, facts);
+        if (condition.Any is { } any) foreach (var c in any) RequireVersionFact(c, facts);
+        if (condition.Not is { } not) RequireVersionFact(not, facts);
     }
 
     private static bool IsWrite(string use) => use is "directory.ensure" or "file.copy" or "file.remove"
@@ -163,7 +196,11 @@ public static class OperationPlanner
             if (File.Exists(filePath))
             {
                 var bytes = File.ReadAllBytes(filePath);
-                return (from, bytes.LongLength, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), filePath);
+                var observed = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+                if (artifact.Sha256 is { } declared
+                    && !string.Equals(declared, observed, StringComparison.OrdinalIgnoreCase))
+                    throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", artifact.Id));
+                return (from, bytes.LongLength, artifact.Sha256 ?? observed, filePath);
             }
             if (artifact.Source.StartsWith("https://", StringComparison.Ordinal))
                 return (from, artifact.SizeBytes, artifact.Sha256, null);
@@ -175,7 +212,11 @@ public static class OperationPlanner
             var bytes = File.ReadAllBytes(stagingPath);
             return (from, bytes.LongLength, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), stagingPath);
         }
-        // Produced by an earlier extract step in this plan; hash unknown until execution.
+        // Missing staging sources must be produced by an earlier extract step.
+        var producer = producedPaths.Keys.FirstOrDefault(prefix =>
+            from == prefix || from.StartsWith(prefix + "/", StringComparison.Ordinal));
+        if (producer is null)
+            throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", from));
         return (from, null, null, null);
     }
 
@@ -196,8 +237,20 @@ public static class OperationPlanner
             _ => throw new PhaketException(ErrorCodes.InvalidUri, ("uri", element.GetString() ?? "")),
         };
         var resolved = PathBoundary.Resolve(root, path);
-        if (scheme == "game" && IsWrite(use) && !context.Game.AllowsWrite(path))
-            throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", element.GetString() ?? ""));
+        if (scheme == "game" && IsWrite(use))
+        {
+            if (!context.Game.AllowsWrite(path))
+                throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", element.GetString() ?? ""));
+            // Re-check the real (symlink-resolved) location against writableAreas.
+            var realRoot = PathBoundary.Resolve(context.GameRoot, ".");
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!resolved.StartsWith(realRoot + Path.DirectorySeparatorChar, comparison)
+                && !string.Equals(resolved, realRoot, comparison))
+                throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", element.GetString() ?? ""));
+            var realRelative = resolved[realRoot.Length..].TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/');
+            if (!context.Game.AllowsWrite(realRelative))
+                throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", element.GetString() ?? ""));
+        }
         return resolved;
     }
 

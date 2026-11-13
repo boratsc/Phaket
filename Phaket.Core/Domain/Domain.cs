@@ -9,7 +9,8 @@ public sealed record RecipeRef(string Id, string Version);
 public sealed record PlannedOperation(
     string OpId, string Kind, string TargetPath, string? SourceRef, long? SizeBytes,
     string? Sha256, IReadOnlyList<string> Preconditions, string BackupStrategy,
-    string Rollback, string OwnershipEffect, IReadOnlyList<string> RequiredPermissions);
+    string Rollback, string OwnershipEffect, IReadOnlyList<string> RequiredPermissions,
+    IReadOnlyDictionary<string, string>? Parameters = null);
 public sealed record PlanConflict(string Path, IReadOnlyList<string> Owners, string Resolution);
 
 public sealed record OperationPlan(
@@ -23,8 +24,9 @@ public sealed record OperationPlan(
 }
 
 public enum JournalState { Planned, Approved, Executing, Completed, Failed, RolledBack, Interrupted }
-public sealed record OperationIntent(string OpId, string Kind, string TargetPath, string? ExpectedSha256);
-public sealed record JournalEntry(OperationIntent Intent, string? BackupRef, bool Applied, bool Verified);
+public sealed record OperationIntent(string OpId, string Kind, string TargetPath, string? ExpectedSha256, string? Key = null);
+public sealed record JournalEntry(OperationIntent Intent, string? BackupRef, bool Applied, bool Verified,
+    IReadOnlyList<string>? CreatedFiles = null, Phaket.Core.Execution.LedgerOwner? RemovedOwner = null);
 public sealed record ExecutionJournal(string SchemaVersion, string TransactionId, string PlanId,
     JournalState State, IReadOnlyList<JournalEntry> Entries)
 {

@@ -25,7 +25,7 @@ public sealed class PlannerFixture : IDisposable
         Directory.CreateDirectory(ProfileRoot);
         Directory.CreateDirectory(StagingRoot);
         Directory.CreateDirectory(PackageRoot);
-        File.WriteAllBytes(Path.Combine(PackageRoot, "custom-roles.zip"), "fake-zip-content"u8.ToArray());
+        File.WriteAllBytes(Path.Combine(PackageRoot, "custom-roles.zip"), []);
         File.WriteAllText(Path.Combine(GameRoot, "winhttp.dll"), "original-loader");
 
         var facts = new PlanFacts("linux", "steam", "2026.3.5",
@@ -205,6 +205,7 @@ public class OperationPlannerTests
     [Fact]
     public void HttpsArtifactMarksPlanAsRequiringDownload()
     {
+        SourcePolicy.AllowGitHubRepository("org/repo");
         using var fixture = new PlannerFixture();
         var recipe = TestFixtures.AmongUsRecipe();
         recipe = recipe with
