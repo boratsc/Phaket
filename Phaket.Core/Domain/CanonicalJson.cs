@@ -20,8 +20,10 @@ public static class CanonicalJson
         return stream.ToArray();
     }
 
-    public static string Sha256(OperationPlan plan) =>
-        Convert.ToHexStringLower(SHA256.HashData(Serialize(plan)));
+    public static string Sha256(OperationPlan plan) => Hash(plan);
+
+    public static string Hash<T>(T value) =>
+        Convert.ToHexStringLower(SHA256.HashData(Serialize(value)));
 
     // Exchange representation: canonical content PLUS the planId. The hash
     // itself is always computed over the content without the identifier.

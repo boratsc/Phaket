@@ -17,7 +17,8 @@ public sealed record LedgerEntry(
     string? BaseValue,
     bool BaseExisted,
     IReadOnlyList<LedgerOwner> Owners,
-    string? CurrentHash);
+    string? CurrentHash,
+    string? Format = null);
 
 public sealed class OwnershipLedger
 {

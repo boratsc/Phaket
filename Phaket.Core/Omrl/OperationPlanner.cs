@@ -181,6 +181,28 @@ public static class OperationPlanner
         PlannerContext context, Dictionary<string, RecipeArtifact> artifacts,
         Dictionary<string, string> producedPaths)
     {
+        if (use == "loader.ensure")
+        {
+            if (!with.TryGetValue("artifact", out var artifactElement)
+                || !artifacts.TryGetValue(artifactElement.GetString() ?? "", out var loaderArtifact))
+                return (null, null, null, null);
+            var fileName = loaderArtifact.Source.StartsWith("package://", StringComparison.Ordinal)
+                ? loaderArtifact.Source["package://".Length..] : loaderArtifact.Id;
+            var loaderPath = Path.Combine(context.PackageRoot, fileName);
+            if (!File.Exists(loaderPath) && File.Exists(loaderPath + ".zip")) loaderPath += ".zip";
+            if (File.Exists(loaderPath))
+            {
+                var bytes = File.ReadAllBytes(loaderPath);
+                var observed = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+                if (loaderArtifact.Sha256 is { } declared
+                    && !string.Equals(declared, observed, StringComparison.OrdinalIgnoreCase))
+                    throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", loaderArtifact.Id));
+                return ($"package://{loaderArtifact.Id}", bytes.LongLength, loaderArtifact.Sha256 ?? observed, loaderPath);
+            }
+            if (loaderArtifact.Source.StartsWith("https://", StringComparison.Ordinal))
+                return ($"package://{loaderArtifact.Id}", loaderArtifact.SizeBytes, loaderArtifact.Sha256, null);
+            throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", loaderArtifact.Id));
+        }
         if (use is not ("file.copy" or "archive.extract") || !with.TryGetValue("from", out var fromElement))
             return (null, null, null, null);
         var from = fromElement.GetString() ?? "";
@@ -225,7 +247,7 @@ public static class OperationPlanner
     {
         var key = use is "directory.ensure" or "file.remove" or "file.verify" or "config.set" ? "path" : "to";
         if (use is "loader.ensure") return context.GameRoot;
-        if (use is "profile.activate") return context.ProfileRoot;
+        if (use is "profile.activate") return Path.Combine(context.ProfileRoot, "active-profile.json");
         if (!with.TryGetValue(key, out var element)) return null;
         var (scheme, path) = VirtualUri.Parse(element.GetString() ?? "");
         var root = scheme switch

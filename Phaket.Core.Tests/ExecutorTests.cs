@@ -52,8 +52,9 @@ public sealed class ExecutorFixture : IDisposable
         TestFixtures.AmongUs,
         new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false));
 
-    public PlanExecutionContext PlanExecutionContext(string recipeId) => new(
-        GameRoot, ProfileRoot, StagingRoot, PackageRoot, TestFixtures.AmongUs, recipeId, "profile-1");
+    public PlanExecutionContext PlanExecutionContext(string recipeId, string? profileRoot = null) => new(
+        GameRoot, profileRoot ?? ProfileRoot, StagingRoot, PackageRoot, TestFixtures.AmongUs, recipeId, "profile-1",
+        Path.Combine(Root, "installation-state"));
 
     public Recipe FullRecipe()
     {
@@ -86,7 +87,7 @@ public sealed class ExecutorFixture : IDisposable
     public static Dictionary<string, JsonElement> Params(params (string Key, string Value)[] pairs) =>
         pairs.ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
 
-    public Recipe CopyRecipe(string recipeId, string artifactId, string target, string content)
+    public Recipe CopyRecipe(string recipeId, string artifactId, string target, string content, string overwrite = "fail")
     {
         // Plain artifact file (not a zip): file.copy moves its bytes verbatim.
         File.WriteAllText(Path.Combine(PackageRoot, artifactId + ".zip"), content);
@@ -101,7 +102,7 @@ public sealed class ExecutorFixture : IDisposable
             Steps =
             [
                 new RecipeStep { Id = "copy", Use = "file.copy",
-                    With = Params(("from", $"package://{artifactId}"), ("to", target)) },
+                    With = Params(("from", $"package://{artifactId}"), ("to", target), ("overwrite", overwrite)) },
             ],
         };
     }
@@ -113,6 +114,14 @@ public sealed class ExecutorFixture : IDisposable
         var journal = executor.Execute(plan, executor.Approve(plan));
         return (plan, journal);
     }
+
+    public string[] TreeSnapshot() =>
+        Directory.GetFileSystemEntries(Root, "*", SearchOption.AllDirectories)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .Select(p => File.Exists(p)
+                ? p + ":" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(p)))
+                : p + ":dir")
+            .ToArray();
 
     public void Dispose() => Directory.Delete(Root, recursive: true);
 }
@@ -144,7 +153,7 @@ public class PlanExecutorTests
         using var fixture = new ExecutorFixture();
         const string target = "game://BepInEx/plugins/Shared.dll";
         fixture.Install(fixture.CopyRecipe("test.shared.a", "mod-a", target, "content-A"), "test.shared.a");
-        fixture.Install(fixture.CopyRecipe("test.shared.b", "mod-b", target, "content-B"), "test.shared.b");
+        fixture.Install(fixture.CopyRecipe("test.shared.b", "mod-b", target, "content-B", "replace"), "test.shared.b");
         var shared = Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Shared.dll");
         Assert.Equal("content-B", File.ReadAllText(shared));
 

@@ -1,0 +1,21 @@
+schemaVersion: game-definition/v0alpha1
+slug: among-us
+title:
+  pl-PL: Among Us
+  en: Among Us
+storeIds:
+  steam: "945360"
+detection:
+  strategy: steam-manifest
+mainExecutable: Among Us.exe
+writableAreas:
+  - BepInEx/**
+  - winhttp.dll
+  - doorstop_config.ini
+  - .doorstop_version
+loaderLayouts:
+  - id: bepinex
+    variant: il2cpp
+    entryFiles:
+      - winhttp.dll
+      - BepInEx/core/BepInEx.IL2CPP.dll

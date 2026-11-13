@@ -229,11 +229,13 @@ public class AdapterDryTests
         public OperationPlan PlanInstall(Profile profile, InstallationFacts facts) =>
             new(OperationPlan.CurrentSchemaVersion, new RecipeRef("org.test.mod", "1.0.0"),
                 facts.Installation.InstallationId, profile.ProfileId, [], [], [], false, []);
-        public Task<ExecutionJournal> ApplyPlan(OperationPlan plan, IApprovedOperations operations, CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Apply requires the host-provided approved-operations broker.");
-        public Task<VerificationResult> Verify(InstallationFacts facts, Profile profile, IApprovedOperations operations, CancellationToken cancellationToken) =>
+        public Task<ExecutionJournal> ApplyPlan(OperationPlan plan, IPlanExecutorHost operations, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Apply requires the host-provided executor.");
+        public ExecutionJournal Complete(OperationPlan plan, ExecutionJournal journal) =>
+            throw new InvalidOperationException("Complete requires the host-provided executor.");
+        public Task<VerificationResult> Verify(InstallationFacts facts, Profile profile, IPlanExecutorHost operations, CancellationToken cancellationToken) =>
             Task.FromResult(new VerificationResult(true, []));
-        public Task<ExecutionJournal> Rollback(ExecutionJournal journal, IApprovedOperations operations, CancellationToken cancellationToken) =>
+        public Task<ExecutionJournal> Rollback(ExecutionJournal journal, IPlanExecutorHost operations, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Rollback requires the broker.");
         public LaunchSpec BuildLaunchSpec(Profile profile, InstallationFacts facts) =>
             new("game.exe", [], facts.Installation.RootPath, new Dictionary<string, string>());

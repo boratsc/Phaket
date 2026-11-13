@@ -18,21 +18,26 @@ public static class RecipeParser
 
     public static Recipe ParseYaml(string yaml)
     {
-        JsonElement element;
+        var element = YamlToJsonElement(yaml);
+        return Deserialize(element);
+    }
+
+    // Shared strict YAML -> JSON conversion (duplicate keys rejected).
+    public static JsonElement YamlToJsonElement(string yaml)
+    {
         try
         {
             var stream = new YamlStream();
             stream.Load(new StringReader(yaml));
             if (stream.Documents.Count != 1)
                 throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "expected exactly one YAML document"));
-            element = ToJson(stream.Documents[0].RootNode);
+            return ToJson(stream.Documents[0].RootNode);
         }
         catch (PhaketException) { throw; }
         catch (Exception ex)
         {
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", ex.Message));
         }
-        return Deserialize(element);
     }
 
     public static Recipe ParseJson(string json)
