@@ -9,6 +9,9 @@
   <DataTemplate DataType="{x:Type vm:ModsViewModel}"><views:ModsView /></DataTemplate>
   <DataTemplate DataType="{x:Type vm:ProfilesViewModel}"><views:ProfilesView /></DataTemplate>
   <DataTemplate DataType="{x:Type vm:BackupViewModel}"><views:BackupView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:CompatibilityViewModel}"><views:CompatibilityView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:InstallViewModel}"><views:InstallView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:HelpViewModel}"><views:HelpView /></DataTemplate>
   <DataTemplate DataType="{x:Type vm:HelpViewModel}"><views:HelpView /></DataTemplate>
  </Window.DataTemplates>
  <Grid ColumnDefinitions="250,*">

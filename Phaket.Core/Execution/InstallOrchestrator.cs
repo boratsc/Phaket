@@ -20,13 +20,21 @@ public sealed class InstallOrchestrator
     {
         var journal = executor.Approve(plan);
         var count = plan.Operations.Count;
-        for (var i = 0; i < count; i++)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var operation = plan.Operations[i];
-            progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "running", (double)i / count));
-            journal = executor.ExecuteOperation(plan, journal, operation.OpId);
-            progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "done", (double)(i + 1) / count));
+            for (var i = 0; i < count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var operation = plan.Operations[i];
+                progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "running", (double)i / count));
+                journal = executor.ExecuteOperation(plan, journal, operation.OpId);
+                progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "done", (double)(i + 1) / count));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            executor.Interrupt(journal);
+            throw;
         }
         journal = executor.Complete(plan, journal);
         progress?.Report(new InstallProgress(count, count, "", "verify", "done", 1.0));

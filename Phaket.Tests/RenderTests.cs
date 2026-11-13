@@ -80,6 +80,14 @@ public class RenderTests
         Dispatcher.UIThread.RunJobs();
         Save(window, "07-backup.png");
 
+        vm.OpenCompatibility();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "09-compatibility.png");
+
+        vm.OpenInstall();
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "10-install.png");
+
         vm.NavigateCommand.Execute("studio");
         vm.RecipeStudio.AddStepCommand.Execute("archive.extract");
         vm.RecipeStudio.AddStepCommand.Execute("file.copy");

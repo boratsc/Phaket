@@ -19,6 +19,8 @@ public partial class MainWindowViewModel : ViewModelBase
     public ModsViewModel? Mods { get; private set; }
     public ProfilesViewModel? Profiles { get; private set; }
     public BackupViewModel? Backup { get; private set; }
+    public CompatibilityViewModel? Compatibility { get; private set; }
+    public InstallViewModel? Install { get; private set; }
 
     private GameCatalogItem? currentGame;
 
@@ -34,7 +36,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OpenGame(GameCatalogItem game)
     {
         currentGame = game;
-        Game = new GameViewModel(game, () => Navigate("library"), OpenMods, OpenProfiles, OpenBackup);
+        Game = new GameViewModel(game, () => Navigate("library"), OpenMods, OpenProfiles, OpenBackup, OpenCompatibility, OpenInstall);
         CurrentPage = Game;
         ActiveNav = "library";
         OnPropertyChanged(nameof(Game));
@@ -65,6 +67,24 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentPage = Backup;
         ActiveNav = "library";
         OnPropertyChanged(nameof(Backup));
+    }
+
+    public void OpenCompatibility()
+    {
+        if (currentGame is null) return;
+        Compatibility = new CompatibilityViewModel(currentGame, () => OpenGame(currentGame));
+        CurrentPage = Compatibility;
+        ActiveNav = "library";
+        OnPropertyChanged(nameof(Compatibility));
+    }
+
+    public void OpenInstall()
+    {
+        if (currentGame is null) return;
+        Install = new InstallViewModel(currentGame, () => OpenGame(currentGame));
+        CurrentPage = Install;
+        ActiveNav = "library";
+        OnPropertyChanged(nameof(Install));
     }
 
     [RelayCommand]

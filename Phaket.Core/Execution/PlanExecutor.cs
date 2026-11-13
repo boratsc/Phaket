@@ -101,6 +101,13 @@ public sealed class PlanExecutor : IPlanExecutorHost
         return journal;
     }
 
+    public ExecutionJournal Interrupt(ExecutionJournal journal)
+    {
+        journal = journal with { State = JournalState.Interrupted };
+        Persist(journal);
+        return journal;
+    }
+
     // Executes a single approved operation; the host broker drives this per op.
     public ExecutionJournal ExecuteOperation(OperationPlan plan, ExecutionJournal journal, string opId)
     {
