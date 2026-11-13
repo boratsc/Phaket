@@ -42,6 +42,10 @@ public class MainWindowTests
         var vm = (MainWindowViewModel)window.DataContext!;
 
         Assert.IsType<LibraryViewModel>(vm.CurrentPage);
+        vm.Library.OpenGameCommand.Execute(vm.Library.Games.First());
+        Assert.IsType<GameViewModel>(vm.CurrentPage);
+        vm.Game!.BackCommand.Execute(null);
+        Assert.IsType<LibraryViewModel>(vm.CurrentPage);
         vm.NavigateCommand.Execute("studio");
         Assert.IsType<RecipeStudioViewModel>(vm.CurrentPage);
         vm.NavigateCommand.Execute("settings");
@@ -50,6 +54,20 @@ public class MainWindowTests
         Assert.IsType<LibraryViewModel>(vm.CurrentPage);
 
         window.Close();
+    }
+
+    [Fact]
+    public void Library_search_filters_and_restores_catalog()
+    {
+        var vm = new LibraryViewModel(_ => { });
+        var count = vm.Games.Count;
+        vm.SearchText = "valheim";
+        Assert.Single(vm.Games);
+        Assert.Contains("Valheim", vm.Games[0].Title);
+        vm.SearchText = "not a game";
+        Assert.Empty(vm.Games);
+        vm.SearchText = "";
+        Assert.Equal(count, vm.Games.Count);
     }
 
     [AvaloniaFact]
@@ -78,12 +96,12 @@ public class MainWindowTests
             loc.CurrentLanguage = "pl-PL";
             var navButton = window.GetVisualDescendants().OfType<Button>()
                 .First(b => AutomationProperties.GetName(b) == "Gry");
-            Assert.Equal("Gry", navButton.Content);
+            Assert.Equal("Gry", AutomationProperties.GetName(navButton));
 
             loc.CurrentLanguage = "en";
-            Assert.Equal("Games", navButton.Content);
+            Assert.Equal("Games", AutomationProperties.GetName(navButton));
             Assert.Equal("Settings", AutomationProperties.GetName(
-                window.GetVisualDescendants().OfType<Button>().First(b => (string?)b.Content == "Settings")));
+                window.GetVisualDescendants().OfType<Button>().First(b => AutomationProperties.GetName(b) == "Settings")));
         }
         finally
         {

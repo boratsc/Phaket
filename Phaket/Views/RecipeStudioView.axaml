@@ -75,7 +75,7 @@
                                                 <Button Content="✕" Padding="6,2"
                                                         Command="{Binding $parent[ItemsControl].((vm:RecipeStudioViewModel)DataContext).RemoveStepCommand}"
                                                         CommandParameter="{Binding}"
-                                                        AutomationProperties.Name="Remove step" />
+                                                        AutomationProperties.Name="{Binding [Studio.RemoveStep], Source={x:Static services:LocalizationService.Instance}}" />
                                             </StackPanel>
                                             <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto">
                                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" Margin="0,0,8,0" VerticalAlignment="Center"

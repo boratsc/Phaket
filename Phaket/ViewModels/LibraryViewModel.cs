@@ -1,82 +1,80 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
-public partial class DetectedGameViewModel : ViewModelBase
-{
-    public DetectedGameViewModel(SteamInstallation installation, GameDefinition? definition)
-    {
-        Installation = installation;
-        Definition = definition;
-    }
-
-    public SteamInstallation Installation { get; }
-    public GameDefinition? Definition { get; }
-
-    public string Title => Definition?.Title?.GetValueOrDefault(LocalizationService.Instance.CurrentLanguage)
-        ?? Definition?.Title?.GetValueOrDefault("en")
-        ?? Installation.Manifest.Name;
-    public string Build => Installation.Manifest.BuildId;
-    public string RootPath => Installation.Installation.RootPath;
-    public string StateKey => Installation.Availability switch
-    {
-        GameAvailability.Moddable => "Library.State.Moddable",
-        GameAvailability.Installed => "Library.State.Installed",
-        _ => "Library.State.InLibrary",
-    };
-
-    public string LaunchInstructions =>
-        $"cd \"{RootPath}\" && ./{Definition?.MainExecutable ?? Installation.Manifest.Name}";
-}
-
 public partial class LibraryViewModel : ViewModelBase
 {
     private readonly IReadOnlyList<GameDefinition> definitions = GameDefinitions.LoadAll();
+    private readonly Action<GameCatalogItem> openGame;
+    private readonly List<GameCatalogItem> catalog = [];
 
-    public ObservableCollection<DetectedGameViewModel> Games { get; } = [];
+    public LibraryViewModel(Action<GameCatalogItem> openGame)
+    {
+        this.openGame = openGame;
+        BuildCatalog();
+    }
 
-    [ObservableProperty]
-    private string status = "";
+    public ObservableCollection<GameCatalogItem> Games { get; } = [];
 
-    [ObservableProperty]
-    private DetectedGameViewModel? selectedGame;
+    [ObservableProperty] private string searchText = "";
+    [ObservableProperty] private string status = "";
 
-    [ObservableProperty]
-    private string launchInstructions = "";
+    // The library shows the games Phaket can mod, with cover art. Detection
+    // fills in real local status; Steam runtimes/tools are never listed.
+    private void BuildCatalog()
+    {
+        Games.Clear();
+        foreach (var definition in definitions)
+        {
+            var cover = $"avares://Phaket/Assets/games/{definition.Slug}.png";
+            var hero = cover;
+            var game = new GameCatalogItem(definition, cover, hero);
+            catalog.Add(game);
+            Games.Add(game);
+        }
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        Games.Clear();
+        foreach (var game in catalog.Where(game => game.Title.Contains(value ?? "", StringComparison.CurrentCultureIgnoreCase)))
+            Games.Add(game);
+    }
 
     [RelayCommand]
     private void Scan()
     {
-        Games.Clear();
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var os = OperatingSystem.IsWindows() ? "windows" : "linux";
         var adapter = new SteamAdapter(definitions);
-        foreach (var installation in adapter.DetectInstallations(os, home))
+        var detected = adapter.DetectInstallations(os, home);
+        foreach (var game in catalog)
         {
-            var definition = definitions.FirstOrDefault(d =>
-                d.StoreIds?.TryGetValue("steam", out var appId) == true && appId == installation.Manifest.AppId);
-            Games.Add(new DetectedGameViewModel(installation, definition));
+            game.Detected = detected.FirstOrDefault(d =>
+                d.Manifest.AppId == game.SteamAppId);
         }
-        Status = Games.Count == 0
-            ? LocalizationService.Instance["Library.NoGames"]
-            : $"{Games.Count}";
+        Status = "";
     }
 
     [RelayCommand]
-    private void AddManualFolder(string folder)
+    private void OpenGame(GameCatalogItem? game)
     {
-        if (!Directory.Exists(folder)) return;
-        var adapter = new SteamAdapter(definitions);
-        // Manual fallback: unknown appId until the user identifies the game.
-        var installation = adapter.FromManualFolder(folder, "manual");
-        if (installation is not null)
-            Games.Add(new DetectedGameViewModel(installation, null));
+        if (game is not null) openGame(game);
+    }
+
+    [RelayCommand]
+    private void Play(GameCatalogItem? game)
+    {
+        if (game is null) return;
+        if (game.IsInstalled)
+            new LaunchService().LaunchGame(game.SteamAppId);
+        else
+            openGame(game);
     }
 
     [RelayCommand]
@@ -90,17 +88,15 @@ public partial class LibraryViewModel : ViewModelBase
             Title = LocalizationService.Instance["Library.AddFolder"],
             AllowMultiple = false,
         });
-        if (folders.Count > 0)
-            AddManualFolder(folders[0].Path.LocalPath);
-    }
-
-    [RelayCommand]
-    private void PrepareLaunch(DetectedGameViewModel? game)
-    {
-        if (game is null) return;
-        SelectedGame = game;
-        // PoC: copy-instruction fallback (ADR-045); no launcher file patching,
-        // no automatic execution without consent.
-        LaunchInstructions = game.LaunchInstructions;
+        if (folders.Count == 0) return;
+        var folder = folders[0].Path.LocalPath;
+        // Match the chosen folder to a supported game by executable name.
+        var match = catalog.FirstOrDefault(g =>
+            File.Exists(Path.Combine(folder, g.Definition.MainExecutable ?? "")));
+        if (match is not null)
+        {
+            var adapter = new SteamAdapter(definitions);
+            match.Detected = adapter.FromManualFolder(folder, match.SteamAppId);
+        }
     }
 }
