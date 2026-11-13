@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.ReportView" x:DataType="vm:ReportViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="16">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="icon" Command="{Binding BackCommand}" AutomationProperties.Name="{Binding [Game.Back], Source={x:Static services:LocalizationService.Instance}}">
+                    <mi:MaterialIcon Kind="ArrowLeft" Width="18" Height="18" />
+                </Button>
+                <TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" VerticalAlignment="Center" />
+                <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding GameTitle}" VerticalAlignment="Center" />
+                <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding [Report.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Classes="pageTitle" Text="{Binding [Report.Title], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Report.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <Border Classes="card" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="{Binding [Report.Mod], Source={x:Static services:LocalizationService.Instance}}" />
+                    <ComboBox ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [Report.Mod], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding [Report.ModVersion], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBox Text="{Binding ModVersion}" AutomationProperties.Name="{Binding [Report.ModVersion], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding [Report.GameVersion], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBox Text="{Binding GameVersion}" AutomationProperties.Name="{Binding [Report.GameVersion], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding [Report.Result], Source={x:Static services:LocalizationService.Instance}}" />
+                    <ComboBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [Report.Result], Source={x:Static services:LocalizationService.Instance}}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ReportResultOption}">
+                                <TextBlock Text="{Binding LabelKey, Converter={x:Static services:LocKeyConverter.Instance}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="{Binding [Report.Comment], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBox Text="{Binding Comment}" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap" AutomationProperties.Name="{Binding [Report.Comment], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Classes="cta" Command="{Binding SubmitCommand}" AutomationProperties.Name="{Binding [Report.Submit], Source={x:Static services:LocalizationService.Instance}}">
+                        <StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Send" Width="16" Height="16" /><TextBlock Text="{Binding [Report.Submit], Source={x:Static services:LocalizationService.Instance}}" /></StackPanel>
+                    </Button>
+                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Report.TrustNote], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border Classes="pill"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding [Report.Trusted], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding TrustedCount}" /></StackPanel></Border>
+                <Border Classes="pill"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding [Report.Untrusted], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding UntrustedCount}" /></StackPanel></Border>
+            </StackPanel>
+            <TextBlock Classes="sectionTitle" Text="{Binding [Report.Recent], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Classes="muted" IsVisible="{Binding IsEmpty}" Text="{Binding [Report.Empty], Source={x:Static services:LocalizationService.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Reports}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReportItem}">
+                        <Border Classes="card" Padding="12" Margin="0,0,0,8">
+                            <WrapPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding ModId}" FontWeight="SemiBold" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding ModVersion}" Classes="muted" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding ResultKey, Converter={x:Static services:LocKeyConverter.Instance}}" Foreground="{Binding ResultColor}" Margin="0,0,12,0" />
+                                <Border Classes="pill" Margin="0,0,12,0"><TextBlock Text="{Binding TrustKey, Converter={x:Static services:LocKeyConverter.Instance}}" /></Border>
+                                <TextBlock Text="{Binding Date}" Classes="muted" />
+                            </WrapPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

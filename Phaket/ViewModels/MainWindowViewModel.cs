@@ -24,6 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public BuildsViewModel? Builds { get; private set; }
     public ShareViewModel? Share { get; private set; }
     public GraphViewModel? Graph { get; private set; }
+    public ReportViewModel? Report { get; private set; }
 
     private GameCatalogItem? currentGame;
 
@@ -39,7 +40,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OpenGame(GameCatalogItem game)
     {
         currentGame = game;
-        Game = new GameViewModel(game, () => Navigate("library"), OpenMods, OpenProfiles, OpenBackup, OpenCompatibility, OpenInstall, OpenBuilds, OpenShare, OpenGraph);
+        Game = new GameViewModel(game, () => Navigate("library"), OpenMods, OpenProfiles, OpenBackup, OpenCompatibility, OpenInstall, OpenBuilds, OpenShare, OpenGraph, OpenReport);
         CurrentPage = Game;
         ActiveNav = "library";
         OnPropertyChanged(nameof(Game));
@@ -115,6 +116,15 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentPage = Graph;
         ActiveNav = "library";
         OnPropertyChanged(nameof(Graph));
+    }
+
+    public void OpenReport()
+    {
+        if (currentGame is null) return;
+        Report = new ReportViewModel(currentGame, () => OpenGame(currentGame));
+        CurrentPage = Report;
+        ActiveNav = "library";
+        OnPropertyChanged(nameof(Report));
     }
 
     [RelayCommand]
