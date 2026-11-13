@@ -30,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Phaket.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="Assets\i18n\*.json" WithCulture="false" />
   </ItemGroup>
