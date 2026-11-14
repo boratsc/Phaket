@@ -271,5 +271,11 @@
   "Account.ItchClientId": "itch.io OAuth app Client ID",
   "Account.ItchHint": "Register an app at itch.io/user/settings/oauth-apps (redirect: http://127.0.0.1/callback).",
   "Account.ItchNoClient": "Enter the itch.io OAuth app client_id.",
-  "Account.Connected": "Connected"
+  "Account.Connected": "Connected",
+  "Account.Cancel": "Cancel",
+  "Account.EpicAuthTitle": "Epic Games sign-in",
+  "Account.EpicAuthHint": "Sign in to your Epic Games account in the embedded browser below.",
+  "Account.EpicAuthFallbackHint": "The embedded browser is unavailable on this system. Open the sign-in in your system browser, then paste the authorization code (the JSON shown after login, or the redirect URL).",
+  "Account.EpicAuthOpenBrowser": "Open in browser",
+  "Account.EpicAuthBadCode": "Invalid authorization code."
 }

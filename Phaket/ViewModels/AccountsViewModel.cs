@@ -4,23 +4,45 @@ using CommunityToolkit.Mvvm.Input;
 using Material.Icons;
 using Phaket.Core.Accounts;
 using Phaket.Services;
+using Phaket.Views;
 
 namespace Phaket.ViewModels;
 
 public partial class AccountsViewModel : ViewModelBase
 {
     public ProviderAccountViewModel[] Providers { get; }
+    private readonly EpicAccountService epicService;
+    private readonly ProviderAccountViewModel epicProvider;
+    private EpicAuthWindow? epicAuth;
 
     public AccountsViewModel()
     {
         string clientId = ProviderAccountViewModel.LoadClientId();
+        // Epic sign-in runs in an embedded WebView dialog (with a manual
+        // fallback) instead of a bare system-browser tab.
+        epicService = new EpicAccountService(null, url => Dispatcher.UIThread.Post(() => OpenEpicAuth(url)));
         Providers =
         [
             new(new DiscordAccountService(), "Discord", nameof(MaterialIconKind.Chat), "Account.Login"),
             new(new SteamAccountService(), "Steam", nameof(MaterialIconKind.Steam), "Account.LoginSteam"),
-            new(new EpicAccountService(), "Epic Games", nameof(MaterialIconKind.GamepadVariant), "Account.LoginEpic"),
+            new(epicService, "Epic Games", nameof(MaterialIconKind.GamepadVariant), "Account.LoginEpic"),
             new(new ItchAccountService(clientId), "itch.io", nameof(MaterialIconKind.Store), "Account.LoginItch", clientId)
         ];
+        epicProvider = Providers[2];
+    }
+
+    private void OpenEpicAuth(string url)
+    {
+        var vm = new EpicAuthViewModel(url,
+            code => { try { epicService.SubmitCode(code); } catch (Exception) { /* login already finished or cancelled */ } },
+            () => epicAuth?.Close());
+        epicAuth = new EpicAuthWindow(vm);
+        epicAuth.Closed += (_, _) =>
+        {
+            if (!vm.CodeSubmitted) epicProvider.CancelLogin();
+            epicAuth = null;
+        };
+        epicAuth.Show();
     }
 }
 
@@ -46,6 +68,9 @@ public partial class ProviderAccountViewModel : ViewModelBase
     [ObservableProperty] private bool needsCode;
     [ObservableProperty] private string authorizationCode = "";
     [ObservableProperty] private string clientId = "";
+    private CancellationTokenSource? loginCts;
+
+    internal void CancelLogin() => loginCts?.Cancel();
 
     public ProviderAccountViewModel(IAccountService service, string displayName, string iconKind, string loginKey)
         : this(service, displayName, iconKind, loginKey, service.Provider == "itch" ? LoadClientId() : "") { }
@@ -98,6 +123,7 @@ public partial class ProviderAccountViewModel : ViewModelBase
         { StatusMessage = LocalizationService.Instance["Account.ItchNoClient"]; return; }
         IsBusy = true;
         StatusMessage = LocalizationService.Instance["Account.Waiting"];
+        loginCts = new CancellationTokenSource();
         try
         {
             if (IsItch)
@@ -106,8 +132,7 @@ public partial class ProviderAccountViewModel : ViewModelBase
                 service = new ItchAccountService(ClientId.Trim());
                 service.AccountChanged += OnAccountChanged;
             }
-            NeedsCode = service is EpicAccountService && service.Current is null;
-            await service.LoginAsync();
+            await service.LoginAsync(loginCts.Token);
             UpdateAccount();
             StatusMessage = LocalizationService.Instance["Account.Success"];
         }

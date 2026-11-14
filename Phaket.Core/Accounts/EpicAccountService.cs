@@ -30,6 +30,10 @@ public sealed class EpicAccountService : IAccountService
     public EpicAccountService(string? storePath = null)
         : this(storePath, null, url => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })) { }
 
+    // Hosts that embed their own sign-in UI (WebView dialog) supply the opener.
+    public EpicAccountService(string? storePath, Action<string> openBrowser)
+        : this(storePath, null, openBrowser) { }
+
     internal EpicAccountService(string? storePath, HttpMessageHandler? handler, Action<string> openBrowser)
     {
         http = handler is null ? SharedHttp : new HttpClient(handler);
@@ -55,7 +59,7 @@ public sealed class EpicAccountService : IAccountService
         }
     }
 
-    internal static string ExtractAuthorizationCode(string input)
+    public static string ExtractAuthorizationCode(string input)
     {
         string value = input?.Trim() ?? "";
         try

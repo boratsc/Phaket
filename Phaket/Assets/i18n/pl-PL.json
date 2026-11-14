@@ -271,5 +271,11 @@
   "Account.ItchClientId": "Client ID aplikacji OAuth itch.io",
   "Account.ItchHint": "Zarejestruj aplikację na itch.io/user/settings/oauth-apps (redirect: http://127.0.0.1/callback).",
   "Account.ItchNoClient": "Podaj client_id aplikacji OAuth itch.io.",
-  "Account.Connected": "Połączono"
+  "Account.Connected": "Połączono",
+  "Account.Cancel": "Anuluj",
+  "Account.EpicAuthTitle": "Logowanie Epic Games",
+  "Account.EpicAuthHint": "Zaloguj się na swoje konto Epic Games we wbudowanej przeglądarce poniżej.",
+  "Account.EpicAuthFallbackHint": "Wbudowana przeglądarka jest niedostępna w tym systemie. Otwórz logowanie w przeglądarce systemowej, a następnie wklej kod autoryzacji (JSON pokazany po zalogowaniu albo adres URL przekierowania).",
+  "Account.EpicAuthOpenBrowser": "Otwórz w przeglądarce",
+  "Account.EpicAuthBadCode": "Nieprawidłowy kod autoryzacji."
 }
