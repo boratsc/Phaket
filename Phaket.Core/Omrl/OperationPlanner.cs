@@ -25,6 +25,19 @@ public sealed record PlannerContext(
 // existence/hash checks. Identical input yields a byte-identical plan.
 public static class OperationPlanner
 {
+    // True when the recipe cannot be planned without a concrete game build fact
+    // (provision step, version constraint or a gameVersion condition). Mod-only
+    // recipes install against a sandbox without any catalog build.
+    public static bool RequiresGameVersion(Recipe recipe) =>
+        recipe.Target.Constraints?.GameVersion is not null
+        || recipe.Steps.Any(s => s.Use == "game.provision" || ConditionUsesGameVersion(s.When));
+
+    private static bool ConditionUsesGameVersion(RecipeCondition? condition) =>
+        condition is not null && (condition.GameVersion is not null
+            || (condition.All?.Any(ConditionUsesGameVersion) ?? false)
+            || (condition.Any?.Any(ConditionUsesGameVersion) ?? false)
+            || ConditionUsesGameVersion(condition.Not));
+
     public static OperationPlan Plan(Recipe recipe, PlannerContext context)
     {
         var recipeElement = System.Text.Json.JsonDocument.Parse(RecipeParser.ToJson(recipe)).RootElement;

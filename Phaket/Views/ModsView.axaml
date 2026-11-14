@@ -58,6 +58,34 @@
             <Button Classes="secondary" Command="{Binding SetFilterCommand}" CommandParameter="inactive"
                     Content="{Binding [Mods.Inactive], Source={x:Static services:LocalizationService.Instance}}" />
         </StackPanel>
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,16">
+            <TextBlock Classes="pageTitle" Text="{Binding [Mods.InstalledTitle], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Classes="muted" IsVisible="{Binding InstalledEmpty}" Text="{Binding [Mods.InstalledEmpty], Source={x:Static services:LocalizationService.Instance}}" />
+            <ItemsControl ItemsSource="{Binding InstalledRecipes}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:InstalledRecipeViewModel}">
+                        <Border Classes="card" Padding="12" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding RecipeId}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <TextBlock Classes="muted" Text="{Binding Version}" />
+                                        <TextBlock Classes="muted" Text="{Binding InstalledAt, StringFormat='{}{0:g}'}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="secondary" Command="{Binding LaunchCommand}"
+                                        Content="{Binding [Mods.Launch], Source={x:Static services:LocalizationService.Instance}}"
+                                        AutomationProperties.Name="{Binding [Mods.Launch], Source={x:Static services:LocalizationService.Instance}}" />
+                                <Button Grid.Column="2" Classes="outline" Command="{Binding UninstallCommand}"
+                                        Content="{Binding [Mods.Uninstall], Source={x:Static services:LocalizationService.Instance}}"
+                                        AutomationProperties.Name="{Binding [Mods.Uninstall], Source={x:Static services:LocalizationService.Instance}}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </StackPanel>
         <!-- Mod list -->
         <Border Classes="card" Padding="8">
             <ItemsControl ItemsSource="{Binding Mods}">

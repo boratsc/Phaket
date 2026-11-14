@@ -1,4 +1,12 @@
 {
+  "Install.Downloading": "Downloading:",
+  "Install.SandboxVersionHint": "Installation completed without game version data.",
+  "Mods.InstalledTitle": "Installed recipe sets",
+  "Mods.InstalledEmpty": "No installed recipe sets.",
+  "Mods.Uninstall": "Uninstall",
+  "Mods.Launch": "Launch",
+  "Mods.SandboxLaunchHint": "Sandbox installations cannot launch the game.",
+  "Mods.Uninstalled": "Recipe set uninstalled.",
   "App.Title": "phaket",
   "App.Footer": "phaket v0.0.1 (PoC) · Zagłębie Dąbrowskie",
   "Nav.Library": "Games",

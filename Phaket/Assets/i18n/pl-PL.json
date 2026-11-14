@@ -1,4 +1,12 @@
 {
+  "Install.Downloading": "Pobieranie:",
+  "Install.SandboxVersionHint": "Instalacja zakończona bez danych o wersji gry.",
+  "Mods.InstalledTitle": "Zainstalowane zestawy przepisów",
+  "Mods.InstalledEmpty": "Brak zainstalowanych zestawów.",
+  "Mods.Uninstall": "Odinstaluj",
+  "Mods.Launch": "Uruchom",
+  "Mods.SandboxLaunchHint": "Instalacja w piaskownicy nie służy do uruchamiania gry.",
+  "Mods.Uninstalled": "Zestaw został odinstalowany.",
   "App.Title": "phaket",
   "App.Footer": "phaket v0.0.1 (PoC) · Zagłębie Dąbrowskie",
   "Nav.Library": "Gry",
