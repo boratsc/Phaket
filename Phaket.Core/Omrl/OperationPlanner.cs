@@ -133,7 +133,9 @@ public static class OperationPlanner
                 var marker = VanillaCache.ReadMarker(cacheDir);
                 var manifestId = step.With.TryGetValue("manifestId", out var manifestElement)
                     && manifestElement.ValueKind == System.Text.Json.JsonValueKind.String
-                    ? manifestElement.GetString() : null;
+                    ? manifestElement.GetString() : context.Facts.ManifestId;
+                // The executor provisions by manifest; carry the resolved id in the op.
+                if (manifestId is not null) parameters["manifestId"] = manifestId;
                 if (marker is null || marker.Store != provisionStore
                     || (manifestId is not null && marker.ManifestId != manifestId)
                     || !Directory.Exists(cacheDir))

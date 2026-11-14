@@ -177,14 +177,14 @@ public partial class InstallViewModel : ViewModelBase
                 token.ThrowIfCancellationRequested();
 
                 // Resolve the version choice against the local catalog cache.
-                string? resolved = versionChoice;
+                CatalogBuild? selectedBuild;
                 using (var catalog = new CatalogStore(CachePath))
                 {
-                    if (versionChoice == "latest")
-                        resolved = catalog.GetLatestBuild(game.Definition.Slug, store)?.VersionLabel;
-                    else if (catalog.GetBuilds(game.Definition.Slug, store).All(b => b.VersionLabel != versionChoice))
-                        resolved = null; // stale selection after a catalog refresh
+                    selectedBuild = versionChoice == "latest"
+                        ? catalog.GetLatestBuild(game.Definition.Slug, store)
+                        : catalog.GetBuilds(game.Definition.Slug, store).FirstOrDefault(b => b.VersionLabel == versionChoice);
                 }
+                var resolved = selectedBuild?.VersionLabel;
                 if (resolved is null && OperationPlanner.RequiresGameVersion(recipe))
                     throw new PhaketException(ErrorCodes.GameBuildUnavailable);
                 // Mod-only recipes do not inspect the version; this is a neutral planning fact.
@@ -212,7 +212,8 @@ public partial class InstallViewModel : ViewModelBase
                     OperationCatalog.Capabilities,
                     uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                         && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
-                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" },
+                    selectedBuild?.ManifestIds.FirstOrDefault());
                 var context = new PlannerContext("install", "install-profile", gameRoot, profileRoot, staging, packages,
                     definition, facts,
                     LatestGameVersion: s =>

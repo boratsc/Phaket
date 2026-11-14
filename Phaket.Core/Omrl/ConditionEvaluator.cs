@@ -8,7 +8,10 @@ public sealed record PlanFacts(
     string? GameVersion,
     IReadOnlySet<string> Capabilities,
     Func<string, bool> FileExists,
-    IReadOnlyDictionary<string, string>? LoaderVersions = null);
+    IReadOnlyDictionary<string, string>? LoaderVersions = null,
+    // Steam manifest of the selected catalog build; used by game.provision
+    // when the recipe step does not pin its own manifestId.
+    string? ManifestId = null);
 
 public static class ConditionEvaluator
 {
