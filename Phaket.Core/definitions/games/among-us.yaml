@@ -5,17 +5,40 @@ title:
   en: Among Us
 storeIds:
   steam: "945360"
+  epic: 963137e4c29d4c79a81323b8fab03a40
 detection:
   strategy: steam-manifest
 mainExecutable: Among Us.exe
 writableAreas:
   - BepInEx/**
+  - dotnet/**
   - winhttp.dll
   - doorstop_config.ini
   - .doorstop_version
+  - changelog.txt
 loaderLayouts:
   - id: bepinex
     variant: il2cpp
     entryFiles:
       - winhttp.dll
-      - BepInEx/core/BepInEx.IL2CPP.dll
+      - BepInEx/core/BepInEx.Unity.IL2CPP.dll
+# Linux needs a Wine DLL override for the winhttp proxy DLL to load under
+# Proton; Windows loads the proxy from the game directory by itself.
+# Source: https://docs.bepinex.dev/articles/advanced/proton_wine.html (fetched 2026-11-13).
+launchRequirements:
+  - kind: dll-override
+    name: winhttp.dll
+    value: n,b
+    status: required
+    os:
+      - linux
+    source: https://docs.bepinex.dev/articles/advanced/proton_wine.html
+    observedAt: "2026-11-13"
+  - kind: env
+    name: PROTON_NO_ESYNC
+    value: "1"
+    status: optional
+    os:
+      - linux
+    source: https://github.com/scp222thj/MalumMenu (IL2CPP chainloader crash workaround)
+    observedAt: "2026-11-13"

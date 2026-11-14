@@ -217,14 +217,14 @@ public partial class RecipeStudioViewModel : ViewModelBase
         foreach (var step in recipe.Steps)
         {
             var vm = new StepViewModel { Id = step.Id, Use = step.Use };
-            if (step.With.TryGetValue("from", out var from)) vm.From = from.GetString() ?? "";
-            if (step.With.TryGetValue("to", out var to)) vm.To = to.GetString() ?? "";
-            if (step.With.TryGetValue("path", out var path)) vm.To = path.GetString() ?? "";
-            if (step.With.TryGetValue("key", out var key)) vm.Key = key.GetString() ?? "";
-            if (step.With.TryGetValue("value", out var value)) vm.Value = value.GetString() ?? "";
-            if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var artifact)) vm.From = artifact.GetString() ?? "";
-            if (step.Use == "loader.ensure" && step.With.TryGetValue("id", out var loaderId)) vm.Key = loaderId.GetString() ?? "";
-            if (step.Use == "profile.activate" && step.With.TryGetValue("profile", out var profile)) vm.To = profile.GetString() ?? "";
+            if (step.With.TryGetValue("from", out var from)) vm.From = Str(from);
+            if (step.With.TryGetValue("to", out var to)) vm.To = Str(to);
+            if (step.With.TryGetValue("path", out var path)) vm.To = Str(path);
+            if (step.With.TryGetValue("key", out var key)) vm.Key = Str(key);
+            if (step.With.TryGetValue("value", out var value)) vm.Value = Str(value);
+            if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var artifact)) vm.From = Str(artifact);
+            if (step.Use == "loader.ensure" && step.With.TryGetValue("id", out var loaderId)) vm.Key = Str(loaderId);
+            if (step.Use == "profile.activate" && step.With.TryGetValue("profile", out var profile)) vm.To = Str(profile);
             Steps.Add(vm);
         }
         Artifacts.Clear();
@@ -233,6 +233,10 @@ public partial class RecipeStudioViewModel : ViewModelBase
         YamlText = yaml;
         Status = LocalizationService.Instance["Studio.Loaded"];
     }
+
+    // YAML scalars may be numbers/bools (unquoted); GetString() would throw.
+    private static string Str(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String ? element.GetString() ?? "" : element.GetRawText();
 
     public bool RoundTripIsLossless()
     {
@@ -311,6 +315,11 @@ public partial class RecipeStudioViewModel : ViewModelBase
             PlanLines.Add(ex.LocalizedMessage(loc.CurrentLanguage));
             return false;
         }
+        catch (Exception ex)
+        {
+            PlanLines.Add(ex.Message);
+            return false;
+        }
         finally
         {
             try { Directory.Delete(sandbox, recursive: true); } catch { /* best effort */ }
@@ -329,41 +338,57 @@ public partial class RecipeStudioViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveYamlAsync()
     {
-        var yaml = SaveYamlCore();
-        var top = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-            ? desktop.MainWindow : null;
-        if (top?.StorageProvider is { } storage)
+        try
         {
-            var file = await storage.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+            var yaml = SaveYamlCore();
+            var top = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow : null;
+            if (top?.StorageProvider is { } storage)
             {
-                Title = LocalizationService.Instance["Studio.SaveYaml"],
-                SuggestedFileName = RecipeId + ".yaml",
-                FileTypeChoices = [new Avalonia.Platform.Storage.FilePickerFileType("YAML") { Patterns = ["*.yaml", "*.yml"] }],
-            });
-            if (file is not null)
-            {
-                await using var stream = await file.OpenWriteAsync();
-                using var writer = new StreamWriter(stream);
-                await writer.WriteAsync(yaml);
+                var file = await storage.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+                {
+                    Title = LocalizationService.Instance["Studio.SaveYaml"],
+                    SuggestedFileName = RecipeId + ".yaml",
+                    FileTypeChoices = [new Avalonia.Platform.Storage.FilePickerFileType("YAML") { Patterns = ["*.yaml", "*.yml"] }],
+                });
+                if (file is not null)
+                {
+                    await using var stream = await file.OpenWriteAsync();
+                    using var writer = new StreamWriter(stream);
+                    await writer.WriteAsync(yaml);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: recipe save failed: {ex}");
+            Status = LocalizationService.Instance["Studio.SaveError"];
         }
     }
 
     [RelayCommand]
     private async Task LoadYamlAsync()
     {
-        var top = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-            ? desktop.MainWindow : null;
-        if (top?.StorageProvider is not { } storage) return;
-        var files = await storage.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        try
         {
-            Title = LocalizationService.Instance["Studio.LoadYaml"],
-            FileTypeFilter = [new Avalonia.Platform.Storage.FilePickerFileType("YAML") { Patterns = ["*.yaml", "*.yml"] }],
-            AllowMultiple = false,
-        });
-        if (files.Count == 0) return;
-        await using var stream = await files[0].OpenReadAsync();
-        using var reader = new StreamReader(stream);
-        LoadYamlCore(await reader.ReadToEndAsync());
+            var top = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow : null;
+            if (top?.StorageProvider is not { } storage) return;
+            var files = await storage.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = LocalizationService.Instance["Studio.LoadYaml"],
+                FileTypeFilter = [new Avalonia.Platform.Storage.FilePickerFileType("YAML") { Patterns = ["*.yaml", "*.yml"] }],
+                AllowMultiple = false,
+            });
+            if (files.Count == 0) return;
+            await using var stream = await files[0].OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            LoadYamlCore(await reader.ReadToEndAsync());
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: recipe load failed: {ex}");
+            Status = LocalizationService.Instance["Studio.LoadError"];
+        }
     }
 }

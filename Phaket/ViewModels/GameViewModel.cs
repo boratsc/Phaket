@@ -118,47 +118,87 @@ public partial class GameViewModel : ViewModelBase
         StatusMessage = ok ? loc["Game.Launched"] : loc["Game.LaunchFailed"];
     }
 
+    // Launch options proposed for this game on the current OS; null when the
+    // definition declares no requirements (e.g. Windows needs none for Among Us).
+    public string? BuildLaunchProposal(string? os = null) =>
+        GameLaunchOptions.SteamLaunchOptions(Game.Definition, os ?? (OperatingSystem.IsWindows() ? "windows" : "linux"));
+
     // Shows a plan for a SINGLE Steam account; nothing is written until accepted.
+    // The proposed options come from the declarative game definition (launchRequirements
+    // with provenance), never from a hard-coded string in the UI.
     [RelayCommand]
     private void PrepareLaunchOptions()
     {
         var loc = LocalizationService.Instance;
-        var root = SteamLaunchOptionsService.FindSteamRoot();
-        if (root is null)
+        try
         {
-            StatusMessage = loc["Game.NoSteam"];
-            return;
+            var root = SteamLaunchOptionsService.FindSteamRoot();
+            if (root is null)
+            {
+                StatusMessage = loc["Game.NoSteam"];
+                return;
+            }
+            var proposed = BuildLaunchProposal();
+            if (proposed is null)
+            {
+                StatusMessage = loc["Game.LaunchOptionsNotNeeded"];
+                ShowDetails = true;
+                return;
+            }
+            var service = new SteamLaunchOptionsService(root);
+            PendingPlan = service.BuildPlan(Game.SteamAppId, proposed);
+            OnPropertyChanged(nameof(PlanSummary));
+            StatusMessage = PendingPlan is null ? loc["Game.NoSteam"] : loc["Game.PlanReady"];
+            ShowDetails = true;
         }
-        var service = new SteamLaunchOptionsService(root);
-        PendingPlan = service.BuildPlan(Game.SteamAppId, "WINEDLLOVERRIDES=\"winhttp.dll=n,b\" %command%");
-        OnPropertyChanged(nameof(PlanSummary));
-        StatusMessage = PendingPlan is null ? loc["Game.NoSteam"] : loc["Game.PlanReady"];
-        ShowDetails = true;
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: launch options prepare failed: {ex}");
+            StatusMessage = loc["Game.LaunchOptionsError"];
+        }
     }
 
     [RelayCommand]
     private void ConfirmLaunchOptions()
     {
         if (PendingPlan is null) return;
-        var root = SteamLaunchOptionsService.FindSteamRoot();
-        if (root is null) return;
-        var service = new SteamLaunchOptionsService(root);
-        lastBackup = service.ApplyPlan(PendingPlan);
-        CanRollback = true;
-        PendingPlan = null;
-        OnPropertyChanged(nameof(PlanSummary));
-        StatusMessage = LocalizationService.Instance["Game.OptionsApplied"];
+        var loc = LocalizationService.Instance;
+        try
+        {
+            var root = SteamLaunchOptionsService.FindSteamRoot();
+            if (root is null) return;
+            var service = new SteamLaunchOptionsService(root);
+            lastBackup = service.ApplyPlan(PendingPlan);
+            CanRollback = true;
+            PendingPlan = null;
+            OnPropertyChanged(nameof(PlanSummary));
+            StatusMessage = loc["Game.OptionsApplied"];
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: launch options apply failed: {ex}");
+            StatusMessage = loc["Game.LaunchOptionsError"];
+        }
     }
 
     [RelayCommand]
     private void RollbackLaunchOptions()
     {
         if (lastBackup is null) return;
-        var root = SteamLaunchOptionsService.FindSteamRoot();
-        if (root is null) return;
-        new SteamLaunchOptionsService(root).Rollback(lastBackup);
-        CanRollback = false;
-        lastBackup = null;
-        StatusMessage = LocalizationService.Instance["Game.OptionsRolledBack"];
+        var loc = LocalizationService.Instance;
+        try
+        {
+            var root = SteamLaunchOptionsService.FindSteamRoot();
+            if (root is null) return;
+            new SteamLaunchOptionsService(root).Rollback(lastBackup);
+            CanRollback = false;
+            lastBackup = null;
+            StatusMessage = loc["Game.OptionsRolledBack"];
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: launch options rollback failed: {ex}");
+            StatusMessage = loc["Game.LaunchOptionsError"];
+        }
     }
 }

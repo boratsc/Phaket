@@ -68,6 +68,7 @@ public static class LaunchTranslator
         var environment = new Dictionary<string, string>(existing.Environment, StringComparer.Ordinal);
         var arguments = new List<string>();
         var steamParts = new List<string>();
+        var steamArgs = new List<string>();
 
         foreach (var requirement in strategy.Requirements.Where(r => r.Status != RequirementStatus.Unsupported))
         {
@@ -109,7 +110,7 @@ public static class LaunchTranslator
                 case "game-arg":
                     arguments.Add(requirement.Value);
                     if (launcher == LauncherKind.Steam)
-                        steamParts.Add(requirement.Value);
+                        steamArgs.Add(requirement.Value);
                     break;
                 case "wrapper":
                     arguments.Add(requirement.Value);
@@ -130,7 +131,10 @@ public static class LaunchTranslator
             var prefix = idx >= 0 ? existingOptions[..idx].TrimEnd() : existingOptions.TrimEnd();
             var suffix = idx >= 0 ? existingOptions[(idx + "%command%".Length)..].Trim() : "";
             var merged = string.Join(" ", new[] { prefix }.Concat(steamParts).Where(p => p.Length > 0));
-            steamOptions = (merged + " %command%" + (suffix.Length > 0 ? " " + suffix : "")).TrimStart();
+            // Game arguments go AFTER %command%: before it they would be shell
+            // code, not arguments to the game executable.
+            var tail = string.Join(" ", new[] { suffix }.Concat(steamArgs).Where(p => p.Length > 0));
+            steamOptions = (merged + " %command%" + (tail.Length > 0 ? " " + tail : "")).TrimStart();
         }
 
         var translation = new LaunchPlanTranslation(
@@ -158,6 +162,9 @@ public static class LaunchTranslator
         if (launcher == LauncherKind.Steam && requirement.Value.Any(c => "\"$`\\;|&<>()".Contains(c)))
             throw new PhaketException(ErrorCodes.ValidationFailed,
                 ("detail", $"requirement {requirement.Name} contains shell metacharacters and needs manual review"));
+        if (launcher == LauncherKind.Steam && requirement.Kind == "game-arg" && requirement.Value.Any(char.IsWhiteSpace))
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"requirement {requirement.Name} contains whitespace and needs manual review"));
     }
 
     // Fallback when the launcher has no safe write API (ADR-045): the user

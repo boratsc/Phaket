@@ -6,9 +6,9 @@ namespace Phaket.Core.Tests;
 public class OperationCatalogTests
 {
     [Fact]
-    public void CatalogHasEightUniqueOperationsWithClosedParameterSchemas()
+    public void CatalogHasNineUniqueOperationsWithClosedParameterSchemas()
     {
-        var expected = new[] { "directory.ensure", "file.copy", "file.remove", "file.verify", "archive.extract", "config.set", "loader.ensure", "profile.activate" };
+        var expected = new[] { "directory.ensure", "file.copy", "file.remove", "file.verify", "archive.extract", "config.set", "loader.ensure", "profile.activate", "game.provision" };
         Assert.Equal(expected.Order(), OperationCatalog.All.Select(x => x.Name).Order());
         foreach (var op in OperationCatalog.All)
         {

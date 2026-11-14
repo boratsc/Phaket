@@ -17,6 +17,7 @@ public static class ErrorCodes
     public const string ArtifactMissing = "ARTIFACT_MISSING";
     public const string ArtifactHashMismatch = "ARTIFACT_HASH_MISMATCH";
     public const string ArtifactDownloadUnavailable = "ARTIFACT_DOWNLOAD_UNAVAILABLE";
+    public const string BaseGameMismatch = "BASE_GAME_MISMATCH";
     public const string ArchiveUnsafe = "ARCHIVE_UNSAFE";
     public const string OwnershipViolation = "OWNERSHIP_VIOLATION";
     public const string ConflictUnresolvable = "CONFLICT_UNRESOLVABLE";

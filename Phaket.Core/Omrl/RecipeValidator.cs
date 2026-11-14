@@ -125,12 +125,17 @@ public static class RecipeValidator
             ValidatePathUri(from.GetString() ?? "", rules.FromSchemes, game, artifactIds, stepId, add, isWrite: false);
         var toKey = use == "directory.ensure" || use == "file.remove" || use == "file.verify" || use == "config.set" ? "path" : "to";
         if (with.TryGetValue(toKey, out var to))
-            ValidatePathUri(to.GetString() ?? "", rules.ToSchemes, game, artifactIds, stepId, add, isWrite: use != "file.verify");
+            ValidatePathUri(to.GetString() ?? "", rules.ToSchemes, game, artifactIds, stepId, add,
+                isWrite: use != "file.verify",
+                // archive.extract targets a DIRECTORY; the game root is a legal
+                // target and every extracted entry is still checked against
+                // writableAreas at write time.
+                allowGameRoot: use == "archive.extract");
     }
 
     private static void ValidatePathUri(
         string uri, string[] allowedSchemes, GameDefinition game, HashSet<string> artifactIds,
-        string stepId, Action<string, (string, string)[]> add, bool isWrite)
+        string stepId, Action<string, (string, string)[]> add, bool isWrite, bool allowGameRoot = false)
     {
         if (!VirtualUri.TryParse(uri, out var scheme, out var path))
         {
@@ -149,7 +154,7 @@ public static class RecipeValidator
                 add(ErrorCodes.ValidationFailed, [("detail", $"step '{stepId}': package URI references undeclared artifact '{artifactId}'")]);
             return;
         }
-        if (isWrite && scheme == "game" && !game.AllowsWrite(path))
+        if (isWrite && scheme == "game" && !(allowGameRoot && path == ".") && !game.AllowsWrite(path))
             add(ErrorCodes.PathOutOfBounds, [("path", uri)]);
     }
 

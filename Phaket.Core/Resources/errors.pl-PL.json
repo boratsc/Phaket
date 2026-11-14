@@ -17,5 +17,6 @@
   "OWNERSHIP_VIOLATION": "Plik {path} nie należy do tego przepisu ani profilu. Usunięcie zostało zablokowane.",
   "CONFLICT_UNRESOLVABLE": "Konflikt na zasobie {path} między {owners} nie może być rozstrzygnięty automatycznie. Wybierz kolejność modów lub usuń konflikt.",
   "JOURNAL_DIVERGENCE": "Stan instalacji różni się od zapisanego w dzienniku transakcji. Wybierz wznowienie lub przywrócenie poprzedniego stanu.",
-  "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}"
+  "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}",
+  "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody."
 }

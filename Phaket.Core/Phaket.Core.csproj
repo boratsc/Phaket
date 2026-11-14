@@ -18,5 +18,6 @@
     <EmbeddedResource Include="Resources\*.json" WithCulture="false" />
     <EmbeddedResource Include="schemas\*.json" />
     <Content Include="definitions\**\*.yaml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="recipes\**\*.yaml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

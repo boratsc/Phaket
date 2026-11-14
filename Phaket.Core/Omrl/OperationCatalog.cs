@@ -25,10 +25,12 @@ public static class OperationCatalog
                 ["archive.extract"], ["read", "write"], ["safe-zip", "approved-path"], ["entries-extracted", "entries-journaled"], "remove-journaled-entries"),
             new OperationDefinition("config.set", """{"type":"object","additionalProperties":false,"required":["path","format","key","value"],"properties":{"path":{"type":"string","minLength":1},"format":{"enum":["json","keyvalue"]},"key":{"type":"string","minLength":1},"value":{"type":"string"}}}""",
                 ["config.set"], ["read", "write"], ["approved-path", "valid-config"], ["key-set", "ownership-recorded"], "restore-base-or-recompute-owners"),
-            new OperationDefinition("loader.ensure", """{"type":"object","additionalProperties":false,"required":["id","artifact"],"properties":{"id":{"type":"string","minLength":1},"artifact":{"type":"string","minLength":1},"version":{"type":"string","minLength":1}}}""",
+            new OperationDefinition("loader.ensure", """{"type":"object","additionalProperties":false,"required":["id","artifact"],"properties":{"id":{"type":"string","minLength":1},"artifact":{"type":"string","minLength":1},"version":{"type":"string","minLength":1},"stripComponents":{"type":"integer","minimum":0,"maximum":4}}}""",
                 ["loader.ensure"], ["read", "write"], ["declared-artifact", "approved-loader-layout"], ["compatible-loader-present", "ownership-recorded"], "remove-new-loader-files-per-ledger"),
             new OperationDefinition("profile.activate", """{"type":"object","additionalProperties":false,"required":["profile"],"properties":{"profile":{"type":"string","minLength":1}}}""",
-                ["profile.activate"], ["write"], ["profile-exists"], ["profile-active"], "restore-previous-active-profile")
+                ["profile.activate"], ["write"], ["profile-exists"], ["profile-active"], "restore-previous-active-profile"),
+            new OperationDefinition("game.provision", """{"type":"object","additionalProperties":false,"required":["store","version"],"properties":{"store":{"enum":["steam","epic"]},"version":{"type":"string","pattern":"^([0-9]+(\\.[0-9]+)*|latest)$"},"manifestId":{"type":"string","minLength":1}}}""",
+                ["game.provision"], ["read", "write"], ["base-game-source", "approved-path"], ["base-game-present", "ownership-recorded"], "remove-provisioned-files-per-ledger")
         }.ToDictionary(operation => operation.Name, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<OperationDefinition> All => Operations.Values.ToArray();

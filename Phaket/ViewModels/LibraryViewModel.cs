@@ -52,16 +52,24 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     private void Scan()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var os = OperatingSystem.IsWindows() ? "windows" : "linux";
-        var adapter = new SteamAdapter(definitions);
-        var detected = adapter.DetectInstallations(os, home);
-        foreach (var game in catalog)
+        try
         {
-            game.Detected = detected.FirstOrDefault(d =>
-                d.Manifest.AppId == game.SteamAppId);
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var os = OperatingSystem.IsWindows() ? "windows" : "linux";
+            var adapter = new SteamAdapter(definitions);
+            var detected = adapter.DetectInstallations(os, home);
+            foreach (var game in catalog)
+            {
+                game.Detected = detected.FirstOrDefault(d =>
+                    d.Manifest.AppId == game.SteamAppId);
+            }
+            Status = "";
         }
-        Status = "";
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: library scan failed: {ex}");
+            Status = LocalizationService.Instance["Library.ScanError"];
+        }
     }
 
     [RelayCommand]

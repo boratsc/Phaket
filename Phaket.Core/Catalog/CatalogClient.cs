@@ -9,7 +9,13 @@ public sealed record CatalogBuild(
     string Id, string GameId, string Store, string VersionLabel, string BuildId,
     IReadOnlyList<string> DepotIds, IReadOnlyList<string> ManifestIds, string Branch,
     string AvailabilityStatus, string Source, string SourceReference,
-    DateTimeOffset? ObservedAt, DateTimeOffset? VerifiedAt, double Confidence, string Provenance);
+    DateTimeOffset? ObservedAt, DateTimeOffset? VerifiedAt, double Confidence, string Provenance,
+    DateTimeOffset? ReleasedAt = null)
+{
+    // Display-only: publisher's release date when the backend knows it.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ReleasedText => ReleasedAt?.ToLocalTime().ToString("d") ?? "—";
+}
 
 public sealed record CatalogResponse(int StatusCode, string? ETag, string? Body);
 
@@ -49,10 +55,23 @@ public sealed class CatalogStore : IDisposable
                 id TEXT PRIMARY KEY, game_id TEXT NOT NULL, store TEXT NOT NULL, version_label TEXT NOT NULL,
                 build_id TEXT NOT NULL, depot_ids TEXT NOT NULL, manifest_ids TEXT NOT NULL, branch TEXT NOT NULL,
                 availability_status TEXT NOT NULL, source TEXT NOT NULL, source_reference TEXT NOT NULL,
-                observed_at TEXT, verified_at TEXT, confidence REAL NOT NULL, provenance TEXT NOT NULL);
+                observed_at TEXT, verified_at TEXT, confidence REAL NOT NULL, provenance TEXT NOT NULL,
+                released_at TEXT);
             CREATE TABLE IF NOT EXISTS catalog_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """;
         cmd.ExecuteNonQuery();
+        // Databases created before released_at existed keep working.
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "SELECT name FROM pragma_table_info('catalog_builds')";
+        var names = new List<string>();
+        using (var reader = columns.ExecuteReader())
+            while (reader.Read()) names.Add(reader.GetString(0));
+        if (!names.Contains("released_at"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE catalog_builds ADD COLUMN released_at TEXT";
+            alter.ExecuteNonQuery();
+        }
     }
 
     public long Revision => long.TryParse(GetMeta("revision"), out var rev) ? rev : 0;
@@ -142,9 +161,9 @@ public sealed class CatalogStore : IDisposable
         using var cmd = connection.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
-            INSERT INTO catalog_builds(id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance)
-            VALUES($id,$game,$store,$version,$build,$depot,$manifest,$branch,$status,$source,$ref,$observed,$verified,$confidence,$provenance)
-            ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id,store=excluded.store,version_label=excluded.version_label,build_id=excluded.build_id,depot_ids=excluded.depot_ids,manifest_ids=excluded.manifest_ids,branch=excluded.branch,availability_status=excluded.availability_status,source=excluded.source,source_reference=excluded.source_reference,observed_at=excluded.observed_at,verified_at=excluded.verified_at,confidence=excluded.confidence,provenance=excluded.provenance
+            INSERT INTO catalog_builds(id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at)
+            VALUES($id,$game,$store,$version,$build,$depot,$manifest,$branch,$status,$source,$ref,$observed,$verified,$confidence,$provenance,$released)
+            ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id,store=excluded.store,version_label=excluded.version_label,build_id=excluded.build_id,depot_ids=excluded.depot_ids,manifest_ids=excluded.manifest_ids,branch=excluded.branch,availability_status=excluded.availability_status,source=excluded.source,source_reference=excluded.source_reference,observed_at=excluded.observed_at,verified_at=excluded.verified_at,confidence=excluded.confidence,provenance=excluded.provenance,released_at=excluded.released_at
             """;
         cmd.Parameters.AddWithValue("$id", payload.GetProperty("id").GetString()!);
         cmd.Parameters.AddWithValue("$game", payload.GetProperty("gameId").GetString()!);
@@ -161,13 +180,16 @@ public sealed class CatalogStore : IDisposable
         cmd.Parameters.AddWithValue("$verified", payload.TryGetProperty("verifiedAt", out var ver) && ver.ValueKind != JsonValueKind.Null ? ver.GetString()! : (object)DBNull.Value);
         cmd.Parameters.AddWithValue("$confidence", payload.GetProperty("confidence").GetDouble());
         cmd.Parameters.AddWithValue("$provenance", payload.GetProperty("provenance").GetString()!);
+        cmd.Parameters.AddWithValue("$released",
+            payload.TryGetProperty("releasedAt", out var rel) && rel.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(rel.GetString(), out var relTs)
+                ? relTs.ToString("O") : (object)DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
     public IReadOnlyList<CatalogBuild> GetBuilds(string gameId, string? store = null)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance FROM catalog_builds WHERE game_id=$game AND ($store IS NULL OR store=$store) ORDER BY id";
+        cmd.CommandText = "SELECT id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at FROM catalog_builds WHERE game_id=$game AND ($store IS NULL OR store=$store) ORDER BY id";
         cmd.Parameters.AddWithValue("$game", gameId);
         cmd.Parameters.AddWithValue("$store", (object?)store ?? DBNull.Value);
         var results = new List<CatalogBuild>();
@@ -180,10 +202,21 @@ public sealed class CatalogStore : IDisposable
                 reader.GetString(7), reader.GetString(8), reader.GetString(9), reader.GetString(10),
                 reader.IsDBNull(11) ? null : DateTimeOffset.Parse(reader.GetString(11)),
                 reader.IsDBNull(12) ? null : DateTimeOffset.Parse(reader.GetString(12)),
-                reader.GetDouble(13), reader.GetString(14)));
+                reader.GetDouble(13), reader.GetString(14),
+                reader.IsDBNull(15) ? null : DateTimeOffset.Parse(reader.GetString(15))));
         }
         return results;
     }
+
+    // "Latest" selection: the newest build by publisher release date. Builds
+    // without a release date rank last (ordered by observation), so an unknown
+    // date never outranks a known older release.
+    public CatalogBuild? GetLatestBuild(string gameId, string? store = null) =>
+        GetDownloadProposals(gameId)
+            .Where(b => store is null || b.Store == store)
+            .OrderByDescending(b => b.ReleasedAt ?? DateTimeOffset.MinValue)
+            .ThenByDescending(b => b.ObservedAt ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
 
     // Download proposals exclude unavailable/unknown builds (spec §7.12.4).
     public IReadOnlyList<CatalogBuild> GetDownloadProposals(string gameId) =>

@@ -26,7 +26,8 @@ public sealed record OperationPlan(
 public enum JournalState { Planned, Approved, Executing, Completed, Failed, RolledBack, Interrupted }
 public sealed record OperationIntent(string OpId, string Kind, string TargetPath, string? ExpectedSha256, string? Key = null);
 public sealed record JournalEntry(OperationIntent Intent, string? BackupRef, bool Applied, bool Verified,
-    IReadOnlyList<string>? CreatedFiles = null, Phaket.Core.Execution.LedgerOwner? RemovedOwner = null);
+    IReadOnlyList<string>? CreatedFiles = null, Phaket.Core.Execution.LedgerOwner? RemovedOwner = null,
+    IReadOnlyList<string>? CreatedDirs = null);
 public sealed record ExecutionJournal(string SchemaVersion, string TransactionId, string PlanId,
     JournalState State, IReadOnlyList<JournalEntry> Entries)
 {

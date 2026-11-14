@@ -56,6 +56,12 @@
                                         <Border Classes="pill" Padding="10,4" Margin="0,0,8,4"><TextBlock Text="{Binding Store}" /></Border>
                                         <Border Classes="pill" Padding="10,4" Margin="0,0,8,4"><TextBlock Text="{Binding AvailabilityStatus}" Foreground="{Binding AvailabilityStatus, Converter={x:Static vm:BuildStatusBrushConverter.Instance}}" /></Border>
                                         <Border Classes="pill" Padding="10,4" Margin="0,0,8,4"><TextBlock Text="{Binding Branch}" /></Border>
+                                        <Border Classes="pill" Padding="10,4" Margin="0,0,8,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Classes="muted" Text="{Binding [Builds.Released], Source={x:Static services:LocalizationService.Instance}}" />
+                                                <TextBlock Text="{Binding ReleasedText}" />
+                                            </StackPanel>
+                                        </Border>
                                     </WrapPanel>
                                     <TextBlock Classes="muted" Text="{Binding Provenance}" TextWrapping="Wrap" />
                                 </StackPanel>

@@ -7,7 +7,7 @@ namespace Phaket.Core.Tests;
 // offline reads, download proposals. Fake transport; no network.
 public class CatalogClientTests
 {
-    private sealed class FakeTransport : ICatalogTransport
+    public sealed class FakeTransport : ICatalogTransport
     {
         public Queue<CatalogResponse> Responses { get; } = new();
         public List<string> Requests { get; } = [];
@@ -207,6 +207,51 @@ public class CatalogClientTests
             await client.SyncAsync();
             Assert.Single(store.GetBuilds("among-us", "epic"));
             Assert.Equal("b-epic", store.GetBuilds("among-us", "epic")[0].Id);
+        }
+        finally { store.Dispose(); Directory.Delete(dir, true); }
+    }
+}
+
+// Backend discovery surfaces release dates; the local cache keeps them and the
+// UI's "latest" choice resolves through GetLatestBuild.
+public class CatalogReleaseDateTests
+{
+    private static string BuildJson(string id, string version, string? released) => $$"""
+        {"id":"{{id}}","gameId":"among-us","store":"steam","versionLabel":"{{version}}","buildId":"b-{{id}}",
+         "depotIds":["945361"],"manifestIds":[],"branch":"live","availabilityStatus":"known",
+         "source":"auto-discovery","sourceReference":"ref","observedAt":"2026-11-14T00:00:00Z","verifiedAt":null,
+         "confidence":0.6,"provenance":"auto-discovery/steam-news","releasedAt":{{(released is null ? "null" : $"\"{released}\"")}}}
+        """;
+
+    [Fact]
+    public async Task ReleasedAtRoundTripsAndLatestFollowsReleaseDate()
+    {
+        var dir = Directory.CreateTempSubdirectory("phaket-catalog-rel-").FullName;
+        var transport = new CatalogClientTests.FakeTransport();
+        var store = new CatalogStore(Path.Combine(dir, "catalog.db"));
+        try
+        {
+            transport.Responses.Enqueue(new CatalogResponse(200, null, $$"""
+                {"revision":1,"nextSince":1,"hasMore":false,"changes":[
+                  {"revision":1,"type":"upsert","buildId":"old","payload":{{BuildJson("old", "2026.6.5", "2026-06-05T00:00:00Z")}}},
+                  {"revision":1,"type":"upsert","buildId":"new","payload":{{BuildJson("new", "2026.9.29", "2026-09-29T00:00:00Z")}}},
+                  {"revision":1,"type":"upsert","buildId":"nodate","payload":{{BuildJson("nodate", "2026.8.18", null)}}}]}
+                """));
+            await new CatalogClient(transport, store).SyncAsync();
+            var builds = store.GetBuilds("among-us", "steam");
+            Assert.Equal(3, builds.Count);
+            Assert.Equal(new DateTimeOffset(2026, 9, 29, 0, 0, 0, TimeSpan.Zero),
+                builds.Single(b => b.Id == "new").ReleasedAt);
+            Assert.Null(builds.Single(b => b.Id == "nodate").ReleasedAt);
+            // "Latest" = newest release date, not insertion order.
+            Assert.Equal("new", store.GetLatestBuild("among-us", "steam")!.Id);
+            // Unavailable builds never become "latest".
+            transport.Responses.Enqueue(new CatalogResponse(200, null, """
+                {"revision":2,"nextSince":2,"hasMore":false,"changes":[
+                  {"revision":2,"type":"revoke","buildId":"new","payload":{}}]}
+                """));
+            await new CatalogClient(transport, store).SyncAsync();
+            Assert.Equal("old", store.GetLatestBuild("among-us", "steam")!.Id);
         }
         finally { store.Dispose(); Directory.Delete(dir, true); }
     }

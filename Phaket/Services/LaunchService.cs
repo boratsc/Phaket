@@ -88,9 +88,14 @@ public sealed class SteamLaunchOptionsService
         app.Values["LaunchOptions"] = plan.Proposed;
         apps.Children[plan.AppId] = app;
 
-        var backup = path + $".phaket-bak-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        // Unique backup name: two applies in the same second must not overwrite
+        // the earlier recovery point.
+        var backup = path + $".phaket-bak-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}-{Guid.NewGuid():N}";
         File.Copy(path, backup, overwrite: true);
-        File.WriteAllText(path, VdfWriter.Write(node));
+        // Atomic replace: a failed write must never truncate the live config.
+        var temp = path + ".phaket-tmp";
+        File.WriteAllText(temp, VdfWriter.Write(node));
+        File.Move(temp, path, overwrite: true);
         return backup;
     }
 

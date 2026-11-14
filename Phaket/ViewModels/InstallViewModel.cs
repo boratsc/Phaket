@@ -3,9 +3,11 @@ using System.Text.Json;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Phaket.Core.Catalog;
 using Phaket.Core.Execution;
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
+using Phaket.Core.Recipes;
 using Phaket.Services;
 
 namespace Phaket.ViewModels;
@@ -18,6 +20,28 @@ public partial class InstallItemViewModel(string key, string number) : ViewModel
     [ObservableProperty] private bool isActive;
 }
 
+// A recipe offered for the current game, with its localized display title.
+public sealed class RecipeOption(Recipe recipe, string title)
+{
+    public Recipe Recipe { get; } = recipe;
+    public string Title { get; } = title;
+    public override string ToString() => Title;
+}
+
+// A selectable game version: "latest" or a concrete catalog build with its
+// publisher release date (the backend discovers both from public sources).
+public sealed class VersionOption(string value, string label)
+{
+    public string Value { get; } = value;
+    public string Label { get; } = label;
+    public override string ToString() => Label;
+}
+
+// Install stepper (mockup 10): recipe -> game version -> dry plan -> execute.
+// Real recipes come from the shipped RecipeLibrary; the base game is provisioned
+// by official tooling (DepotDownloader/legendary) through ToolBaseGameSource.
+// Default target is a SANDBOX; installing into a detected game install requires
+// an explicit opt-in checkbox (consent), never implicit.
 public partial class InstallViewModel : ViewModelBase
 {
     private readonly GameCatalogItem game;
@@ -32,11 +56,20 @@ public partial class InstallViewModel : ViewModelBase
     {
         this.game = game;
         this.back = back;
+        LoadOptions();
         UpdateSteps();
     }
 
+    private static string AppDataRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
+    private static string CachePath => Path.Combine(AppDataRoot, "catalog.db");
+
     public InstallItemViewModel[] Steps { get; } = [new("Install.Step1", "1"), new("Install.Step2", "2"), new("Install.Step3", "3"), new("Install.Step4", "4")];
     public InstallItemViewModel[] Checklist { get; } = [new("Install.VerifyVersion", ""), new("Install.CheckDeps", ""), new("Install.AnalyzeConflicts", ""), new("Install.Prepare", "")];
+    public System.Collections.ObjectModel.ObservableCollection<RecipeOption> Recipes { get; } = [];
+    public System.Collections.ObjectModel.ObservableCollection<VersionOption> Versions { get; } = [];
+    [ObservableProperty] private RecipeOption? selectedRecipe;
+    [ObservableProperty] private VersionOption? selectedVersion;
+    [ObservableProperty] private bool useDetectedInstall;
     [ObservableProperty] private int currentStep = 2;
     [ObservableProperty] private double progress;
     [ObservableProperty] private bool isRunning;
@@ -44,13 +77,50 @@ public partial class InstallViewModel : ViewModelBase
     [ObservableProperty] private string statusMessage = "";
     public string ProgressPercent => $"{Progress:P0}";
     public bool CanRollback => !IsRunning && journal is not null;
-    public bool CanStart => !IsRunning && journal is null;
+    public bool CanStart => !IsRunning && journal is null && SelectedRecipe is not null && SelectedVersion is not null;
+    public bool HasDetectedInstall => game.IsInstalled;
+    public string DetectedRoot => game.RootPath;
     partial void OnProgressChanged(double value) => OnPropertyChanged(nameof(ProgressPercent));
     partial void OnCurrentStepChanged(int value) => UpdateSteps();
     partial void OnIsRunningChanged(bool value) { OnPropertyChanged(nameof(CanRollback)); OnPropertyChanged(nameof(CanStart)); }
+    partial void OnSelectedRecipeChanged(RecipeOption? value) => OnPropertyChanged(nameof(CanStart));
+    partial void OnSelectedVersionChanged(VersionOption? value) => OnPropertyChanged(nameof(CanStart));
     private void UpdateSteps()
     {
         for (var i = 0; i < Steps.Length; i++) { Steps[i].IsComplete = i + 1 < CurrentStep; Steps[i].IsActive = i + 1 == CurrentStep; }
+    }
+
+    private void LoadOptions()
+    {
+        var loc = LocalizationService.Instance;
+        try
+        {
+            foreach (var recipe in RecipeLibrary.ForGame(game.Definition.Slug))
+            {
+                var title = recipe.Metadata?.Title?.GetValueOrDefault(loc.CurrentLanguage)
+                    ?? recipe.Metadata?.Title?.GetValueOrDefault("en") ?? recipe.Id;
+                Recipes.Add(new RecipeOption(recipe, $"{title} {recipe.Version}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"phaket: recipe load failed: {ex}");
+            StatusMessage = loc["Install.RecipeLoadError"];
+        }
+        SelectedRecipe = Recipes.FirstOrDefault();
+
+        Versions.Add(new VersionOption("latest", loc["Install.VersionLatest"]));
+        try
+        {
+            using var store = new CatalogStore(CachePath);
+            foreach (var build in store.GetBuilds(game.Definition.Slug, "steam")
+                .Where(b => b.AvailabilityStatus is "known" or "verified" or "downloadable")
+                .OrderByDescending(b => b.ReleasedAt ?? b.ObservedAt ?? DateTimeOffset.MinValue))
+                Versions.Add(new VersionOption(build.VersionLabel,
+                    $"{build.VersionLabel} · {loc["Builds.Released"]} {build.ReleasedText}"));
+        }
+        catch (Exception) { /* offline: only "latest" remains, resolved later */ }
+        SelectedVersion = Versions.FirstOrDefault();
     }
 
     [RelayCommand] private void Back() { if (!IsRunning) { CleanupSandbox(); back(); } }
@@ -67,43 +137,70 @@ public partial class InstallViewModel : ViewModelBase
     [RelayCommand]
     private async Task StartAsync()
     {
-        if (!CanStart) return;
+        if (!CanStart || SelectedRecipe is null || SelectedVersion is null) return;
         CleanupSandbox();
         IsRunning = true; IsDone = false; CurrentStep = 2; Progress = 0; StatusMessage = "";
         foreach (var item in Checklist) { item.IsComplete = false; item.IsActive = false; }
         Checklist[0].IsActive = true;
         cancellation = new CancellationTokenSource();
+        // Snapshot consent/target on the UI thread: the worker must never observe
+        // a checkbox the user toggled after Start was pressed.
+        var detectedRoot = UseDetectedInstall && game.IsInstalled
+            ? game.Detected!.Installation.RootPath : null;
         try
         {
             var token = cancellation.Token;
+            var recipe = SelectedRecipe.Recipe;
+            var store = "steam";
+            var versionChoice = SelectedVersion.Value;
             await Task.Run(() =>
             {
                 var definition = GameDefinitions.LoadAll().First(g => g.Slug == game.Definition.Slug);
                 token.ThrowIfCancellationRequested();
+
+                // Resolve the version choice against the local catalog cache.
+                string? resolved = versionChoice;
+                using (var catalog = new CatalogStore(CachePath))
+                {
+                    if (versionChoice == "latest")
+                        resolved = catalog.GetLatestBuild(game.Definition.Slug, store)?.VersionLabel;
+                    else if (catalog.GetBuilds(game.Definition.Slug, store).All(b => b.VersionLabel != versionChoice))
+                        resolved = null; // stale selection after a catalog refresh
+                }
+                if (resolved is null)
+                    throw new PhaketException(ErrorCodes.GameBuildUnavailable);
+                var gameVersion = resolved;
+
                 var root = Directory.CreateTempSubdirectory("phaket-install-").FullName;
                 sandboxRoot = root;
-                var gameRoot = Path.Combine(root, "game");
+                var gameRoot = detectedRoot ?? Path.Combine(root, "game");
                 profileRoot = Path.Combine(root, "profile");
                 var staging = Path.Combine(root, "staging");
-                var packages = Path.Combine(root, "packages");
-                Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "plugins"));
-                Directory.CreateDirectory(profileRoot); Directory.CreateDirectory(staging); Directory.CreateDirectory(packages);
-                using (var zip = ZipFile.Open(Path.Combine(packages, "sample.zip"), ZipArchiveMode.Create))
-                using (var writer = new StreamWriter(zip.CreateEntry("sample.txt").Open())) writer.Write("Phaket sandbox fixture");
-                static Dictionary<string, JsonElement> Args(params (string Key, string Value)[] args) => args.ToDictionary(x => x.Key, x => JsonSerializer.SerializeToElement(x.Value));
-                var recipe = new Recipe
+                var packages = Path.Combine(AppDataRoot, "packages");
+                var state = Path.Combine(AppDataRoot, "state", game.Definition.Slug);
+                if (detectedRoot is null)
                 {
-                    SchemaVersion = "omrl/v0alpha1", Id = "sandbox.sample", Version = "1.0.0",
-                    Target = new RecipeTarget { Game = definition.Slug, Systems = ["linux", "windows"] },
-                    Requires = new RecipeRequires { Capabilities = ["archive.extract", "file.copy"] },
-                    Artifacts = [new RecipeArtifact { Id = "sample", Source = "package://sample.zip" }],
-                    Steps = [new RecipeStep { Id = "extract", Use = "archive.extract", With = Args(("from", "package://sample"), ("to", "staging://sample")) },
-                        new RecipeStep { Id = "copy", Use = "file.copy", With = Args(("from", "staging://sample/sample.txt"), ("to", "game://BepInEx/plugins/sample.txt")) }]
-                };
-                var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", "steam", null, OperationCatalog.Capabilities, _ => false);
-                var plan = OperationPlanner.Plan(recipe, new PlannerContext("sandbox", "sandbox", gameRoot, profileRoot, staging, packages, definition, facts));
+                    Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "plugins"));
+                    File.WriteAllText(Path.Combine(gameRoot, definition.MainExecutable ?? "game.exe"), "sandbox fixture");
+                }
+                Directory.CreateDirectory(profileRoot); Directory.CreateDirectory(staging); Directory.CreateDirectory(packages); Directory.CreateDirectory(state);
+
+                var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", store, gameVersion,
+                    OperationCatalog.Capabilities,
+                    uri => VirtualUri.TryParse(uri, out var scheme, out var path)
+                        && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                var context = new PlannerContext("install", "install-profile", gameRoot, profileRoot, staging, packages,
+                    definition, facts,
+                    LatestGameVersion: s =>
+                    {
+                        using var catalog = new CatalogStore(CachePath);
+                        return catalog.GetLatestBuild(game.Definition.Slug, s)?.VersionLabel;
+                    });
+                var plan = OperationPlanner.Plan(recipe, context);
                 token.ThrowIfCancellationRequested();
-                executor = new PlanExecutor(new PlanExecutionContext(gameRoot, profileRoot, staging, packages, definition, recipe.Id, "sandbox", Path.Combine(root, "state")));
+                executor = new PlanExecutor(new PlanExecutionContext(gameRoot, profileRoot, staging, packages,
+                    definition, recipe.Id, "install-profile", state, new ToolBaseGameSource()));
                 var reporter = new Progress<InstallProgress>(p => Dispatcher.UIThread.Post(() =>
                 {
                     if (!IsRunning) return;
@@ -117,6 +214,7 @@ public partial class InstallViewModel : ViewModelBase
             StatusMessage = LocalizationService.Instance["Install.Done"];
         }
         catch (OperationCanceledException) { StatusMessage = LocalizationService.Instance["Install.Cancel"]; }
+        catch (PhaketException ex) { StatusMessage = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
         catch (Exception ex) { StatusMessage = ex.Message; }
         finally
         {

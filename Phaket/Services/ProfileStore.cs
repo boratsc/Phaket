@@ -51,8 +51,13 @@ public sealed class ProfileStore
     private Dictionary<string, GameProfileData> data = new(StringComparer.Ordinal);
 
     public ProfileStore()
+        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket"))
     {
-        root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
+    }
+
+    internal ProfileStore(string root)
+    {
+        this.root = root;
         profilesPath = Path.Combine(root, "profiles.json");
         backupsDir = Path.Combine(root, "backups");
         Directory.CreateDirectory(root);
@@ -65,7 +70,13 @@ public sealed class ProfileStore
         if (File.Exists(profilesPath))
         {
             try { data = JsonSerializer.Deserialize<Dictionary<string, GameProfileData>>(File.ReadAllText(profilesPath)) ?? []; }
-            catch { data = []; }
+            catch
+            {
+                // Unreadable user file: keep it on disk untouched and never seed
+                // sample data over it. The user can recover manually.
+                data = new Dictionary<string, GameProfileData>(StringComparer.Ordinal);
+                return;
+            }
         }
         Seed("among-us", "Szyfrowy Mod – Stable",
             ("Szyfrowy Mod", "2.6.0"), ("BepInEx IL2CPP", "6.0.4"), ("Reactor", "2.5.1"),

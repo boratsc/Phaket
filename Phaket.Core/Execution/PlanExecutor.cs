@@ -11,7 +11,8 @@ namespace Phaket.Core.Execution;
 // profile transaction. Hosts must pass a durable StateRoot per installation.
 public sealed record PlanExecutionContext(
     string GameRoot, string ProfileRoot, string StagingRoot, string PackageRoot,
-    GameDefinition Game, string RecipeId, string ProfileId, string? StateRoot = null);
+    GameDefinition Game, string RecipeId, string ProfileId, string? StateRoot = null,
+    IBaseGameSource? BaseGameSource = null);
 
 public enum DivergencePolicy { Fail, Restore, Skip }
 
@@ -122,14 +123,27 @@ public sealed class PlanExecutor : IPlanExecutorHost
         journal = journal with { State = JournalState.Executing };
         try
         {
+            // The vanilla cache must exist BEFORE the intent is journaled: the
+            // journal then carries the exact write list a rollback can undo.
+            if (operation.Kind == "game.provision" && existing is null)
+                EnsureProvisionCache(operation.Parameters ?? new Dictionary<string, string>());
             var intent = new OperationIntent(operation.OpId, operation.Kind, operation.TargetPath,
                 operation.Sha256, operation.Parameters?.GetValueOrDefault("key"));
             var entry = existing ?? new JournalEntry(intent, null, false, false);
 
             // For extracts, journal the full planned write list BEFORE any write
-            // so a partial failure is still recoverable.
-            if (operation.Kind is "archive.extract" or "loader.ensure" && existing is null)
-                entry = entry with { CreatedFiles = PlanArchiveWrites(operation) };
+            // so a partial failure is still recoverable. Created directories are
+            // journaled too: they are new game-tree state and must be cleaned up.
+            if (operation.Kind is "archive.extract" or "loader.ensure" or "game.provision" && existing is null)
+                entry = entry with
+                {
+                    CreatedFiles = operation.Kind == "game.provision"
+                        ? PlanProvisionWrites(operation)
+                        : PlanArchiveWrites(operation),
+                    CreatedDirs = operation.Kind == "game.provision"
+                        ? PlanProvisionDirs(operation)
+                        : PlanArchiveDirs(operation),
+                };
 
             if (existing is null) entries.Add(entry);
             Persist(journal with { Entries = entries.ToArray() });
@@ -199,9 +213,15 @@ public sealed class PlanExecutor : IPlanExecutorHost
                     break;
                 case "archive.extract":
                 case "loader.ensure":
+                case "game.provision":
                     // Covers partial extracts: planned writes are journaled up front.
                     foreach (var file in entry.CreatedFiles ?? [])
                         RestoreResource(Relative(file), ledger);
+                    // Remove directories this transaction created, deepest first,
+                    // only when empty (never touches pre-existing or user content).
+                    foreach (var dir in (entry.CreatedDirs ?? []).Reverse())
+                        if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                            Directory.Delete(dir);
                     break;
                 case "config.set":
                     if (entry.Applied) RestoreResource(Relative(target) + "::" + entry.Intent.Key, ledger);
@@ -282,6 +302,110 @@ public sealed class PlanExecutor : IPlanExecutorHost
         return SafeArchive.PlanWrites(source, targetRoot, operation.SourceRef ?? "loader", strip);
     }
 
+    private IReadOnlyList<string>? PlanArchiveDirs(PlannedOperation operation)
+    {
+        // A missing staging source is produced by an earlier extract: no local
+        // archive to inspect, so no directories can be planned from it.
+        string source;
+        try
+        {
+            source = operation.Kind == "loader.ensure"
+                ? (operation.SourceRef is { Length: > 0 } r ? ResolveSource(r) : ResolvePackageArtifact(operation.Parameters?["artifact"] ?? ""))
+                : ResolveSource(operation.SourceRef!);
+        }
+        catch (PhaketException) { return null; }
+        if (!File.Exists(source)) return null;
+        var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
+        var strip = operation.Parameters?.TryGetValue("stripComponents", out var s) == true ? int.Parse(s) : 0;
+        return SafeArchive.PlanDirectories(source, targetRoot, operation.SourceRef ?? "loader", strip);
+    }
+
+    // game.provision: the vanilla cache directory for this exact store+version.
+    private string ProvisionCacheDir(PlannedOperation operation)
+    {
+        var parameters = operation.Parameters ?? new Dictionary<string, string>();
+        var store = parameters.GetValueOrDefault("store") ?? "";
+        var version = parameters.GetValueOrDefault("version") ?? "";
+        return VanillaCache.DirectoryFor(context.PackageRoot, store, version);
+    }
+
+    // Fetches the exact pinned vanilla into the per-version cache when missing.
+    // Sources are official tooling only (DepotDownloader / legendary) via the host
+    // runner — never a private mirror, never the user's Steam library.
+    private void EnsureProvisionCache(IReadOnlyDictionary<string, string> parameters)
+    {
+        var store = parameters.GetValueOrDefault("store")
+            ?? throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "game.provision missing store"));
+        var version = parameters.GetValueOrDefault("version")
+            ?? throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "game.provision missing version"));
+        var manifestId = parameters.GetValueOrDefault("manifestId");
+        var cacheDir = VanillaCache.DirectoryFor(context.PackageRoot, store, version);
+        var marker = VanillaCache.ReadMarker(cacheDir);
+        if (marker is not null && marker.Store == store
+            && (manifestId is null || marker.ManifestId == manifestId)
+            && Directory.Exists(cacheDir))
+            return;
+        if (context.BaseGameSource is null)
+            throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", $"vanilla {store} {version}"));
+        System.IO.Directory.CreateDirectory(cacheDir);
+        if (!context.BaseGameSource.TryPrepare(store, version, manifestId, cacheDir, out var sourceError))
+            throw new PhaketException(ErrorCodes.ArtifactMissing,
+                ("artifact", $"vanilla {store} {version}: {sourceError}"));
+        VanillaCache.WriteMarker(cacheDir, new VanillaCacheMarker(store, version, manifestId,
+            "host-runner", DateTimeOffset.UtcNow));
+    }
+
+    private IReadOnlyList<string>? PlanProvisionWrites(PlannedOperation operation)
+    {
+        var cacheDir = ProvisionCacheDir(operation);
+        if (!Directory.Exists(cacheDir)) return null; // fetched at execute time
+        return EnumerateVanilla(cacheDir);
+    }
+
+    private IReadOnlyList<string>? PlanProvisionDirs(PlannedOperation operation)
+    {
+        var cacheDir = ProvisionCacheDir(operation);
+        if (!Directory.Exists(cacheDir)) return null;
+        return NewDirectoriesUnder(cacheDir, context.GameRoot);
+    }
+
+    // Copies cached vanilla into the game root, capturing base state per file.
+    // The cache marker is excluded: it is Phaket metadata, not game content.
+    private IReadOnlyList<string> CopyVanilla(string cacheDir, OwnershipLedger ledger)
+    {
+        var created = new List<string>();
+        foreach (var file in EnumerateVanilla(cacheDir))
+        {
+            var relative = file[(Path.GetFullPath(cacheDir).Length + 1)..].Replace('\\', '/');
+            var target = Path.Combine(context.GameRoot, relative);
+            CaptureBase(relative, target, ledger);
+            // Base-game files are intentionally outside writableAreas (recipes must
+            // not write them); the boundary here is the per-version vanilla cache,
+            // which EnumerateVanilla never leaves. No RevalidateWrite on purpose.
+            AtomicCopy(file, target);
+            created.Add(target);
+        }
+        ledger.Save(ledgerPath);
+        return created;
+    }
+
+    private static IReadOnlyList<string> EnumerateVanilla(string cacheDir) =>
+        Directory.GetFiles(cacheDir, "*", SearchOption.AllDirectories)
+            .Where(f => Path.GetFileName(f) != VanillaCache.MarkerFileName)
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToArray();
+
+    private static IReadOnlyList<string> NewDirectoriesUnder(string sourceDir, string targetRoot)
+    {
+        var sourceFull = Path.GetFullPath(sourceDir);
+        var targetFull = Path.GetFullPath(targetRoot);
+        return Directory.GetDirectories(sourceFull, "*", SearchOption.AllDirectories)
+            .Select(d => Path.Combine(targetFull, d[(sourceFull.Length + 1)..].Replace('\\', '/')))
+            .Where(d => !Directory.Exists(d))
+            .OrderBy(d => d.Length).ThenBy(d => d, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private (string? BackupRef, IReadOnlyList<string>? Created, LedgerOwner? Removed) Apply(
         PlannedOperation operation, OwnershipLedger ledger)
     {
@@ -350,7 +474,11 @@ public sealed class PlanExecutor : IPlanExecutorHost
                     : ResolvePackageArtifact(artifactId);
                 if (operation.Sha256 is { } expected && HashFile(source) != expected)
                     throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", artifactId));
-                var created = SafeArchive.Extract(source, context.GameRoot, artifactId, 0, destination =>
+                // Real loader packages (e.g. Thunderstore BepInExPack_AmongUs.zip) wrap
+                // their contents in a single folder; strip it so entry files land at the
+                // game root, matching the official manual-install instructions.
+                var strip = parameters.TryGetValue("stripComponents", out var sc) ? int.Parse(sc) : 0;
+                var created = SafeArchive.Extract(source, context.GameRoot, artifactId, strip, destination =>
                 {
                     var relative = realRelative(destination);
                     if (!context.Game.AllowsWrite(relative))
@@ -426,6 +554,13 @@ public sealed class PlanExecutor : IPlanExecutorHost
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.WriteAllText(target, JsonSerializer.Serialize(new { profileId = parameters["profile"] }, JsonOptions));
                 return (backup, null, null);
+            }
+
+            case "game.provision":
+            {
+                EnsureProvisionCache(parameters);
+                var created = CopyVanilla(ProvisionCacheDir(operation), ledger);
+                return (null, created, null);
             }
 
             case "file.verify":

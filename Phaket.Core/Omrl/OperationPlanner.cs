@@ -1,4 +1,5 @@
 using Phaket.Core.Domain;
+using Phaket.Core.Execution;
 
 namespace Phaket.Core.Omrl;
 
@@ -14,7 +15,10 @@ public sealed record PlannerContext(
     string PackageRoot,
     GameDefinition Game,
     PlanFacts Facts,
-    IReadOnlyList<ResourceOwner>? ExistingOwners = null);
+    IReadOnlyList<ResourceOwner>? ExistingOwners = null,
+    // Resolves "latest" for game.provision from the build catalog (store -> version
+    // label). Null means no catalog: "latest" then fails with GAME_BUILD_UNAVAILABLE.
+    Func<string, string?>? LatestGameVersion = null);
 
 // Expands a validated recipe against concrete installation facts into a dry
 // OperationPlan. Never mutates the filesystem; reads are limited to source
@@ -68,6 +72,7 @@ public static class OperationPlanner
         var operations = new List<PlannedOperation>();
         var producedPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var writes = new List<(string Path, string OpId)>();
+        var requiresDownload = false;
 
         foreach (var step in recipe.Steps)
         {
@@ -76,20 +81,57 @@ public static class OperationPlanner
             if (operation is null) throw new PhaketException(ErrorCodes.UnknownOperation, ("operation", step.Use));
 
             var (sourceRef, sizeBytes, sha256, sourcePath) = ResolveSource(step.Use, step.With, context, artifacts, producedPaths);
+            // A remote artifact with no local file yet means the host must download
+            // it before execution; a locally present file clears the flag.
+            if (sourcePath is null && sourceRef is not null
+                && sourceRef.StartsWith("package://", StringComparison.Ordinal)
+                && step.Use is "file.copy" or "archive.extract" or "loader.ensure")
+                requiresDownload = true;
             var targetPath = ResolveTarget(step.Use, step.With, context);
             var preconditions = new List<string>(operation.Preconditions);
+            var parameters = step.With.ToDictionary(kv => kv.Key, kv => kv.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                ? kv.Value.GetString()! : kv.Value.GetRawText());
             if (sourcePath is null && sourceRef is not null && step.Use is "file.copy")
             {
                 var producer = producedPaths.FirstOrDefault(kv => sourceRef.StartsWith(kv.Key, StringComparison.Ordinal));
                 if (producer.Value is not null) preconditions.Add($"produced-by:{producer.Value}");
+            }
+            if (step.Use == "game.provision")
+            {
+                // The base game must match the recipe's pinned version exactly and
+                // can only come from official tooling (DepotDownloader / legendary).
+                var provisionStore = step.With.GetValueOrDefault("store").GetString() ?? "";
+                if (provisionStore != facts.Store)
+                    throw new PhaketException(ErrorCodes.ValidationFailed,
+                        ("detail", $"game.provision store '{provisionStore}' does not match installation store '{facts.Store}'"));
+                var provisionVersion = step.With.GetValueOrDefault("version").GetString() ?? "";
+                // "Latest" is resolved ONCE at plan time from the build catalog; the
+                // executor only ever sees a concrete version (reproducible plans).
+                if (provisionVersion == "latest")
+                {
+                    provisionVersion = context.LatestGameVersion?.Invoke(provisionStore)
+                        ?? throw new PhaketException(ErrorCodes.GameBuildUnavailable);
+                    parameters["version"] = provisionVersion;
+                }
+                sourceRef = $"vanilla://{provisionStore}/{provisionVersion}";
+                targetPath = context.GameRoot;
+                // A cached vanilla for this exact version means no download is needed.
+                var cacheDir = VanillaCache.DirectoryFor(context.PackageRoot, provisionStore, provisionVersion);
+                var marker = VanillaCache.ReadMarker(cacheDir);
+                var manifestId = step.With.TryGetValue("manifestId", out var manifestElement)
+                    && manifestElement.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? manifestElement.GetString() : null;
+                if (marker is null || marker.Store != provisionStore
+                    || (manifestId is not null && marker.ManifestId != manifestId)
+                    || !Directory.Exists(cacheDir))
+                    requiresDownload = true;
             }
 
             operations.Add(new PlannedOperation(
                 step.Id, step.Use, targetPath ?? context.ProfileRoot, sourceRef, sizeBytes, sha256,
                 preconditions, operation.Recovery, operation.Recovery,
                 IsWrite(step.Use) ? "record-owner" : "none", operation.Permissions,
-                step.With.ToDictionary(kv => kv.Key, kv => kv.Value.ValueKind == System.Text.Json.JsonValueKind.String
-                    ? kv.Value.GetString()! : kv.Value.GetRawText())));
+                parameters));
 
             if (targetPath is not null)
             {
@@ -118,7 +160,7 @@ public static class OperationPlanner
             context.InstallationId, context.ProfileId,
             operations, conflicts,
             ExecutableWarnings(operations),
-            recipe.Artifacts.Any(a => a.Source.StartsWith("https://", StringComparison.Ordinal)),
+            requiresDownload,
             verification);
     }
 
@@ -160,7 +202,11 @@ public static class OperationPlanner
         List<(string Path, string OpId)> writes, IReadOnlyList<ResourceOwner> existing, string gameRoot)
     {
         var conflicts = new List<PlanConflict>();
-        foreach (var group in writes.GroupBy(w => w.Path, StringComparer.Ordinal).Where(g => g.Count() > 1))
+        // Writes that target the game root as a DIRECTORY (provision, loader,
+        // extract) are tree merges, not file conflicts: per-file sharing is
+        // resolved by the ownership ledger at execute time.
+        foreach (var group in writes.Where(w => w.Path != gameRoot)
+            .GroupBy(w => w.Path, StringComparer.Ordinal).Where(g => g.Count() > 1))
             conflicts.Add(new PlanConflict(group.Key, group.Select(w => w.OpId).ToArray(), "last-wins"));
         foreach (var write in writes)
         {
@@ -212,9 +258,15 @@ public static class OperationPlanner
             var segments = path.Split('/');
             var artifact = artifacts[segments[0]];
             var relative = string.Join('/', segments.Skip(1));
+            // Remote artifacts land in the package root under their artifact id
+            // (that is where a host downloader places them); local package://
+            // artifacts keep their declared file name.
+            var baseName = artifact.Source.StartsWith("package://", StringComparison.Ordinal)
+                ? artifact.Source["package://".Length..]
+                : artifact.Id + ".zip";
             var filePath = relative.Length == 0
-                ? Path.Combine(context.PackageRoot, artifact.Source["package://".Length..])
-                : PathBoundary.Resolve(context.PackageRoot, Path.Combine(artifact.Source["package://".Length..], relative));
+                ? Path.Combine(context.PackageRoot, baseName)
+                : PathBoundary.Resolve(context.PackageRoot, Path.Combine(baseName, relative));
             if (File.Exists(filePath))
             {
                 var bytes = File.ReadAllBytes(filePath);
@@ -258,6 +310,14 @@ public static class OperationPlanner
             "package" => context.PackageRoot,
             _ => throw new PhaketException(ErrorCodes.InvalidUri, ("uri", element.GetString() ?? "")),
         };
+        // Root sentinel: archive.extract may target the game root itself; every
+        // extracted entry is still checked against writableAreas at write time.
+        if (path == ".")
+        {
+            if (scheme == "game" && use != "archive.extract")
+                throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", element.GetString() ?? ""));
+            return Path.GetFullPath(root);
+        }
         var resolved = PathBoundary.Resolve(root, path);
         if (scheme == "game" && IsWrite(use))
         {

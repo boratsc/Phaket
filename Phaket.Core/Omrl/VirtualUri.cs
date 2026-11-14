@@ -21,6 +21,14 @@ public static class VirtualUri
         var rest = text[match.Length..];
         if (rest.Length == 0) return false;
         if (rest.Any(c => c is '\\' or ':' || char.IsControl(c))) return false;
+        // "." addresses the root of the scheme (e.g. game://. for the game
+        // directory). Only the bare sentinel is allowed, never as a segment.
+        if (rest == ".")
+        {
+            scheme = match.Groups[1].Value;
+            path = ".";
+            return true;
+        }
         var segments = rest.Split('/');
         if (segments.Length > 64) return false;
         foreach (var segment in segments)

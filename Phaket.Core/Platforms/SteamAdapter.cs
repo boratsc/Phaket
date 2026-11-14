@@ -55,7 +55,10 @@ public sealed class SteamAdapter
         Add(steamRoot, isFlatpak);
         var vdfPath = Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(vdfPath)) return libraries;
-        var root = VdfParser.Parse(File.ReadAllText(vdfPath));
+        VdfNode root;
+        // A corrupt library list must not abort detection: the root library stays.
+        try { root = VdfParser.Parse(File.ReadAllText(vdfPath)); }
+        catch (Exception) { return libraries; }
         var folders = root.Child("libraryfolders") ?? root;
         foreach (var (_, entry) in folders.Children)
         {
@@ -96,7 +99,10 @@ public sealed class SteamAdapter
                 if (!Directory.Exists(steamapps)) continue;
                 foreach (var acf in Directory.GetFiles(steamapps, "appmanifest_*.acf").Order(StringComparer.Ordinal))
                 {
-                    var manifest = ParseAppManifest(acf);
+                    SteamAppManifest? manifest;
+                    // One corrupt/unreadable acf must not abort the whole scan.
+                    try { manifest = ParseAppManifest(acf); }
+                    catch (Exception) { continue; }
                     if (manifest is null) continue;
                     var installDir = Path.Combine(steamapps, "common", manifest.InstallDir);
                     var definition = definitions.FirstOrDefault(d =>

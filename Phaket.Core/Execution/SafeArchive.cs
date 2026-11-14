@@ -35,6 +35,35 @@ public static class SafeArchive
         return planned;
     }
 
+    // Directories the extract would create that do NOT exist yet, deepest last.
+    // Recorded in the journal BEFORE any write so a partial failure can be cleaned.
+    public static IReadOnlyList<string> PlanDirectories(string archivePath, string targetRoot, string artifactId, int stripComponents = 0)
+    {
+        using var zip = ZipFile.OpenRead(archivePath);
+        var root = Path.GetFullPath(targetRoot);
+        var dirs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in zip.Entries)
+        {
+            var name = NormalizeName(entry.FullName, stripComponents);
+            if (name is null || name.Length == 0) continue;
+            var trimmed = name.TrimEnd('/');
+            if (trimmed.Length == 0) continue;
+            // Every ancestor directory of each entry, resolved to its real path.
+            var dir = Path.GetDirectoryName(trimmed)?.Replace('\\', '/');
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var resolved = ResolveDestination(root, dir, artifactId);
+                if (!dirs.Add(resolved)) break; // ancestor already seen -> its parents too
+                dir = Path.GetDirectoryName(dir)?.Replace('\\', '/');
+            }
+        }
+        // Shallowest-first (deterministic): rollback deletes in reverse (deepest-first).
+        return dirs.Where(d => !Directory.Exists(d))
+            .OrderBy(d => d.Length)
+            .ThenBy(d => d, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     // Pass 2: write the pre-validated entries. beforeOverwrite runs immediately
     // before each file write (base-state capture).
     public static IReadOnlyList<string> Extract(string archivePath, string targetRoot, string artifactId,

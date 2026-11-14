@@ -109,7 +109,7 @@ public class LinuxP0VerticalTests
             File.WriteAllText(Path.Combine(gameDir, "winhttp.dll"), "original-doorstop");
             ExecutorFixture.MakeZip(Path.Combine(packageRoot, "loader-bundle.zip"),
                 ("winhttp.dll", "bepinex-doorstop"u8.ToArray()),
-                ("BepInEx/core/BepInEx.IL2CPP.dll", "loader-core"u8.ToArray()));
+                ("BepInEx/core/BepInEx.Unity.IL2CPP.dll", "loader-core"u8.ToArray()));
             ExecutorFixture.MakeZip(Path.Combine(packageRoot, "mod-bundle.zip"),
                 ("CustomRoles.dll", "custom-roles"u8.ToArray()));
 

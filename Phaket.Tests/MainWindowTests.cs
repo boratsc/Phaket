@@ -4,6 +4,7 @@ using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Phaket;
 using Phaket.Services;
@@ -105,14 +106,23 @@ public class MainWindowTests
     {
         var window = new MainWindow();
         window.Show();
-
-        var buttons = window.GetVisualDescendants().OfType<Button>().ToList();
-        var named = buttons.Select(b => AutomationProperties.GetName(b)).Where(n => !string.IsNullOrEmpty(n)).ToList();
-        Assert.Contains("Gry", named);
-        Assert.Contains("Recipe Studio", named);
-        Assert.Contains("Ustawienia", named);
-
-        window.Close();
+        // The user's persisted language choice must not decide this assertion.
+        var loc = LocalizationService.Instance;
+        var previous = loc.CurrentLanguage;
+        loc.CurrentLanguage = "pl-PL";
+        try
+        {
+            var buttons = window.GetVisualDescendants().OfType<Button>().ToList();
+            var named = buttons.Select(b => AutomationProperties.GetName(b)).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            Assert.Contains("Gry", named);
+            Assert.Contains("Recipe Studio", named);
+            Assert.Contains("Ustawienia", named);
+        }
+        finally
+        {
+            loc.CurrentLanguage = previous;
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -153,22 +163,26 @@ public class LocalizationTests
         Assert.Equal(pl.OrderBy(k => k), en.OrderBy(k => k));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void EveryKeyResolvesInBothLanguages()
     {
         var loc = LocalizationService.Instance;
-        foreach (var key in loc.Keys("pl-PL"))
+        var previous = loc.CurrentLanguage;
+        try
         {
-            loc.CurrentLanguage = "pl-PL";
-            var pl = loc[key];
-            loc.CurrentLanguage = "en";
-            var en = loc[key];
-            Assert.NotEqual(key, pl);
-            Assert.NotEqual(key, en);
-            Assert.False(string.IsNullOrWhiteSpace(pl));
-            Assert.False(string.IsNullOrWhiteSpace(en));
+            foreach (var key in loc.Keys("pl-PL"))
+            {
+                loc.CurrentLanguage = "pl-PL";
+                var pl = loc[key];
+                loc.CurrentLanguage = "en";
+                var en = loc[key];
+                Assert.NotEqual(key, pl);
+                Assert.NotEqual(key, en);
+                Assert.False(string.IsNullOrWhiteSpace(pl));
+                Assert.False(string.IsNullOrWhiteSpace(en));
+            }
         }
-        loc.CurrentLanguage = "pl-PL";
+        finally { loc.CurrentLanguage = previous; }
     }
 
     [Fact]
@@ -213,21 +227,25 @@ public class RecipeStudioFlowTests
         Assert.Contains(reloaded.PlanLines, l => l.Contains("BepInEx"));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void InvalidRecipeProducesLocalizedErrors()
     {
         var loc = LocalizationService.Instance;
-        loc.CurrentLanguage = "pl-PL";
-        var vm = new RecipeStudioViewModel();
-        vm.AddStepCommand.Execute("file.copy");
-        vm.Steps[0].To = "game://../evil.dll"; // traversal
-        Assert.False(vm.ValidateCore());
-        Assert.Contains(vm.ValidationResults, r => r.Contains("adres") || r.Contains("URI") || r.Contains("zakres"));
+        var previous = loc.CurrentLanguage;
+        try
+        {
+            loc.CurrentLanguage = "pl-PL";
+            var vm = new RecipeStudioViewModel();
+            vm.AddStepCommand.Execute("file.copy");
+            vm.Steps[0].To = "game://../evil.dll"; // traversal
+            Assert.False(vm.ValidateCore());
+            Assert.Contains(vm.ValidationResults, r => r.Contains("adres") || r.Contains("URI") || r.Contains("zakres"));
 
-        loc.CurrentLanguage = "en";
-        Assert.False(vm.ValidateCore());
-        Assert.Contains(vm.ValidationResults, r => r.Contains("URI") || r.Contains("path") || r.Contains("area"));
-        loc.CurrentLanguage = "pl-PL";
+            loc.CurrentLanguage = "en";
+            Assert.False(vm.ValidateCore());
+            Assert.Contains(vm.ValidationResults, r => r.Contains("URI") || r.Contains("path") || r.Contains("area"));
+        }
+        finally { loc.CurrentLanguage = previous; }
     }
 
     [Fact]

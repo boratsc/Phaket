@@ -38,6 +38,24 @@
                 </ItemsControl>
                 <StackPanel Grid.Column="1" Spacing="18">
                     <Border Classes="card" Padding="28">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="sectionTitle" Text="{Binding [Install.Recipe], Source={x:Static services:LocalizationService.Instance}}" />
+                            <ComboBox ItemsSource="{Binding Recipes}" SelectedItem="{Binding SelectedRecipe}" HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding !IsRunning}"
+                                      AutomationProperties.Name="{Binding [Install.Recipe], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBlock Classes="sectionTitle" Text="{Binding [Install.Version], Source={x:Static services:LocalizationService.Instance}}" />
+                            <ComboBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding !IsRunning}"
+                                      AutomationProperties.Name="{Binding [Install.Version], Source={x:Static services:LocalizationService.Instance}}" />
+                            <CheckBox IsChecked="{Binding UseDetectedInstall}" IsVisible="{Binding HasDetectedInstall}"
+                                      IsEnabled="{Binding !IsRunning}"
+                                      Content="{Binding [Install.UseDetected], Source={x:Static services:LocalizationService.Instance}}"
+                                      AutomationProperties.Name="{Binding [Install.UseDetected], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBlock Classes="muted" IsVisible="{Binding HasDetectedInstall}" TextWrapping="Wrap"
+                                       Text="{Binding [Install.DetectedHint], Source={x:Static services:LocalizationService.Instance}}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Classes="card" Padding="28">
                         <StackPanel Spacing="16">
                             <TextBlock Classes="sectionTitle" Text="{Binding [Install.Analysis], Source={x:Static services:LocalizationService.Instance}}" />
                             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Install.AnalysisHint], Source={x:Static services:LocalizationService.Instance}}" />

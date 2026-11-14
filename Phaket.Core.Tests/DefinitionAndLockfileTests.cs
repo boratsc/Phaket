@@ -120,7 +120,7 @@ public class DefinitionTests
 
     [Fact]
     public void AmongUsFullFixtureFlow() =>
-        RunFullFlow("among-us.yaml", "among-us", "BepInEx.IL2CPP.dll", "Among Us.exe");
+        RunFullFlow("among-us.yaml", "among-us", "BepInEx.Unity.IL2CPP.dll", "Among Us.exe");
 
     [Fact]
     public void ValheimFullFixtureFlow() =>

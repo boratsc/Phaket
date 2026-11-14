@@ -140,11 +140,37 @@ identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
   + `RenderTests` (zrzuty Skia 1280×800 do `/tmp/opencode/phaket-render`).
 - CI (GitHub Actions): build + testy na `ubuntu-26.04` i `windows-latest`.
 - E2E: install→verify→uninstall (sandbox), katalog desktop→backend, share round-trip.
+- **Pierwszy realny przepis** (`Phaket.Core.Tests/fixtures/recipes/among-us-betterpolus.yaml`):
+  BetterPolus 1.2.2 + loader BepInEx 6.0.700 z Thunderstore — prawdziwe URL-e pobierania
+  i SHA-256 paczek (zweryfikowane 2026-11-13), `stripComponents: 1` dla folderu-wrapper
+  paczki loadera, opcje uruchomienia Linux/Proton (`WINEDLLOVERRIDES="winhttp.dll=n,b"
+  %command%`) jako dane definicji gry z proweniencją (docs.bepinex.dev). Testy planują
+  i wykonują przepis na fixture o strukturze identycznej z realnymi paczkami.
+- **Macierz wersji Town of Us Mira** (`among-us-tou-mira-1.7.3.yaml`,
+  `among-us-tou-mira-1.6.3-beta2.yaml`): wydanie moda ↔ dokładna wersja gry
+  (1.7.3 → 2026.8.18, 1.6.3-beta2 → 2026.6.5) jak `ModVersion`/`AmongVersion` w SUSModderze,
+  ale vanilla provisionuje operacja `game.provision` przez oficjalne narzędzia
+  (DepotDownloader `-app 945360 -depot 945361 -manifest <pin>` / legendary dla Epic),
+  z cache per wersja i markerem — nigdy z biblioteki Steam użytkownika i nigdy
+  z prywatnego serwera. Warianty paczek per sklep (x86 Steam / x64 Epic) wybierane
+  warunkami `store:`; uninstall przepisu zostawia provisionowaną bazę gry.
+- **Pętla wersji gry w UI**: widok Instalacji wybiera przepis z `Phaket.Core/recipes`
+  i wersję gry — „Najnowsza" albo konkretna z datą wydania z katalogu buildów
+  (`releasedAt` z backendu, odkrywane automatycznie z publicznych źródeł); wybór
+  resolwuje się raz przy planowaniu, więc plan pozostaje deterministyczny.
+  Widok Buildów pokazuje datę wydania obok statusu. Vanilla pobiera host przez
+  `ToolBaseGameSource` (DepotDownloader/legendary, ścieżki z `PHAKET_DEPOTDOWNLOADER`
+  /`PHAKET_LEGENDARY`); bez skonfigurowanych narzędzi plan kończy się czytelnym
+  błędem, nigdy cichym pobraniem z niezaufanego źródła.
 
 ## Znane ograniczenia PoC
 
 - Instalacja w UI działa na **sandbox fixture** (nie na prawdziwej grze); E2E na realnej
   instalacji wymaga zgody i zasobów użytkownika.
+- Silnik **nie pobiera** artefaktów ani gry vanilla: host przygotowuje pliki w katalogu
+  pakietów (pobranie z Thunderstore/GitHub po weryfikacji SHA-256; gra Steam wyłącznie
+  przez narzędzia typu DepotDownloader, Epic przez legendary — jak w SUSModderze).
+  Plan z brakującym artefaktem zgłasza `requires-download` i czytelny błąd przy wykonaniu.
 - Dane grafu/współdzielenia/ProtonDB w demo są przykładowe; import zrzutu ODbL pozwala
   wczytać realne dane.
 - Natywny Wayland bez AT-SPI; rzeczywisty Windows GUI i czytnik Orca niezweryfikowane.
@@ -162,6 +188,13 @@ ODbL import, safe launch options). .NET 10 + Avalonia 12.1.6, Windows + Linux (X
 default, native Wayland opt-in without AT-SPI). pl-PL/en localization. ~210 tests +
 headless UI + Skia renders; CI on ubuntu-26.04 + windows-latest. Chat is MVP 0.1 (out of
 PoC scope); Discord sign-in (OAuth2+PKCE, SUSModder/Clair pattern) is implemented.
+The first real recipe (BetterPolus + BepInEx pack from Thunderstore, real digests and
+Linux/Proton launch options as definition data) is planned and executed in tests; the
+engine itself never downloads artifacts or the base game (host responsibility).
+A Town of Us Mira version matrix (mod release pinned to an exact game build) shows
+`game.provision`: vanilla fetched per store via DepotDownloader/legendary with a
+per-version cache, platform/arch pack variants per store, and uninstall that keeps
+the provisioned base game.
 Licensed LGPL-3.0-or-later; OMRL/ADR-038 approval pending
 (blocks public release only).
 

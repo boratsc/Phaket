@@ -1,0 +1,65 @@
+# First real recipe: BetterPolus 1.2.2 for Among Us (Steam edition).
+# Artifact URLs and SHA-256 values are the REAL Thunderstore package digests
+# (fetched and hashed 2026-11-13). Loader pack contents verified against the
+# downloaded zip: wrapper folder BepInExPack_AmongUs/ must be stripped so
+# winhttp.dll / doorstop_config.ini / BepInEx/ / dotnet/ land at the game root.
+schemaVersion: omrl/v0alpha1
+id: community.thunderstore.better-polus
+version: 1.2.2
+metadata:
+  title:
+    pl-PL: BetterPolus
+    en: BetterPolus
+  description:
+    pl-PL: Zbalansowana mapa Polus (BepInEx 6 IL2CPP). Wymaga loadera BepInEx z paczki Thunderstore.
+    en: Balanced Polus map (BepInEx 6 IL2CPP). Requires the BepInEx loader from the Thunderstore pack.
+target:
+  game: among-us
+  systems:
+    - windows
+    - linux
+  editions:
+    - store: steam
+requires:
+  capabilities:
+    - loader.ensure
+    - archive.extract
+    - file.copy
+    - file.verify
+  loaders:
+    - id: bepinex
+      version: ">=6.0"
+artifacts:
+  - id: loader-pack
+    source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
+    sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
+    sizeBytes: 31432183
+    format: zip
+  - id: better-polus
+    source: https://thunderstore.io/package/download/Eliam/BetterPolus/1.2.2/
+    sha256: a065635ac957c9847173cfbd072f012a003ab54b3004c3794ae5decd365d0c53
+    sizeBytes: 63920
+    format: zip
+steps:
+  - id: ensure-bepinex
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-pack
+      version: 6.0.700
+      stripComponents: 1
+  - id: extract-mod
+    use: archive.extract
+    with:
+      from: package://better-polus
+      to: staging://better-polus
+  - id: install-plugin
+    use: file.copy
+    with:
+      from: staging://better-polus/plugins/BetterPolus.dll
+      to: game://BepInEx/plugins/BetterPolus.dll
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/BetterPolus.dll
+      sha256: ebaa2b58e6f4958db3f54820d00806cf02e00791179a8c5724801f2939ad9952
