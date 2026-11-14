@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services"
+        x:Class="Phaket.Views.EpicAuthWindow" x:DataType="vm:EpicAuthViewModel"
+        Title="{Binding [Account.EpicAuthTitle], Source={x:Static services:LocalizationService.Instance}}"
+        Width="900" Height="700" MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource BgBrush}">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0" Background="{StaticResource SurfaceRaisedBrush}" Padding="20,12"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Classes="pageTitle" Text="{Binding [Account.EpicAuthTitle], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Classes="muted" Text="{Binding [Account.EpicHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="secondary" VerticalAlignment="Center"
+                        Command="{Binding CancelCommand}"
+                        Content="{Binding [Account.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                        AutomationProperties.Name="{Binding [Account.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+            </Grid>
+        </Border>
+
+        <!-- Embedded native WebView (created programmatically; engine may be absent) -->
+        <Grid Grid.Row="1" x:Name="WebViewHost" RowDefinitions="*,Auto" IsVisible="{Binding IsWebViewMode}">
+            <Border Grid.Row="1" Background="{StaticResource SurfaceRaisedBrush}" Padding="15,8"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="muted" Text="{Binding WebViewStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="secondary" Margin="10,0,0,0"
+                            Command="{Binding OpenBrowserCommand}"
+                            Content="{Binding [Account.EpicAuthOpenBrowser], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Account.EpicAuthOpenBrowser], Source={x:Static services:LocalizationService.Instance}}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Fallback: system browser + paste (no webview engine on this machine) -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding !IsWebViewMode}">
+            <StackPanel Margin="30" Spacing="16">
+                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+                <TextBlock Classes="sectionTitle" Text="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding AuthorizationInput}" AcceptsReturn="True" TextWrapping="Wrap"
+                         MinHeight="120" VerticalContentAlignment="Top" FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Watermark="{Binding [Account.EpicHint], Source={x:Static services:LocalizationService.Instance}}"
+                         AutomationProperties.Name="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
+                    <Button Classes="secondary" Command="{Binding OpenBrowserCommand}"
+                            Content="{Binding [Account.EpicAuthOpenBrowser], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Account.EpicAuthOpenBrowser], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Classes="cta" Command="{Binding ConfirmCommand}" IsDefault="True"
+                            Content="{Binding [Account.EpicSubmit], Source={x:Static services:LocalizationService.Instance}}"
+                            AutomationProperties.Name="{Binding [Account.EpicSubmit], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{StaticResource SurfaceRaisedBrush}" Padding="15,8"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+            <TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</Window>
