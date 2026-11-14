@@ -1,0 +1,22 @@
+schemaVersion: game-definition/v0alpha1
+slug: valheim
+title:
+  pl-PL: Valheim
+  en: Valheim
+storeIds:
+  steam: "892970"
+detection:
+  strategy: steam-manifest
+mainExecutable: valheim.exe
+writableAreas:
+  - BepInEx/**
+  - winhttp.dll
+  - doorstop_config.ini
+  - .doorstop_version
+  - unstripped_corlib/**
+loaderLayouts:
+  - id: bepinex
+    variant: mono
+    entryFiles:
+      - winhttp.dll
+      - BepInEx/core/BepInEx.dll

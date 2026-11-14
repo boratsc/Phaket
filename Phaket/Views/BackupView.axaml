@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.BackupView"
+             x:DataType="vm:BackupViewModel">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
+            <Button Classes="icon" Command="{Binding BackCommand}"
+                    AutomationProperties.Name="{Binding [Game.Back], Source={x:Static services:LocalizationService.Instance}}">
+                <mi:MaterialIcon Kind="ArrowLeft" Width="18" Height="18" />
+            </Button>
+            <TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" Classes="muted" />
+            <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding GameTitle}" VerticalAlignment="Center" FontWeight="SemiBold" />
+        </StackPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <StackPanel Grid.Column="0">
+                <TextBlock Classes="pageTitle" Text="{Binding [Backup.Title], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding [Backup.Subtitle], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="outline" Command="{Binding CreateCommand}" VerticalAlignment="Center"
+                    AutomationProperties.Name="{Binding [Backup.Create], Source={x:Static services:LocalizationService.Instance}}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <mi:MaterialIcon Kind="ShieldPlus" Width="16" Height="16" />
+                    <TextBlock Text="{Binding [Backup.Create], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
+            </Button>
+        </Grid>
+        <!-- Safety banner -->
+        <Border DockPanel.Dock="Top" Classes="card" Margin="0,0,0,16">
+            <StackPanel Orientation="Horizontal" Spacing="20">
+                <mi:MaterialIcon Kind="ShieldCheck" Width="44" Height="44" Foreground="{StaticResource AmberBrush}" />
+                <StackPanel VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Text="{Binding [Backup.Safe], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <TextBlock Classes="muted" Text="{Binding [Backup.Local], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBlock Classes="muted" Text="{Binding [Backup.Fast], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBlock Classes="muted" Text="{Binding [Backup.Stable], Source={x:Static services:LocalizationService.Instance}}" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+        <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding Status}" Margin="0,0,0,8" />
+        <ItemsControl ItemsSource="{Binding Backups}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:BackupItem}">
+                    <Border Classes="gameCard" Margin="0,0,0,12">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                            <mi:MaterialIcon Grid.Column="0" Kind="ArchiveArrowDown" Width="24" Height="24"
+                                             Foreground="{StaticResource MutedBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                <TextBlock Classes="muted">
+                                    <Run Text="{Binding Date}" /> • <Run Text="{Binding Size}" />
+                                </TextBlock>
+                            </StackPanel>
+                            <Border Grid.Column="2" Classes="pill" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Classes="muted" Text="{Binding Kind}" />
+                            </Border>
+                            <Button Grid.Column="3" Classes="outline" VerticalAlignment="Center"
+                                    Command="{Binding $parent[ItemsControl].((vm:BackupViewModel)DataContext).RestoreCommand}"
+                                    CommandParameter="{Binding}"
+                                    AutomationProperties.Name="{Binding [Backup.Restore], Source={x:Static services:LocalizationService.Instance}}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <mi:MaterialIcon Kind="Restore" Width="16" Height="16" />
+                                    <TextBlock Text="{Binding [Backup.Restore], Source={x:Static services:LocalizationService.Instance}}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Grid.Column="4" Classes="icon" Margin="8,0,0,0" AutomationProperties.Name="Menu">
+                                <mi:MaterialIcon Kind="DotsHorizontal" Width="18" Height="18" />
+                            </Button>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

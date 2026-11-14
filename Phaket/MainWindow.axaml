@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:Phaket.ViewModels" xmlns:views="using:Phaket.Views" xmlns:services="using:Phaket.Services" xmlns:mi="using:Material.Icons.Avalonia"
+ x:Class="Phaket.MainWindow" x:DataType="vm:MainWindowViewModel" Title="phaket" Width="1280" Height="800" MinWidth="900" MinHeight="600">
+ <Window.DataTemplates>
+  <DataTemplate DataType="{x:Type vm:LibraryViewModel}"><views:LibraryView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:GameViewModel}"><views:GameView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:RecipeStudioViewModel}"><views:RecipeStudioView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:SettingsViewModel}"><views:SettingsView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:ModsViewModel}"><views:ModsView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:ProfilesViewModel}"><views:ProfilesView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:BackupViewModel}"><views:BackupView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:CompatibilityViewModel}"><views:CompatibilityView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:InstallViewModel}"><views:InstallView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:BuildsViewModel}"><views:BuildsView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:ShareViewModel}"><views:ShareView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:GraphViewModel}"><views:GraphView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:ReportViewModel}"><views:ReportView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:HelpViewModel}"><views:HelpView /></DataTemplate>
+  <DataTemplate DataType="{x:Type vm:AccountsViewModel}"><views:AccountsView /></DataTemplate>
+ </Window.DataTemplates>
+ <Grid ColumnDefinitions="250,*">
+  <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+   <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="20,24,16,32">
+     <Image Source="avares://Phaket/Assets/lioness.png" Width="48" Height="48" />
+     <TextBlock Text="phaket" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AmberBrush}" VerticalAlignment="Center" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10" Margin="22,16,16,26">
+     <Ellipse Width="10" Height="10" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" />
+     <TextBlock Classes="muted" MaxWidth="185" TextWrapping="Wrap" Text="{Binding [App.Footer], Source={x:Static services:LocalizationService.Instance}}" />
+    </StackPanel>
+    <StackPanel Spacing="2">
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=library}" Command="{Binding NavigateCommand}" CommandParameter="library" AutomationProperties.Name="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="GamepadVariant"/><TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=profiles}" Command="{Binding NavigateCommand}" CommandParameter="profiles" AutomationProperties.Name="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Layers"/><TextBlock Text="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=mods}" Command="{Binding NavigateCommand}" CommandParameter="mods" AutomationProperties.Name="{Binding [Nav.Mods], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="PackageVariant"/><TextBlock Text="{Binding [Nav.Mods], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=studio}" Command="{Binding NavigateCommand}" CommandParameter="studio" AutomationProperties.Name="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Flask"/><TextBlock Text="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=settings}" Command="{Binding NavigateCommand}" CommandParameter="settings" AutomationProperties.Name="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Cog"/><TextBlock Text="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=account}" Command="{Binding NavigateCommand}" CommandParameter="account" AutomationProperties.Name="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="AccountCircle"/><TextBlock Text="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+    <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=help}" Command="{Binding NavigateCommand}" CommandParameter="help" AutomationProperties.Name="{Binding [Nav.Help], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="HelpCircle"/><TextBlock Text="{Binding [Nav.Help], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
+    </StackPanel>
+   </DockPanel>
+  </Border>
+  <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" Margin="32,32,32,24" />
+ </Grid>
+</Window>

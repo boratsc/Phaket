@@ -1,0 +1,22 @@
+{
+  "UNSUPPORTED_SCHEMA_VERSION": "Nieobsługiwana wersja schematu przepisu: {schemaVersion}. Obsługiwana jest tylko omrl/v0alpha1.",
+  "UNKNOWN_OPERATION": "Nieznana operacja: {operation}. Dozwolone są wyłącznie operacje z katalogu OMRL.",
+  "INVALID_URI": "Nieprawidłowy adres wirtualny: {uri}. Dozwolone schematy: game://, profile://, staging://, package://.",
+  "PATH_OUT_OF_BOUNDS": "Ścieżka wykracza poza zatwierdzony obszar: {path}. Zapis jest ograniczony do katalogu gry i profilu.",
+  "MISSING_CAPABILITY": "Przepis używa operacji {operation}, ale nie deklaruje wymaganej możliwości {capability}.",
+  "INVALID_VERSION": "Nieprawidłowa wersja: {version}. Dozwolone są wyłącznie wersje numeryczno-kropkowe, np. 2026.1.",
+  "INVALID_VERSION_RANGE": "Nieprawidłowy zakres wersji: {range}. Przykłady poprawnych zakresów: >=6.0, <2.0, =1.2.3, *.",
+  "UNSUPPORTED_GAME_VERSION": "Ta wersja gry ({gameVersion}) nie spełnia wymagań przepisu ({range}).",
+  "AMBIGUOUS_TARGET": "Nie można jednoznacznie określić celu instalacji: {reason}. Wskaż jedną edycję lub wersję gry.",
+  "GAME_BUILD_UNAVAILABLE": "Nie można ustalić wersji gry dla tej instalacji. Wskaż istniejącą instalację lub wybierz inny zgodny mod.",
+  "LOADER_UNAVAILABLE": "Wymagany modloader {loader} w wersji {range} nie jest dostępny dla tej instalacji.",
+  "ARTIFACT_MISSING": "Brak pliku artefaktu: {artifact}. Pobierz go ponownie lub wskaż lokalną kopię.",
+  "ARTIFACT_HASH_MISMATCH": "Suma kontrolna pliku {artifact} nie zgadza się z deklarowaną. Plik mógł zostać podmieniony — instalacja wstrzymana.",
+  "ARTIFACT_DOWNLOAD_UNAVAILABLE": "Artefakt {artifact} wymaga pobrania, które nie jest dostępne w tej wersji. Użyj lokalnej kopii z zgodną sumą kontrolną.",
+  "ARCHIVE_UNSAFE": "Archiwum {artifact} jest niebezpieczne: {reason}. Rozpakowanie zostało zablokowane.",
+  "OWNERSHIP_VIOLATION": "Plik {path} nie należy do tego przepisu ani profilu. Usunięcie zostało zablokowane.",
+  "CONFLICT_UNRESOLVABLE": "Konflikt na zasobie {path} między {owners} nie może być rozstrzygnięty automatycznie. Wybierz kolejność modów lub usuń konflikt.",
+  "JOURNAL_DIVERGENCE": "Stan instalacji różni się od zapisanego w dzienniku transakcji. Wybierz wznowienie lub przywrócenie poprzedniego stanu.",
+  "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}",
+  "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody."
+}

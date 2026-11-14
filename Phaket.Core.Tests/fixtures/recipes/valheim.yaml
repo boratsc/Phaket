@@ -1,0 +1,56 @@
+schemaVersion: omrl/v0alpha1
+id: community.phaket.valheim-quality
+version: 1.0.0
+metadata:
+  title:
+    pl-PL: Valheim Quality
+    en: Valheim Quality
+  description:
+    pl-PL: Instaluje moda jakościowego dla Valheim (BepInEx 5, Mono).
+    en: Installs a quality-of-life mod for Valheim (BepInEx 5, Mono).
+target:
+  game: valheim
+  systems:
+    - windows
+    - linux
+  constraints:
+    gameVersion: ">=0.217"
+requires:
+  capabilities:
+    - loader.ensure
+    - archive.extract
+    - file.copy
+    - file.verify
+  loaders:
+    - id: bepinex
+      version: ">=5.0"
+artifacts:
+  - id: mod-bundle
+    source: package://valheim-quality.zip
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    format: zip
+steps:
+  - id: ensure-loader
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: mod-bundle
+  - id: extract-mod
+    use: archive.extract
+    with:
+      from: package://mod-bundle
+      to: staging://valheim-quality
+  - id: install-plugin
+    use: file.copy
+    with:
+      from: staging://valheim-quality/ValheimQuality.dll
+      to: game://BepInEx/plugins/ValheimQuality.dll
+    when:
+      any:
+        - os: [windows]
+        - os: [linux]
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/ValheimQuality.dll
+      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

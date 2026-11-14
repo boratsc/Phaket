@@ -1,0 +1,123 @@
+# Town of Us Mira 1.7.3 for Among Us (Steam + Epic editions).
+# Real digests of the GitHub release assets (fetched 2026-11-13):
+#   TouMira.v1.7.3-x86-steam-itch.zip  9037afe3... (91654060 B)
+#   BepInExPack_AmongUs 6.0.700        88bbefc7... (31432183 B, Thunderstore)
+#   BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip  616ec7eb... (GitHub; Epic needs x64,
+#   exactly like SUSModder's variant selection: Epic => x64 BepInEx)
+# The mod DLLs are byte-identical in the steam and epic packs, but each pack ships
+# its own doorstop layer (x86 for Steam, x64 for Epic), so the mod artifact is
+# per-store exactly like SUSModder's platform/arch variant selection.
+# The mod pack is extracted as a whole tree (plugins + configs + its doorstop
+# layer), like SUSModder's CopyContent, but with ownership: files shared with the
+# loader show up as plan conflicts and are recomputed from remaining owners on
+# uninstall. Game version pin: TOU Mira 1.7.3 targets Among Us v17.4 == 2026.8.18;
+# vanilla is provisioned per store with an exact pin (DepotDownloader -manifest on
+# Steam, legendary on Epic) — never copied from the user's Steam library.
+schemaVersion: omrl/v0alpha1
+id: community.github.town-of-us-mira
+version: 1.7.3
+metadata:
+  title:
+    pl-PL: Town of Us Mira
+    en: Town of Us Mira
+  description:
+    pl-PL: Duży mod ról (MiraAPI, BepInEx 6 IL2CPP). Wymaga dokładnej wersji gry 2026.8.18 — silnik provisionuje vanillę przez DepotDownloader/legendary.
+    en: Large roles mod (MiraAPI, BepInEx 6 IL2CPP). Requires exact game version 2026.8.18 — the engine provisions vanilla via DepotDownloader/legendary.
+target:
+  game: among-us
+  systems:
+    - windows
+    - linux
+  editions:
+    - store: steam
+    - store: epic
+  constraints:
+    gameVersion: "=2026.8.18"
+requires:
+  capabilities:
+    - game.provision
+    - loader.ensure
+    - archive.extract
+    - file.verify
+  loaders:
+    - id: bepinex
+      version: ">=6.0"
+artifacts:
+  - id: loader-x86
+    source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
+    sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
+    sizeBytes: 31432183
+    format: zip
+  - id: loader-x64
+    source: https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip
+    sha256: 616ec7eb06cf11b2a0000e8fcef04d1b12bb58e84a2e0bdac9523234fc193ceb
+    sizeBytes: 34146254
+    format: zip
+  - id: tou-mod-steam
+    source: https://github.com/AU-Avengers/TOU-Mira/releases/download/1.7.3/TouMira.v1.7.3-x86-steam-itch.zip
+    sha256: 9037afe3efbfd7a6f4e586ef5e9450cffbc4ffdf63c21a773ad4bc27bdab1151
+    sizeBytes: 91654060
+    format: zip
+  - id: tou-mod-epic
+    source: https://github.com/AU-Avengers/TOU-Mira/releases/download/1.7.3/TouMira.v1.7.3-x64-epic-msstore.zip
+    sha256: 65276ce005a03777a11189176bd34fb069f48dc47c9f5e60b8259833c271e803
+    sizeBytes: 94761696
+    format: zip
+steps:
+  - id: provision-vanilla-steam
+    use: game.provision
+    with:
+      store: steam
+      version: 2026.8.18
+    when:
+      store: steam
+  - id: provision-vanilla-epic
+    use: game.provision
+    with:
+      store: epic
+      version: 2026.8.18
+    when:
+      store: epic
+  - id: ensure-bepinex-steam
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-x86
+      version: 6.0.700
+      stripComponents: 1
+    when:
+      store: steam
+  - id: ensure-bepinex-epic
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-x64
+      version: 6.0.0
+      stripComponents: 0
+    when:
+      store: epic
+  - id: install-mod-tree-steam
+    use: archive.extract
+    with:
+      from: package://tou-mod-steam
+      to: game://.
+      stripComponents: 1
+    when:
+      store: steam
+  - id: install-mod-tree-epic
+    use: archive.extract
+    with:
+      from: package://tou-mod-epic
+      to: game://.
+      stripComponents: 1
+    when:
+      store: epic
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/TownOfUsMira.dll
+      sha256: 2e043c95ca9963dd6344913cb79a40d59a607d0bf13faf0ae15f7c435b7c5a6f
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/MiraAPI.dll
+      sha256: 6f0e713b876feb128f197975e45ce23d3f0a735b067aaa2596d35f61501ff92d

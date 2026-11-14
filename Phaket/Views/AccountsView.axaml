@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Phaket.Views.AccountsView" x:DataType="vm:AccountsViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="20" MaxWidth="640" HorizontalAlignment="Stretch">
+            <TextBlock Classes="pageTitle" Text="{Binding [Account.Title], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Providers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ProviderAccountViewModel">
+                        <Border Classes="card" Margin="0,0,0,12" AutomationProperties.Name="{Binding DisplayName}">
+                            <StackPanel Spacing="12">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <mi:MaterialIcon Kind="{Binding IconKind}" Width="20" Height="20" />
+                                    <TextBlock Classes="sectionTitle" Text="{Binding DisplayName}" />
+                                    <TextBlock Classes="muted" IsVisible="{Binding IsLoggedIn}" Text="{Binding [Account.Connected], Source={x:Static services:LocalizationService.Instance}}" />
+                                </StackPanel>
+                                <TextBlock Classes="muted" Text="{Binding [Account.NotLoggedIn], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding !IsLoggedIn}" />
+                                <TextBlock Text="{Binding Username}" IsVisible="{Binding IsLoggedIn}" TextWrapping="Wrap" />
+                                <StackPanel Spacing="6" IsVisible="{Binding HasLocal}">
+                                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.SteamLocal], Source={x:Static services:LocalizationService.Instance}}" />
+                                    <TextBlock Text="{Binding LocalPersona}" TextWrapping="Wrap" />
+                                    <Button Classes="secondary" Command="{Binding UseLocalCommand}" IsEnabled="{Binding CanLogin}" HorizontalAlignment="Left"
+                                            Content="{Binding [Account.SteamUseLocal], Source={x:Static services:LocalizationService.Instance}}"
+                                            AutomationProperties.Name="{Binding [Account.SteamUseLocal], Source={x:Static services:LocalizationService.Instance}}" />
+                                </StackPanel>
+                                <StackPanel Spacing="6" IsVisible="{Binding NeedsCode}">
+                                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.EpicHint], Source={x:Static services:LocalizationService.Instance}}" />
+                                    <TextBox Text="{Binding AuthorizationCode}" PlaceholderText="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}"
+                                             AutomationProperties.Name="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}" />
+                                    <Button Classes="cta" Command="{Binding SubmitCodeCommand}" HorizontalAlignment="Left"
+                                            Content="{Binding [Account.EpicSubmit], Source={x:Static services:LocalizationService.Instance}}"
+                                            AutomationProperties.Name="{Binding [Account.EpicSubmit], Source={x:Static services:LocalizationService.Instance}}" />
+                                </StackPanel>
+                                <StackPanel Spacing="6" IsVisible="{Binding IsItch}">
+                                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.ItchHint], Source={x:Static services:LocalizationService.Instance}}" />
+                                    <TextBox Text="{Binding ClientId}" IsEnabled="{Binding CanLogin}" PlaceholderText="{Binding [Account.ItchClientId], Source={x:Static services:LocalizationService.Instance}}"
+                                             AutomationProperties.Name="{Binding [Account.ItchClientId], Source={x:Static services:LocalizationService.Instance}}" />
+                                </StackPanel>
+                                <WrapPanel>
+                                    <Button Classes="cta" Command="{Binding LoginCommand}" IsEnabled="{Binding CanLogin}" IsVisible="{Binding !IsLoggedIn}" Margin="0,0,8,8"
+                                            Content="{Binding LoginText}" AutomationProperties.Name="{Binding LoginText}" />
+                                    <Button Classes="secondary" Command="{Binding LogoutCommand}" IsVisible="{Binding IsLoggedIn}" IsEnabled="{Binding CanLogout}" Margin="0,0,0,8"
+                                            Content="{Binding [Account.Logout], Source={x:Static services:LocalizationService.Instance}}"
+                                            AutomationProperties.Name="{Binding [Account.Logout], Source={x:Static services:LocalizationService.Instance}}" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" IsVisible="{Binding StatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" AutomationProperties.Name="{Binding [Account.Waiting], Source={x:Static services:LocalizationService.Instance}}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.Privacy], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

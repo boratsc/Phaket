@@ -1,0 +1,22 @@
+{
+  "UNSUPPORTED_SCHEMA_VERSION": "Unsupported recipe schema version: {schemaVersion}. Only omrl/v0alpha1 is supported.",
+  "UNKNOWN_OPERATION": "Unknown operation: {operation}. Only operations from the OMRL catalog are allowed.",
+  "INVALID_URI": "Invalid virtual URI: {uri}. Allowed schemes: game://, profile://, staging://, package://.",
+  "PATH_OUT_OF_BOUNDS": "Path is outside the approved area: {path}. Writes are limited to the game and profile directories.",
+  "MISSING_CAPABILITY": "The recipe uses operation {operation} but does not declare the required capability {capability}.",
+  "INVALID_VERSION": "Invalid version: {version}. Only numeric-dot versions are allowed, e.g. 2026.1.",
+  "INVALID_VERSION_RANGE": "Invalid version range: {range}. Valid examples: >=6.0, <2.0, =1.2.3, *.",
+  "UNSUPPORTED_GAME_VERSION": "This game version ({gameVersion}) does not satisfy the recipe requirement ({range}).",
+  "AMBIGUOUS_TARGET": "The installation target cannot be determined unambiguously: {reason}. Select a single edition or game version.",
+  "GAME_BUILD_UNAVAILABLE": "The game version for this installation cannot be determined. Point to an existing installation or choose another compatible mod.",
+  "LOADER_UNAVAILABLE": "The required mod loader {loader} in version {range} is not available for this installation.",
+  "ARTIFACT_MISSING": "Artifact file is missing: {artifact}. Download it again or provide a local copy.",
+  "ARTIFACT_HASH_MISMATCH": "The checksum of {artifact} does not match the declared value. The file may have been tampered with — installation halted.",
+  "ARTIFACT_DOWNLOAD_UNAVAILABLE": "Artifact {artifact} requires a download that is not available in this version. Use a local copy with a matching checksum.",
+  "ARCHIVE_UNSAFE": "Archive {artifact} is unsafe: {reason}. Extraction was blocked.",
+  "OWNERSHIP_VIOLATION": "File {path} does not belong to this recipe or profile. Removal was blocked.",
+  "CONFLICT_UNRESOLVABLE": "The conflict on {path} between {owners} cannot be resolved automatically. Choose a mod order or remove the conflict.",
+  "JOURNAL_DIVERGENCE": "The installation state differs from the transaction journal. Choose to resume or restore the previous state.",
+  "VALIDATION_FAILED": "The recipe failed validation: {detail}",
+  "BASE_GAME_MISMATCH": "The game directory {path} already contains base game version {have}, but the recipe requires {need}. Switching the base version under existing mods is not available — use a separate installation or uninstall the mods first."
+}

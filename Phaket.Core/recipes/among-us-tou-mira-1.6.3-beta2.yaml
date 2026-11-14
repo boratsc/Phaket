@@ -1,0 +1,73 @@
+# Town of Us Mira 1.6.3-beta2 for Among Us (Steam edition) — an OLDER mod release
+# pinned to an OLDER game version (v17.3 == 2026.6.5), the way SUSModder pairs
+# modConfig.ModVersion with modConfig.AmongVersion. Real digests (2026-11-13):
+#   TouMirav1.6.3b2-x86-steam-itch.zip  e77cceaa... (94573248 B)
+# Demonstrates the version matrix: same mod id, different release, different game
+# pin, different plugin digests; the loader pack stays BepInEx 6.0.700.
+schemaVersion: omrl/v0alpha1
+id: community.github.town-of-us-mira
+version: 1.6.3-beta2
+metadata:
+  title:
+    pl-PL: Town of Us Mira (beta 2)
+    en: Town of Us Mira (beta 2)
+  description:
+    pl-PL: Starsze wydanie moda dla Among Us v17.3 (2026.6.5).
+    en: Older mod release for Among Us v17.3 (2026.6.5).
+target:
+  game: among-us
+  systems:
+    - windows
+    - linux
+  editions:
+    - store: steam
+  constraints:
+    gameVersion: "=2026.6.5"
+requires:
+  capabilities:
+    - game.provision
+    - loader.ensure
+    - archive.extract
+    - file.verify
+  loaders:
+    - id: bepinex
+      version: ">=6.0"
+artifacts:
+  - id: loader-x86
+    source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
+    sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
+    sizeBytes: 31432183
+    format: zip
+  - id: tou-mod
+    source: https://github.com/AU-Avengers/TOU-Mira/releases/download/1.6.3-beta2/TouMirav1.6.3b2-x86-steam-itch.zip
+    sha256: e77cceaaecce859a86def07b22ce30f673de152d4fb4ddff9cecd2b26bc78a6d
+    sizeBytes: 94573248
+    format: zip
+steps:
+  - id: provision-vanilla
+    use: game.provision
+    with:
+      store: steam
+      version: 2026.6.5
+  - id: ensure-bepinex
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-x86
+      version: 6.0.700
+      stripComponents: 1
+  - id: install-mod-tree
+    use: archive.extract
+    with:
+      from: package://tou-mod
+      to: game://.
+      stripComponents: 1
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/TownOfUsMira.dll
+      sha256: a4b735292704bb0de181de6502766bdb98c3be81c79dc6a24695ec009840ec96
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/MiraAPI.dll
+      sha256: 9be4e6db9b6a878d1ed1ef2067c55248b00ea9b38a649496e4f75045a91c0cc5

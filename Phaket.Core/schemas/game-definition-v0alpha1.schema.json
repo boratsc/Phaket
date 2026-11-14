@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phaket.app/schemas/game-definition-v0alpha1.schema.json",
+  "title": "Phaket game definition (game-definition/v0alpha1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "slug", "writableAreas"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
+    "title": { "type": "object", "additionalProperties": { "type": "string" } },
+    "storeIds": { "type": "object", "additionalProperties": { "type": "string" } },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": { "strategy": { "enum": ["steam-manifest", "legendary-installed", "manual"] } }
+    },
+    "writableAreas": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "mainExecutable": { "type": "string", "minLength": 1 },
+    "launchRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "value", "status"],
+        "properties": {
+          "kind": { "enum": ["dll-override", "env", "game-arg"] },
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" },
+          "value": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["required", "recommended", "optional"] },
+          "os": { "type": "array", "uniqueItems": true, "items": { "enum": ["windows", "linux"] } },
+          "source": { "type": "string", "minLength": 1 },
+          "observedAt": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "loaderLayouts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "variant", "entryFiles"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "variant": { "type": "string", "minLength": 1 },
+          "entryFiles": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    }
+  }
+}

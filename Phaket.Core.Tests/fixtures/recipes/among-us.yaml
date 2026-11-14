@@ -1,0 +1,52 @@
+schemaVersion: omrl/v0alpha1
+id: community.phaket.custom-roles
+version: 1.0.0
+metadata:
+  title:
+    pl-PL: Custom Roles
+    en: Custom Roles
+  description:
+    pl-PL: Instaluje moda Custom Roles dla Among Us (BepInEx 6, IL2CPP).
+    en: Installs the Custom Roles mod for Among Us (BepInEx 6, IL2CPP).
+target:
+  game: among-us
+  systems:
+    - windows
+    - linux
+  constraints:
+    gameVersion: ">=2026.1"
+requires:
+  capabilities:
+    - loader.ensure
+    - archive.extract
+    - file.copy
+    - file.verify
+  loaders:
+    - id: bepinex
+      version: ">=6.0"
+artifacts:
+  - id: mod-bundle
+    source: package://custom-roles.zip
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    format: zip
+steps:
+  - id: ensure-loader
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: mod-bundle
+  - id: extract-mod
+    use: archive.extract
+    with:
+      from: package://mod-bundle
+      to: staging://custom-roles
+  - id: install-plugin
+    use: file.copy
+    with:
+      from: staging://custom-roles/CustomRoles.dll
+      to: game://BepInEx/plugins/CustomRoles.dll
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/CustomRoles.dll
+      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

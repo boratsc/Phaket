@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services"
+ x:Class="Phaket.Views.HelpView" x:DataType="vm:HelpViewModel">
+ <ScrollViewer>
+  <StackPanel Spacing="20">
+   <TextBlock Classes="pageTitle" Text="{Binding [Help.Title], Source={x:Static services:LocalizationService.Instance}}" />
+   <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Help.About], Source={x:Static services:LocalizationService.Instance}}" />
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.UsageTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Usage], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Studio], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Management], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SafetyTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Safety], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
+  </StackPanel>
+ </ScrollViewer>
+</UserControl>

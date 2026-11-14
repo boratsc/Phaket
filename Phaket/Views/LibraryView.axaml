@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services" xmlns:mi="using:Material.Icons.Avalonia" x:Class="Phaket.Views.LibraryView" x:DataType="vm:LibraryViewModel">
+ <DockPanel>
+  <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="0,0,0,28">
+   <StackPanel Spacing="5"><TextBlock Classes="pageTitle" Text="{Binding [Library.Title], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Classes="muted" FontSize="15" Text="{Binding [Library.Subtitle], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
+   <Grid Grid.Column="1" Width="230" VerticalAlignment="Center"><TextBox Padding="36,8,10,8" PlaceholderText="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}" Text="{Binding SearchText}" AutomationProperties.Name="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}"/><mi:MaterialIcon Kind="Magnify" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource MutedBrush}" IsHitTestVisible="False"/></Grid>
+   <Button Grid.Column="2" Classes="outline" VerticalAlignment="Center" Command="{Binding AddFolderCommand}" AutomationProperties.Name="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Plus"/><TextBlock Text="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Button>
+  </Grid>
+  <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding [Library.Empty], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding Games.Count, Converter={x:Static services:CountToVisibilityConverter.Instance}}"/>
+  <ScrollViewer><ItemsControl ItemsSource="{Binding Games}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:GameCatalogItem">
+   <Border Classes="gameCard" Margin="0,0,0,16"><Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="20">
+    <Button Background="Transparent" BorderThickness="0" Padding="0" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}">
+     <Border Width="120" Height="180" CornerRadius="12" ClipToBounds="True"><Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill"/></Border>
+    </Button>
+    <StackPanel Grid.Column="1" Spacing="12" VerticalAlignment="Center">
+     <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Left" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}"><TextBlock Text="{Binding Title}" FontSize="21" FontWeight="SemiBold"/></Button>
+     <StackPanel Orientation="Horizontal" Spacing="10"><mi:MaterialIcon Kind="Steam"/><TextBlock Text="Steam"/><mi:MaterialIcon Kind="CheckCircle" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding IsInstalled}"/><TextBlock Text="{Binding [Library.State.Moddable], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding IsInstalled}"/><TextBlock Classes="muted" Text="{Binding [Library.State.NotDetected], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding !IsInstalled}"/></StackPanel>
+     <StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Layers"/><TextBlock Classes="muted" Text="{Binding [Library.ActiveProfile], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding [Library.DefaultProfile], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
+    </StackPanel>
+    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+     <Border Classes="pill"><StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding ModCount}"/><TextBlock Text="{Binding [Library.Mods], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Border>
+     <Button Classes="cta" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).PlayCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Play"/><TextBlock Text="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Button>
+     <Button Classes="icon" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding [Game.Details], Source={x:Static services:LocalizationService.Instance}}"><mi:MaterialIcon Kind="DotsHorizontal"/></Button>
+    </StackPanel>
+   </Grid></Border>
+  </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+ </DockPanel>
+</UserControl>

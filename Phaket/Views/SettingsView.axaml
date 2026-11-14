@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <StackPanel Spacing="16" MaxWidth="640" HorizontalAlignment="Left">
+        <TextBlock Classes="pageTitle" Text="{Binding [Settings.Title], Source={x:Static services:LocalizationService.Instance}}" />
+        <Border Classes="card">
+            <StackPanel Spacing="8">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Settings.Language], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding [Settings.LanguageHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                          MinWidth="200"
+                          AutomationProperties.Name="{Binding [Settings.Language], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>
