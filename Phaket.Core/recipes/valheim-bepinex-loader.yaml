@@ -1,0 +1,38 @@
+schemaVersion: omrl/v0alpha1
+id: community.thunderstore.valheim-bepinex
+version: 5.4.2360
+metadata:
+  title:
+    pl-PL: BepInExPack Valheim
+    en: BepInExPack Valheim
+  description:
+    pl-PL: Loader BepInEx Mono dla Valheim z paczki Thunderstore.
+    en: BepInEx Mono loader for Valheim from Thunderstore.
+target:
+  game: valheim
+  systems: [windows, linux]
+  editions:
+    - store: steam
+requires:
+  capabilities: [loader.ensure, file.verify]
+  loaders:
+    - id: bepinex
+      version: "5.4.2360"
+artifacts:
+  - id: loader-pack
+    source: https://thunderstore.io/package/download/denikson/BepInExPack_Valheim/5.4.2360/
+    sha256: 6bca77b1016acfe0ffaebb6534c84b12ae8d12e5a96abbf59ec6e4526204fc6f
+    sizeBytes: 726409
+    format: zip
+steps:
+  - id: ensure-loader
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-pack
+      version: 5.4.2360
+      stripComponents: 1
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/core/BepInEx.dll

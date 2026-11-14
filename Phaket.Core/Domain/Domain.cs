@@ -10,7 +10,7 @@ public sealed record PlannedOperation(
     string OpId, string Kind, string TargetPath, string? SourceRef, long? SizeBytes,
     string? Sha256, IReadOnlyList<string> Preconditions, string BackupStrategy,
     string Rollback, string OwnershipEffect, IReadOnlyList<string> RequiredPermissions,
-    IReadOnlyDictionary<string, string>? Parameters = null);
+    IReadOnlyDictionary<string, string>? Parameters = null, bool Shared = false);
 public sealed record PlanConflict(string Path, IReadOnlyList<string> Owners, string Resolution);
 
 public sealed record OperationPlan(

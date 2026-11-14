@@ -9,10 +9,15 @@ detection:
   strategy: steam-manifest
 mainExecutable: valheim.exe
 writableAreas:
+  # Real BepInExPack_Valheim 5.4.2360 installs these root files/directories.
   - BepInEx/**
   - winhttp.dll
   - doorstop_config.ini
   - .doorstop_version
+  - doorstop_libs/**
+  - start_game_bepinex.sh
+  - start_server_bepinex.sh
+  - changelog.txt
   - unstripped_corlib/**
 loaderLayouts:
   - id: bepinex

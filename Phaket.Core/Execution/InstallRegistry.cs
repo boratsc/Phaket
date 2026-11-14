@@ -9,7 +9,7 @@ namespace Phaket.Core.Execution;
 public sealed record InstalledRecipe(
     string RecipeId, string RecipeVersion, string GameSlug, string Store,
     string GameRoot, string ProfileRoot, string StagingRoot, string StateRoot,
-    string? SandboxRoot, DateTimeOffset InstalledAt);
+    string? SandboxRoot, DateTimeOffset InstalledAt, string ModFullName = "", string ModVersion = "");
 
 public sealed class InstallRegistry
 {

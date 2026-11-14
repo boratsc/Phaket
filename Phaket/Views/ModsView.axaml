@@ -2,9 +2,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mi="using:Material.Icons.Avalonia"
              xmlns:vm="using:Phaket.ViewModels"
+             xmlns:catalog="using:Phaket.Core.Catalog"
              xmlns:services="using:Phaket.Services"
+             xmlns:domain="using:Phaket.Core.Domain"
+             xmlns:mods="using:Phaket.Core.Mods"
              x:Class="Phaket.Views.ModsView"
              x:DataType="vm:ModsViewModel">
+    <TabControl SelectedIndex="{Binding SelectedTabIndex}">
+      <TabItem Header="{Binding [ModCatalog.Installed], Source={x:Static services:LocalizationService.Instance}}">
     <DockPanel>
         <!-- Breadcrumb -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
@@ -65,7 +70,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:InstalledRecipeViewModel}">
                         <Border Classes="card" Padding="12" Margin="0,0,0,8">
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="{Binding RecipeId}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     <StackPanel Orientation="Horizontal" Spacing="12">
@@ -73,6 +78,7 @@
                                         <TextBlock Classes="muted" Text="{Binding InstalledAt, StringFormat='{}{0:g}'}" />
                                     </StackPanel>
                                 </StackPanel>
+                                <Button Grid.Column="3" IsVisible="{Binding HasUpdate}" Command="{Binding UpdateCommand}" Content="{Binding [ModInstall.Update], Source={x:Static services:LocalizationService.Instance}}" />
                                 <Button Grid.Column="1" Classes="secondary" Command="{Binding LaunchCommand}"
                                         Content="{Binding [Mods.Launch], Source={x:Static services:LocalizationService.Instance}}"
                                         AutomationProperties.Name="{Binding [Mods.Launch], Source={x:Static services:LocalizationService.Instance}}" />
@@ -85,6 +91,9 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+            <SelectableTextBlock IsVisible="{Binding HasLaunchRequirements}" Text="{Binding LaunchRequirements}" TextWrapping="Wrap" />
+            <Button IsVisible="{Binding HasLaunchRequirements}" Command="{Binding CopyLaunchRequirementsCommand}"
+                    Content="{Binding [Mods.Copy], Source={x:Static services:LocalizationService.Instance}}" />
         </StackPanel>
         <!-- Mod list -->
         <Border Classes="card" Padding="8">
@@ -104,13 +113,80 @@
                                 <mi:MaterialIcon Kind="CheckCircle" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" />
                                 <TextBlock Text="{Binding CompatibilityKey, Converter={x:Static services:LocKeyConverter.Instance}}" Foreground="{StaticResource SuccessBrush}" />
                             </StackPanel>
-                            <Button Grid.Column="5" Classes="icon" AutomationProperties.Name="Menu">
-                                <mi:MaterialIcon Kind="DotsHorizontal" Width="18" Height="18" />
-                            </Button>
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Border>
     </DockPanel>
+      </TabItem>
+      <TabItem Header="{Binding [ModCatalog.Tab], Source={x:Static services:LocalizationService.Instance}}">
+        <DockPanel DataContext="{Binding Catalog}" x:DataType="vm:ModCatalogViewModel" Margin="8">
+          <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,12">
+            <TextBlock Text="{Binding [Builds.Endpoint], Source={x:Static services:LocalizationService.Instance}}" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox Text="{Binding Endpoint}" AutomationProperties.Name="{Binding [Builds.Endpoint], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Grid.Column="1" Command="{Binding RefreshCommand}" Content="{Binding [Builds.Refresh], Source={x:Static services:LocalizationService.Instance}}" />
+            </Grid>
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding [Builds.LastSync], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding LastSyncText}"/></StackPanel>
+            <TextBox Text="{Binding SearchText}" PlaceholderText="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.Name="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock IsVisible="{Binding IsEmpty}" Text="{Binding [ModCatalog.Empty], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="*,4,*" ColumnSpacing="4">
+            <ListBox ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutomationProperties.Name="{Binding [ModCatalog.Tab], Source={x:Static services:LocalizationService.Instance}}">
+              <ListBox.ItemTemplate><DataTemplate DataType="{x:Type catalog:ThunderstoreMod}">
+                <Grid ColumnDefinitions="40,*" ColumnSpacing="8" Margin="4"><services:CatalogIcon Width="36" Height="36" Url="{Binding IconUrl}"/><StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Owner}"/><TextBlock Text="{Binding Latest.VersionNumber}"/><TextBlock IsVisible="{Binding IsDeprecated}" Text="{Binding [ModCatalog.Deprecated], Source={x:Static services:LocalizationService.Instance}}" /></StackPanel></Grid>
+              </DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+            <ScrollViewer Grid.Column="2"><StackPanel Spacing="8" Margin="8,0">
+              <TextBlock Text="{Binding InstallStatus}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding [ModInstall.ChooseTarget], Source={x:Static services:LocalizationService.Instance}}" />
+              <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" IsEnabled="{Binding !IsPreparing}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [ModInstall.ChooseTarget], Source={x:Static services:LocalizationService.Instance}}"><ComboBox.ItemTemplate><DataTemplate DataType="{x:Type vm:InstallTargetChoice}"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" /></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+              <Button Command="{Binding ChooseFolderCommand}" IsEnabled="{Binding !IsPreparing}" Content="{Binding [ModInstall.ChooseFolder], Source={x:Static services:LocalizationService.Instance}}" />
+              <ProgressBar IsVisible="{Binding IsPreparing}" Value="{Binding InstallProgress}" Minimum="0" Maximum="100" AutomationProperties.Name="{Binding [ModInstall.Progress], Source={x:Static services:LocalizationService.Instance}}" />
+              <StackPanel IsVisible="{Binding HasConflicts}" Spacing="6">
+                <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Conflicts], Source={x:Static services:LocalizationService.Instance}}" />
+                <ItemsControl ItemsSource="{Binding Conflicts}"><ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type mods:ConflictProposal}"><StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Package}" FontWeight="Bold"/><TextBlock Text="{Binding [ModInstall.Versions], Source={x:Static services:LocalizationService.Instance}}"/><ItemsControl ItemsSource="{Binding Versions}"/><TextBlock Text="{Binding [ModInstall.RequestedBy], Source={x:Static services:LocalizationService.Instance}}"/><ItemsControl ItemsSource="{Binding RequestedBy}"/><TextBlock Text="{Binding [ModInstall.SuggestedVersion], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding SuggestedVersion}"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                <Button IsEnabled="{Binding !IsPreparing}" Command="{Binding UseSuggestedCommand}" Content="{Binding [ModInstall.Suggested], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button IsEnabled="{Binding !IsPreparing}" Command="{Binding CancelInstallCommand}" Content="{Binding [ModInstall.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel IsVisible="{Binding HasPreview}" Spacing="6">
+                <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Target], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock IsVisible="{Binding IsSandboxTarget}" Text="{Binding [ModInstall.Sandbox], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock IsVisible="{Binding !IsSandboxTarget}" Text="{Binding [ModInstall.Real], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock IsVisible="{Binding !IsSandboxTarget}" Text="{Binding [ModInstall.RealWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="{Binding TargetDescription}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding [ModInstall.Warning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Packages], Source={x:Static services:LocalizationService.Instance}}" />
+                <ItemsControl ItemsSource="{Binding Preview}"><ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type services:InstallPreview}"><StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding FullName}" FontWeight="Bold"/><TextBlock Text="{Binding Version}"/><TextBlock Text="{Binding [ModInstall.Size], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding SizeBytes}"/><ItemsControl ItemsSource="{Binding Files}"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Operations], Source={x:Static services:LocalizationService.Instance}}" />
+                <ItemsControl ItemsSource="{Binding Operations}"><ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type domain:PlannedOperation}"><StackPanel Margin="0,0,0,6"><TextBlock Text="{Binding Kind}"/><SelectableTextBlock Text="{Binding TargetPath}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                <CheckBox IsChecked="{Binding PlanAccepted}" Content="{Binding [ModInstall.Accept], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Command="{Binding ExecuteInstallCommand}" Content="{Binding [ModInstall.Execute], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button IsEnabled="{Binding !IsPreparing}" Command="{Binding CancelInstallCommand}" Content="{Binding [ModInstall.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <TextBlock Text="{Binding [ModCatalog.Warning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding [ModCatalog.Source], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Text="{Binding SelectedMod.Name}" FontSize="18" FontWeight="Bold" />
+              <TextBlock Text="{Binding SelectedMod.Owner}" />
+              <TextBlock Text="{Binding SelectedMod.Description}" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding SelectedMod.PackageUrl}" TextWrapping="Wrap" />
+              <Button IsVisible="{Binding HasDetails}" Command="{Binding OpenPackageCommand}" Content="{Binding [ModCatalog.Open], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Text="{Binding DetailsStatus}" TextWrapping="Wrap" />
+              <TextBlock IsVisible="{Binding HasDetails}" Text="{Binding [ModCatalog.Versions], Source={x:Static services:LocalizationService.Instance}}" FontWeight="Bold" />
+              <ItemsControl ItemsSource="{Binding Details.Versions}"><ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type catalog:ThunderstoreVersion}">
+                <StackPanel Spacing="3" Margin="0,0,0,12"><TextBlock Text="{Binding VersionNumber}" FontWeight="SemiBold" />
+                  <Button Command="{Binding $parent[UserControl].DataContext.Catalog.InstallVersionCommand}" CommandParameter="{Binding}" Content="{Binding [ModInstall.Install], Source={x:Static services:LocalizationService.Instance}}" />
+                  <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Size], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding FileSize}"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Date], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding DateCreated, StringFormat='{}{0:g}'}"/></StackPanel>
+                  <TextBlock Text="{Binding [ModCatalog.Dependencies], Source={x:Static services:LocalizationService.Instance}}"/><ItemsControl ItemsSource="{Binding Dependencies}" />
+                </StackPanel>
+              </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            </StackPanel></ScrollViewer>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+    </TabControl>
 </UserControl>

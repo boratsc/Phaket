@@ -134,15 +134,23 @@ public sealed class PlanExecutor : IPlanExecutorHost
             // For extracts, journal the full planned write list BEFORE any write
             // so a partial failure is still recoverable. Created directories are
             // journaled too: they are new game-tree state and must be cleaned up.
-            if (operation.Kind is "archive.extract" or "loader.ensure" or "game.provision" && existing is null)
+            if (operation.Kind is "file.copy" or "archive.extract" or "loader.ensure" or "game.provision" or "directory.ensure" && existing is null)
                 entry = entry with
                 {
-                    CreatedFiles = operation.Kind == "game.provision"
-                        ? PlanProvisionWrites(operation)
-                        : PlanArchiveWrites(operation),
-                    CreatedDirs = operation.Kind == "game.provision"
-                        ? PlanProvisionDirs(operation)
-                        : PlanArchiveDirs(operation),
+                    CreatedFiles = operation.Kind switch
+                    {
+                        "game.provision" => PlanProvisionWrites(operation),
+                        "archive.extract" or "loader.ensure" => PlanArchiveWrites(operation),
+                        _ => null,
+                    },
+                    CreatedDirs = operation.Kind switch
+                    {
+                        "game.provision" => PlanProvisionDirs(operation),
+                        "archive.extract" or "loader.ensure" => PlanArchiveDirs(operation),
+                        "file.copy" => PlanMissingParentDirs(operation.TargetPath),
+                        "directory.ensure" => PlanMissingDirectory(operation.TargetPath),
+                        _ => null,
+                    },
                 };
 
             if (existing is null) entries.Add(entry);
@@ -262,10 +270,10 @@ public sealed class PlanExecutor : IPlanExecutorHost
             if (!resource.Contains("::", StringComparison.Ordinal))
             {
                 var path = ResourcePath(resource);
-                if (entry.CurrentHash is { } expected && File.Exists(path)
+                if (!entry.Shared && entry.CurrentHash is { } expected && File.Exists(path)
                     && HashFile(path) != expected && policy == DivergencePolicy.Fail)
                     throw new PhaketException(ErrorCodes.JournalDivergence, ("path", path));
-                if (policy == DivergencePolicy.Skip && File.Exists(path)
+                if (!entry.Shared && policy == DivergencePolicy.Skip && File.Exists(path)
                     && entry.CurrentHash is { } expected2 && HashFile(path) != expected2)
                     continue;
             }
@@ -280,7 +288,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
             ledger.Set(entry with { Owners = remaining });
             Recompute(resource, ledger);
             ledger.Save(ledgerPath);
-            if (ledger.Get(resource) is { Owners.Count: 0 } empty && !empty.BaseExisted && empty.BaseValue is null)
+            if (ledger.Get(resource) is { Owners.Count: 0 } empty && (empty.Shared || !empty.BaseExisted && empty.BaseValue is null))
             {
                 ledger.Remove(resource);
                 ledger.Save(ledgerPath);
@@ -289,7 +297,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
         // Directories this recipe created are removed when empty (deepest first);
         // anything the user put inside survives.
         foreach (var dir in ledger.TakeCreatedDirs(recipeId).OrderByDescending(d => d.Length))
-            if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+            if (IsWithinAllowedInstallArea(dir) && Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
                 Directory.Delete(dir);
         ledger.RemoveCreatedDirs(recipeId);
         ledger.Save(ledgerPath);
@@ -298,6 +306,14 @@ public sealed class PlanExecutor : IPlanExecutorHost
         if (Directory.Exists(ownerBackupDir)) Directory.Delete(ownerBackupDir, recursive: true);
         Persist(new ExecutionJournal(ExecutionJournal.CurrentSchemaVersion,
             Guid.NewGuid().ToString("N"), $"uninstall:{recipeId}", JournalState.Completed, []));
+    }
+
+    private bool IsWithinAllowedInstallArea(string directory)
+    {
+        var full = Path.GetFullPath(directory);
+        if (PathBoundary.IsWithin(Path.GetFullPath(context.GameRoot), full))
+            return context.Game.AllowsWrite(realRelative(full));
+        return PathBoundary.IsWithin(Path.GetFullPath(context.ProfileRoot), full);
     }
 
     private IReadOnlyList<string> PlanArchiveWrites(PlannedOperation operation)
@@ -326,6 +342,25 @@ public sealed class PlanExecutor : IPlanExecutorHost
         var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
         var strip = operation.Parameters?.TryGetValue("stripComponents", out var s) == true ? int.Parse(s) : 0;
         return SafeArchive.PlanDirectories(source, targetRoot, operation.SourceRef ?? "loader", strip);
+    }
+
+    private IReadOnlyList<string> PlanMissingParentDirs(string path)
+    {
+        var parent = Path.GetDirectoryName(Path.GetFullPath(path));
+        return parent is null ? [] : PlanMissingDirectory(parent);
+    }
+
+    private static IReadOnlyList<string> PlanMissingDirectory(string path)
+    {
+        var missing = new List<string>();
+        for (var current = Path.GetFullPath(path); !Directory.Exists(current); current = Path.GetDirectoryName(current)!)
+        {
+            missing.Add(current);
+            var parent = Path.GetDirectoryName(current);
+            if (parent is null || parent == current) break;
+        }
+        missing.Reverse();
+        return missing;
     }
 
     // game.provision: the vanilla cache directory for this exact store+version.
@@ -443,6 +478,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
                     AtomicCopy(source, target);
                 faultHook?.Invoke("after-file-write");
                 AddOwner(relative, NewOwner(operation.OpId, HashFile(target)), ledger, HashFile(target));
+                if (operation.Shared) ledger.Set(ledger.Get(relative)! with { Shared = true });
                 StoreOwnerContent(relative, target);
                 ledger.Save(ledgerPath);
                 return (backup, null, null);
@@ -608,6 +644,13 @@ public sealed class PlanExecutor : IPlanExecutorHost
         var entry = ledger.Get(resource);
         if (entry is null) return;
         var remaining = entry.Owners.OrderBy(o => o.Layer).ToArray();
+
+        if (entry.Shared && !resource.Contains("::", StringComparison.Ordinal))
+        {
+            var sharedPath = ResourcePath(resource);
+            ledger.Set(entry with { CurrentHash = File.Exists(sharedPath) ? HashFile(sharedPath) : null });
+            return;
+        }
 
         if (resource.Contains("::", StringComparison.Ordinal))
         {

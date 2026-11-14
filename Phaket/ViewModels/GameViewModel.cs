@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 using Phaket.Services;
+using System.Collections.ObjectModel;
 
 namespace Phaket.ViewModels;
 
@@ -25,6 +26,7 @@ public partial class GameCatalogItem : ViewModelBase
     public string SteamAppId => Definition.StoreIds?.GetValueOrDefault("steam") ?? "";
 
     [ObservableProperty] private SteamInstallation? detected;
+    public ObservableCollection<SteamInstallation> Installations { get; } = [];
     [ObservableProperty] private string profileName = "Profil domyślny";
     [ObservableProperty] private int modCount;
 

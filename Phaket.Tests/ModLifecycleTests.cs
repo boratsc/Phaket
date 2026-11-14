@@ -4,6 +4,7 @@ using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Phaket.Core.Execution;
+using Phaket.Core.Mods;
 using Phaket.Core.Domain;
 using Phaket.Core.Platforms;
 using Phaket.Core.Omrl;
@@ -15,6 +16,12 @@ namespace Phaket.Tests;
 
 public class ModLifecycleTests
 {
+    private sealed class ReceiptCollector : IReceiptTransport
+    {
+        public List<ModReceipt> Items { get; } = [];
+        public Task PostAsync(string path, ModReceipt receipt, CancellationToken cancellationToken) { Items.Add(receipt); return Task.CompletedTask; }
+    }
+
     private sealed class FixtureTransport(Dictionary<string, byte[]> files) : IPackageTransport
     {
         public Task<Stream> OpenReadAsync(string url, CancellationToken cancellationToken) =>
@@ -84,7 +91,9 @@ public class ModLifecycleTests
             Assert.Equal("proxy", File.ReadAllText(Path.Combine(entry.GameRoot, "winhttp.dll")));
             install.BackCommand.Execute(null);
             if (useSandbox) Assert.True(Directory.Exists(sandbox));
-            var mods = new ModsViewModel(game, () => { }, appRoot);
+            registry.Add(entry with { ModFullName = "Test-BetterPolus", ModVersion = "1.2.3" });
+            var receipts = new ReceiptCollector();
+            var mods = new ModsViewModel(game, () => { }, appRoot, receipts);
             var item = Assert.Single(mods.InstalledRecipes);
             // Visual evidence: the installed-sets section with a real entry.
             var window = new Avalonia.Controls.Window { Width = 1280, Height = 800, DataContext = mods, Content = new Phaket.Views.ModsView() };
@@ -101,6 +110,10 @@ public class ModLifecycleTests
             }
             await item.UninstallCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
+            var receipt = Assert.Single(receipts.Items);
+            Assert.Equal("uninstalled", receipt.Result);
+            Assert.Equal("Test-BetterPolus", receipt.ModFullName);
+            Assert.Equal("1.2.3", receipt.ModVersion);
             Assert.Empty(registry.All());
             Assert.Empty(mods.InstalledRecipes);
             if (useSandbox) Assert.False(Directory.Exists(sandbox));

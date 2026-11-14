@@ -1,10 +1,12 @@
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
+using Phaket.Core.Mods;
 
 namespace Phaket.Core.Execution;
 
 public sealed record InstallProgress(
     int StepIndex, int StepCount, string OpId, string Kind, string Phase, double Fraction);
+public sealed record ReceiptContext(string GameId, string? Store, string? ModFullName);
 
 // Drives a dry-run plan through the transactional executor step by step,
 // reporting progress for the install stepper UI (mockup 05). Cancellation
@@ -12,11 +14,12 @@ public sealed record InstallProgress(
 public sealed class InstallOrchestrator
 {
     private readonly PlanExecutor executor;
+    private readonly ReceiptSender? receipts;
 
-    public InstallOrchestrator(PlanExecutor executor) => this.executor = executor;
+    public InstallOrchestrator(PlanExecutor executor, ReceiptSender? receipts = null) { this.executor = executor; this.receipts = receipts; }
 
     public ExecutionJournal Run(OperationPlan plan, IProgress<InstallProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ReceiptContext? receiptContext = null)
     {
         // Hold the installation lock across approval, every operation and
         // completion: a concurrent install/rollback must not interleave.
@@ -39,8 +42,29 @@ public sealed class InstallOrchestrator
             executor.Interrupt(journal);
             throw;
         }
+        catch (Exception ex)
+        {
+            if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "failed", (ex as PhaketException)?.Error.Code ?? ex.GetType().Name, cancellationToken);
+            throw;
+        }
         journal = executor.Complete(plan, journal);
+        if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "installed", cancellationToken: cancellationToken);
         progress?.Report(new InstallProgress(count, count, "", "verify", "done", 1.0));
         return journal;
+    }
+
+    public void Uninstall(string recipeId, DivergencePolicy policy = DivergencePolicy.Fail,
+        ReceiptContext? receiptContext = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            executor.Uninstall(recipeId, policy);
+            if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? recipeId, "", receiptContext?.Store, "uninstalled", cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? recipeId, "", receiptContext?.Store, "failed", (ex as PhaketException)?.Error.Code ?? ex.GetType().Name, cancellationToken);
+            throw;
+        }
     }
 }

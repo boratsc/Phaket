@@ -4,6 +4,7 @@ using System.Text.Json;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Omrl;
+using Phaket.Core.Mods;
 
 namespace Phaket.Core.Tests;
 
@@ -50,7 +51,8 @@ public sealed class ExecutorFixture : IDisposable
     public PlannerContext PlannerContext(string recipeId = "test.recipe") => new(
         "install-1", "profile-1", GameRoot, ProfileRoot, StagingRoot, PackageRoot,
         TestFixtures.AmongUs,
-        new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false));
+         new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false,
+             new Dictionary<string, string> { ["bepinex"] = "6.0.0" }));
 
     public PlanExecutionContext PlanExecutionContext(string recipeId, string? profileRoot = null) => new(
         GameRoot, profileRoot ?? ProfileRoot, StagingRoot, PackageRoot, TestFixtures.AmongUs, recipeId, "profile-1",
@@ -128,6 +130,98 @@ public sealed class ExecutorFixture : IDisposable
 
 public class PlanExecutorTests
 {
+    [Fact]
+    public void GeneratedSharedConfigSurvivesUninstallIncludingUserEdits()
+    {
+        using var fixture = new ExecutorFixture();
+        var generated = RecipeGenerator.Generate("Test-Mod", "1.0.0", "https://thunderstore.io/package/download/Test/Mod/1.0.0/",
+            new string('a', 64), ["plugins/Mod.dll", "config/x.cfg"], TestFixtures.AmongUs);
+        Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "plugins"));
+        Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "config"));
+        File.WriteAllText(Path.Combine(fixture.StagingRoot, "package", "plugins", "Mod.dll"), "plugin");
+        File.WriteAllText(Path.Combine(fixture.StagingRoot, "package", "config", "x.cfg"), "config");
+        ExecutorFixture.MakeZip(Path.Combine(fixture.PackageRoot, "package"),
+            ("plugins/Mod.dll", "plugin"u8.ToArray()), ("config/x.cfg", "config"u8.ToArray()));
+        var ownership = generated.Ownership.ToDictionary(x => x.StepId, x => x.Ownership);
+        var plan = OperationPlanner.Plan(generated.Recipe, fixture.PlannerContext(generated.Recipe.Id), ownership);
+        plan = plan with { Operations = plan.Operations.Select(operation => operation with { Sha256 = null }).ToArray() };
+        Assert.Contains(plan.Operations, x => x.Shared);
+        var executor = new PlanExecutor(fixture.PlanExecutionContext(generated.Recipe.Id));
+        executor.Execute(plan, executor.Approve(plan));
+        var config = Path.Combine(fixture.GameRoot, "BepInEx", "config", "x.cfg");
+        var plugin = Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Test-Mod", "Mod.dll");
+        File.AppendAllText(config, "user edit");
+
+        executor.Uninstall(generated.Recipe.Id);
+
+        Assert.Equal("configuser edit", File.ReadAllText(config));
+        Assert.False(File.Exists(plugin));
+    }
+
+    [Fact]
+    public void GeneratedSharedConfigAndOrdinaryFilesHaveDistinctUninstallBehavior()
+    {
+        using var fixture = new ExecutorFixture();
+        var generated = RecipeGenerator.Generate("Test-Mod", "1.0.0", "https://thunderstore.io/package/download/Test/Mod/1.0.0/",
+            new string('a', 64), ["plugins/Mod.dll", "config/x.cfg"], TestFixtures.AmongUs);
+        Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "plugins"));
+        Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "config"));
+        File.WriteAllText(Path.Combine(fixture.StagingRoot, "package", "plugins", "Mod.dll"), "plugin");
+        File.WriteAllText(Path.Combine(fixture.StagingRoot, "package", "config", "x.cfg"), "config");
+        ExecutorFixture.MakeZip(Path.Combine(fixture.PackageRoot, "package"),
+            ("plugins/Mod.dll", "plugin"u8.ToArray()), ("config/x.cfg", "config"u8.ToArray()));
+        var plan = OperationPlanner.Plan(generated.Recipe, fixture.PlannerContext(generated.Recipe.Id),
+            generated.Ownership.ToDictionary(x => x.StepId, x => x.Ownership));
+        plan = plan with { Operations = plan.Operations.Select(operation => operation with { Sha256 = null }).ToArray() };
+        var executor = new PlanExecutor(fixture.PlanExecutionContext(generated.Recipe.Id));
+        executor.Execute(plan, executor.Approve(plan));
+        var config = Path.Combine(fixture.GameRoot, "BepInEx", "config", "x.cfg");
+        var plugin = Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Test-Mod", "Mod.dll");
+        executor.Uninstall(generated.Recipe.Id);
+        Assert.True(File.Exists(config));
+        Assert.False(File.Exists(plugin));
+    }
+
+    [Fact]
+    public void UninstallRemovesNonSharedFile()
+    {
+        using var fixture = new ExecutorFixture();
+        var recipe = fixture.CopyRecipe("test.ordinary", "artifact", "game://BepInEx/plugins/ordinary.dll", "content");
+        fixture.Install(recipe, recipe.Id);
+        new PlanExecutor(fixture.PlanExecutionContext(recipe.Id)).Uninstall(recipe.Id);
+        Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "ordinary.dll")));
+    }
+
+    [Fact]
+    public void LegacyLedgerEntryWithoutSharedFieldLoadsFalseAndUninstallRemovesFile()
+    {
+        using var fixture = new ExecutorFixture();
+        var recipe = fixture.CopyRecipe("test.legacy", "artifact", "game://BepInEx/plugins/legacy.dll", "content");
+        fixture.Install(recipe, recipe.Id);
+        var ledgerPath = Path.Combine(fixture.Root, "installation-state", "ledger.json");
+        var json = File.ReadAllText(ledgerPath).Replace(",\n      \\\"shared\\\": true", "", StringComparison.Ordinal);
+        File.WriteAllText(ledgerPath, json);
+        Assert.All(OwnershipLedger.Load(ledgerPath).Entries.Values, e => Assert.False(e.Shared));
+        new PlanExecutor(fixture.PlanExecutionContext(recipe.Id)).Uninstall(recipe.Id);
+        Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "legacy.dll")));
+    }
+
+    [Fact]
+    public void SharedPlannerRoundTripPersistsLedgerAndLegacyLedgerDefaultsFalse()
+    {
+        using var fixture = new ExecutorFixture();
+        var recipe = fixture.CopyRecipe("test.shared", "artifact", "game://BepInEx/config/x.cfg", "content");
+        var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext(), new Dictionary<string, string> { ["copy"] = "shared" });
+        Assert.True(Assert.Single(plan.Operations).Shared);
+        var executor = new PlanExecutor(fixture.PlanExecutionContext(recipe.Id));
+        executor.Execute(plan, executor.Approve(plan));
+        var ledgerPath = Path.Combine(fixture.Root, "installation-state", "ledger.json");
+        Assert.True(OwnershipLedger.Load(ledgerPath).Entries["BepInEx/config/x.cfg"].Shared);
+
+        File.WriteAllText(ledgerPath, "{\"entries\":{\"legacy\":{\"resource\":\"legacy\",\"baseExisted\":false,\"owners\":[],\"currentHash\":null}}}");
+        Assert.False(OwnershipLedger.Load(ledgerPath).Entries["legacy"].Shared);
+    }
+
     [Fact]
     public void InstallVerifyUninstallRoundTrip()
     {

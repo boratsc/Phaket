@@ -68,9 +68,6 @@
                                     <TextBlock Text="{Binding [Backup.Restore], Source={x:Static services:LocalizationService.Instance}}" />
                                 </StackPanel>
                             </Button>
-                            <Button Grid.Column="4" Classes="icon" Margin="8,0,0,0" AutomationProperties.Name="Menu">
-                                <mi:MaterialIcon Kind="DotsHorizontal" Width="18" Height="18" />
-                            </Button>
                         </Grid>
                     </Border>
                 </DataTemplate>

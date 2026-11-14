@@ -64,9 +64,14 @@ public sealed class EpicAccountService : IAccountService
         string value = input?.Trim() ?? "";
         try
         {
-            using var doc = JsonDocument.Parse(value);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("authorizationCode", out var code) && code.ValueKind == JsonValueKind.String)
-                value = code.GetString() ?? "";
+            if (value.StartsWith('{') || value.StartsWith('"'))
+            {
+                using var doc = JsonDocument.Parse(value);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("authorizationCode", out var code) && code.ValueKind == JsonValueKind.String)
+                    value = code.GetString() ?? "";
+                else if (doc.RootElement.ValueKind == JsonValueKind.String)
+                    value = doc.RootElement.GetString() ?? "";
+            }
         }
         catch (JsonException) { }
         if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
@@ -116,7 +121,7 @@ public sealed class EpicAccountService : IAccountService
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
                 using var response = await http.SendAsync(request, ct);
                 response.EnsureSuccessStatusCode();
-                var profile = await response.Content.ReadFromJsonAsync<Profile>(cancellationToken: ct);
+                var profile = await response.Content.ReadFromJsonAsync<Profile>(Json, ct);
                 if (string.IsNullOrWhiteSpace(profile?.AccountId) || string.IsNullOrWhiteSpace(profile.DisplayName))
                     throw new InvalidOperationException("Nieprawidłowy profil Epic / Invalid Epic profile.");
                 var now = DateTimeOffset.UtcNow;

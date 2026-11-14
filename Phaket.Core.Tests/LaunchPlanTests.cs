@@ -18,6 +18,40 @@ public class LaunchPlanTests
 
     private static readonly ExistingLaunchSettings Empty = new(null, new Dictionary<string, string>());
 
+    [Theory]
+    [InlineData("valheim", "linux", LauncherKind.Steam, "DOORSTOP_ENABLED", "1")]
+    [InlineData("valheim", "windows", LauncherKind.Heroic, "DOORSTOP_TARGET_ASSEMBLY", "/profile/BepInEx/core/BepInEx.Preloader.dll")]
+    [InlineData("among-us", "linux", LauncherKind.Steam, "WINEDLLOVERRIDES", "WINEDLLOVERRIDES=\"winhttp.dll=n,b\" %command%")]
+    [InlineData("among-us", "windows", LauncherKind.Heroic, "WINEDLLOVERRIDES", "winhttp=n,b")]
+    [InlineData("valheim", "linux", LauncherKind.Heroic, "LD_PRELOAD", "libdoorstop_x64.so")]
+    [InlineData("valheim", "windows", LauncherKind.Steam, "DOORSTOP_TARGET_ASSEMBLY", "/profile/BepInEx/core/BepInEx.Preloader.dll")]
+    [InlineData("among-us", "linux", LauncherKind.Heroic, "WINEDLLOVERRIDES", "winhttp=n,b")]
+    [InlineData("among-us", "windows", LauncherKind.Steam, "WINEDLLOVERRIDES", "WINEDLLOVERRIDES=\"winhttp.dll=n,b\" %command%")]
+    public void BepInExLaunchStrategiesTranslateForGameAndPlatform(string game, string os,
+        LauncherKind launcher, string expectedName, string expected)
+    {
+        var strategy = BepInExLaunchStrategy.Create(game, os, launcher, "/profile", ProtonDbProvenance);
+        Assert.All(strategy.Requirements, r => Assert.Equal(RequirementStatus.Required, r.Status));
+        var translated = LaunchTranslator.Plan(strategy, launcher, Empty, null).Translations.Single();
+        if (expectedName == "WINEDLLOVERRIDES")
+        {
+            if (launcher == LauncherKind.Steam) Assert.Equal(expected, translated.SteamLaunchOptions);
+            else Assert.Equal(expected, translated.Environment[expectedName]);
+        }
+        else Assert.Equal(expected, translated.Environment[expectedName]);
+        if (launcher != LauncherKind.Steam) Assert.Null(translated.SteamLaunchOptions);
+    }
+
+    [Fact]
+    public void ValheimLinuxLaunchRequirementsUseDoorstopNativePaths()
+    {
+        var requirements = BepInExLaunchStrategy.Create("valheim", "linux", LauncherKind.Steam,
+            "/profile", ProtonDbProvenance).Requirements;
+        Assert.Contains(requirements, r => r.Name == "LD_LIBRARY_PATH" && r.Value == "/profile/doorstop_libs:$LD_LIBRARY_PATH");
+        Assert.Contains(requirements, r => r.Name == "LD_PRELOAD" && r.Value == "libdoorstop_x64.so");
+        Assert.Contains(requirements, r => r.Name == "DOORSTOP_TARGET_ASSEMBLY" && r.Value.EndsWith("BepInEx.Preloader.dll"));
+    }
+
     [Fact]
     public void SteamTranslationUsesPercentCommand()
     {

@@ -1,0 +1,38 @@
+schemaVersion: omrl/v0alpha1
+id: community.thunderstore.among-us-bepinex
+version: 6.0.700
+metadata:
+  title:
+    pl-PL: BepInExPack Among Us
+    en: BepInExPack Among Us
+  description:
+    pl-PL: Loader BepInEx IL2CPP dla Among Us. Katalog opakowujący jest usuwany podczas instalacji.
+    en: BepInEx IL2CPP loader for Among Us. Its wrapper directory is stripped during installation.
+target:
+  game: among-us
+  systems: [windows, linux]
+  editions:
+    - store: steam
+requires:
+  capabilities: [loader.ensure, file.verify]
+  loaders:
+    - id: bepinex
+      version: "6.0.700"
+artifacts:
+  - id: loader-pack
+    source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
+    sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
+    sizeBytes: 31432183
+    format: zip
+steps:
+  - id: ensure-loader
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-pack
+      version: 6.0.700
+      stripComponents: 1
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/core/BepInEx.Unity.IL2CPP.dll

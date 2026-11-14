@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.IO.Compression;
 using System.Text;
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
@@ -49,6 +50,25 @@ public sealed class PlannerFixture : IDisposable
 
 public class OperationPlannerTests
 {
+    [Theory]
+    [InlineData("different", true)]
+    [InlineData("same", false)]
+    public void LoaderPlanReportsOnlyDifferentExistingArchiveFiles(string existing, bool conflictExpected)
+    {
+        using var fixture = new PlannerFixture();
+        var archivePath = Path.Combine(fixture.PackageRoot, "loader.zip");
+        File.WriteAllText(Path.Combine(fixture.GameRoot, "doorstop_config.ini"), existing == "same" ? "loader" : "user");
+        using (var zip = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(zip.CreateEntry("doorstop_config.ini").Open())) writer.Write("loader");
+        var recipe = TestFixtures.AmongUsRecipe() with
+        {
+            Artifacts = [new RecipeArtifact { Id = "mod-bundle", Source = "package://loader.zip" }]
+        };
+        var plan = OperationPlanner.Plan(recipe, fixture.Context);
+        Assert.Equal(conflictExpected, plan.Conflicts.Any(c => c.Resolution == "overwrite"));
+        if (!conflictExpected) Assert.DoesNotContain(plan.Warnings, w => w == "loader-overwrite-unknown");
+    }
+
     [Fact]
     public void DryRunProducesPlanWithoutMutatingFilesystem()
     {

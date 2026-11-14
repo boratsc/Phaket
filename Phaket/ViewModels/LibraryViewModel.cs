@@ -60,8 +60,10 @@ public partial class LibraryViewModel : ViewModelBase
             var detected = adapter.DetectInstallations(os, home);
             foreach (var game in catalog)
             {
-                game.Detected = detected.FirstOrDefault(d =>
-                    d.Manifest.AppId == game.SteamAppId);
+                game.Installations.Clear();
+                foreach (var installation in detected.Where(d => d.Manifest.AppId == game.SteamAppId))
+                    game.Installations.Add(installation);
+                game.Detected = game.Installations.FirstOrDefault();
             }
             Status = "";
         }
@@ -108,6 +110,8 @@ public partial class LibraryViewModel : ViewModelBase
         {
             var adapter = new SteamAdapter(definitions);
             match.Detected = adapter.FromManualFolder(folder, match.SteamAppId);
+            if (match.Detected is { } installation && !match.Installations.Any(i => i.Installation.RootPath == folder))
+                match.Installations.Add(installation);
         }
     }
 }

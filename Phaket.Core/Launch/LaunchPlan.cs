@@ -26,6 +26,39 @@ public sealed record LaunchScope(
 public sealed record GameLaunchStrategy(
     string Id, int Revision, LaunchScope Scope, IReadOnlyList<LaunchRequirement> Requirements);
 
+public static class BepInExLaunchStrategy
+{
+    public static GameLaunchStrategy Create(string gameId, string os, LauncherKind launcher,
+        string profilePath, LaunchProvenance provenance) =>
+        new($"{gameId}-bepinex-{os}", 1,
+            new LaunchScope(gameId, null, os, launcher,
+                os == "linux" && gameId == "valheim" ? RuntimeKind.Native : RuntimeKind.Proton,
+                null, "bepinex", gameId == "among-us" ? "6.0.700" : "5.4.2360"),
+            Requirements(gameId, os, profilePath, provenance));
+
+    private static IReadOnlyList<LaunchRequirement> Requirements(string gameId, string os,
+        string profilePath, LaunchProvenance provenance)
+    {
+        if (os == "linux" && gameId == "valheim")
+            return [
+                new("env", "DOORSTOP_ENABLED", "1", RequirementStatus.Required, provenance),
+                new("env", "DOORSTOP_TARGET_ASSEMBLY", $"{profilePath}/BepInEx/core/BepInEx.Preloader.dll", RequirementStatus.Required, provenance),
+                new("env", "LD_LIBRARY_PATH", $"{profilePath}/doorstop_libs:$LD_LIBRARY_PATH", RequirementStatus.Required, provenance),
+                new("env", "LD_PRELOAD", "libdoorstop_x64.so", RequirementStatus.Required, provenance),
+            ];
+        if (os == "windows" && gameId == "valheim")
+            return [
+                new("dll-override", "winhttp.dll", "n,b", RequirementStatus.Required, provenance),
+                new("env", "DOORSTOP_TARGET_ASSEMBLY", $"{profilePath}/BepInEx/core/BepInEx.Preloader.dll", RequirementStatus.Required, provenance),
+            ];
+        if (os == "windows" && gameId == "among-us")
+            return [new("dll-override", "winhttp.dll", "n,b", RequirementStatus.Required, provenance)];
+        if (gameId == "among-us")
+            return [new("dll-override", "winhttp.dll", "n,b", RequirementStatus.Required, provenance)];
+        return [];
+    }
+}
+
 public sealed record ExistingLaunchSettings(
     string? SteamLaunchOptions, IReadOnlyDictionary<string, string> Environment);
 
@@ -159,7 +192,7 @@ public static class LaunchTranslator
         if (requirement.Value.Any(char.IsControl))
             throw new PhaketException(ErrorCodes.ValidationFailed,
                 ("detail", $"requirement {requirement.Name} contains control characters"));
-        if (launcher == LauncherKind.Steam && requirement.Value.Any(c => "\"$`\\;|&<>()".Contains(c)))
+        if (launcher == LauncherKind.Steam && requirement.Value.Any(c => "\"`\\;|&<>()".Contains(c)))
             throw new PhaketException(ErrorCodes.ValidationFailed,
                 ("detail", $"requirement {requirement.Name} contains shell metacharacters and needs manual review"));
         if (launcher == LauncherKind.Steam && requirement.Kind == "game-arg" && requirement.Value.Any(char.IsWhiteSpace))

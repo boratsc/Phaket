@@ -22,7 +22,7 @@ public partial class CompatibilityViewModel : ViewModelBase
     public int ModCount => Mods.Count;
     public bool AllModsCompatible => Report.AllModsCompatible;
     public string ProtonVersion => "—";
-    public string GameSource => "Steam";
+    public string GameSource => Game.Detected is null ? "—" : "Steam";
     public bool IsCompat => SelectedTab == "compat";
     public bool IsGeneral => SelectedTab == "general";
     public bool IsOther => !IsCompat && !IsGeneral;

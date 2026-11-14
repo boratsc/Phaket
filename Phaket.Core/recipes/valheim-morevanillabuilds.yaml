@@ -1,0 +1,71 @@
+schemaVersion: omrl/v0alpha1
+id: community.thunderstore.more-vanilla-builds
+version: 1.1.5
+metadata:
+  title:
+    pl-PL: MoreVanillaBuilds
+    en: MoreVanillaBuilds
+  description:
+    pl-PL: Odblokowuje budowanie większą liczbą waniliowych prefabów; wymaga Jötunn i BepInEx.
+    en: Unlocks building with more vanilla prefabs; requires Jötunn and BepInEx.
+target:
+  game: valheim
+  systems: [windows, linux]
+  editions:
+    - store: steam
+requires:
+  capabilities: [loader.ensure, archive.extract, file.copy, file.verify]
+  loaders:
+    - id: bepinex
+      version: ">=5.4"
+artifacts:
+  - id: loader-pack
+    source: https://thunderstore.io/package/download/denikson/BepInExPack_Valheim/5.4.2202/
+    sha256: d9c3b16992aa6a02069a921a3e4d613240fe291282bb67fe92261b00c6fabf8c
+    sizeBytes: 711730
+    format: zip
+  - id: jotunn
+    source: https://thunderstore.io/package/download/ValheimModding/Jotunn/2.26.1/
+    sha256: 37a408db8c5eec1345ae345bf97423e201805e21c6ed912923f6eb3fa4c5aec9
+    sizeBytes: 783931
+    format: zip
+  - id: mod
+    source: https://thunderstore.io/package/download/Galateam/MoreVanillaBuilds/1.1.5/
+    sha256: 3f498b4b7bb5d621ac48533426b7ff63dbc07b65605cc1ac67f6051674163150
+    sizeBytes: 18836
+    format: zip
+steps:
+  - id: ensure-loader
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-pack
+      version: 5.4.2202
+      stripComponents: 1
+  - id: extract-jotunn
+    use: archive.extract
+    with:
+      from: package://jotunn
+      to: staging://jotunn
+  - id: install-jotunn
+    use: file.copy
+    with:
+      from: staging://jotunn/plugins/Jotunn.dll
+      to: game://BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll
+  - id: extract-mod
+    use: archive.extract
+    with:
+      from: package://mod
+      to: staging://more-vanilla-builds
+  - id: install-mod
+    use: file.copy
+    with:
+      from: staging://more-vanilla-builds/MoreVanillaBuilds.dll
+      to: game://BepInEx/plugins/Galateam-MoreVanillaBuilds/MoreVanillaBuilds.dll
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/Galateam-MoreVanillaBuilds/MoreVanillaBuilds.dll

@@ -22,15 +22,9 @@ public partial class GraphViewModel : ViewModelBase
     {
         Game = game;
         this.back = back;
-        var mods = new ProfileStore().Active(game.Definition.Slug)?.Mods ?? [];
-        var graph = DependencyGraph.Sample(mods.Select(m => (m.Name, m.Version)));
-        string NameOf(string id) => graph.Nodes.FirstOrDefault(n => n.Id == id)?.Name ?? id;
-        Nodes = new ObservableCollection<GraphNodeVm>(graph.Nodes.Select(n => new GraphNodeVm(
-            n.Name, n.Version, graph.TransitiveDependencies(n.Id).Select(NameOf).ToArray(),
-            n.Name is "BepInEx" or "BepInEx IL2CPP")));
-        ConflictEdges = graph.Conflicts().Select(e => new GraphConflictVm(NameOf(e.From), NameOf(e.To))).ToArray();
-        cycle = graph.DetectCycle()?.Select(NameOf).ToArray();
-        EdgeCount = graph.Edges.Count(e => e.Kind == DependencyKind.Requires);
+        Nodes = [];
+        ConflictEdges = [];
+        EdgeCount = 0;
     }
 
     public GameCatalogItem Game { get; }

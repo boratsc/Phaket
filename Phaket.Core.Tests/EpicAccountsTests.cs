@@ -12,11 +12,15 @@ public sealed class EpicAccountsTests
     [Theory]
     [InlineData(Code)]
     [InlineData("{\"authorizationCode\":\"" + Code + "\"}")]
+    [InlineData("\"" + Code + "\"")]
     [InlineData("https://localhost/launcher/authorized?x=1&code=" + Code + "&other=2")]
     public void ExtractsCode(string input) => Assert.Equal(Code, EpicAccountService.ExtractAuthorizationCode(input));
 
     [Theory]
     [InlineData("garbage")]
+    [InlineData("0123456789abcdef")]
+    [InlineData("ż" + Code)]
+    [InlineData("https://localhost/launcher/authorized?state=x")]
     [InlineData("{\"authorizationCode\":123}")]
     [InlineData("https://localhost/?code=0123456789abcdef0123456789abcdef&code=0123456789abcdef0123456789abcdef")]
     public void RejectsInvalidCode(string input) => Assert.Throws<InvalidOperationException>(() => EpicAccountService.ExtractAuthorizationCode(input));
@@ -34,7 +38,7 @@ public sealed class EpicAccountsTests
             {
                 string body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
                 requests.Add((request.Method.Method, request.RequestUri!.AbsoluteUri, request.Headers.Authorization?.ToString(), body));
-                string result = request.Method == HttpMethod.Get ? "{\"accountId\":\"id1\",\"displayName\":\"Player\"}" : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600}";
+                string result = request.Method == HttpMethod.Get ? "{\"account_id\":\"id1\",\"display_name\":\"Player\"}" : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600}";
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(result, Encoding.UTF8, "application/json") };
             });
             string? browser = null;
@@ -76,6 +80,31 @@ public sealed class EpicAccountsTests
             Assert.False(File.Exists(path));
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task VerifyRequiresSnakeCaseProfile()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "phaket-epic-" + Guid.NewGuid(), "epic.bin");
+        try
+        {
+            var handler = new FakeHandler(request => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(request.Method == HttpMethod.Get
+                    ? "{\"AccountId\":\"id1\",\"DisplayName\":\"Player\"}"
+                    : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
+            }));
+            var service = new EpicAccountService(path, handler, _ => { });
+            Task<AccountInfo> login = service.LoginAsync(TestContext.Current.CancellationToken);
+            service.SubmitCode(Code);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => login);
+            Assert.Contains("Nieprawidłowy profil Epic", error.Message);
+        }
+        finally
+        {
+            string dir = Path.GetDirectoryName(path)!;
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
     }
 
     [Fact]

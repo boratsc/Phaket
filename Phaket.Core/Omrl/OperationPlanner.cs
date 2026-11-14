@@ -1,5 +1,7 @@
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
+using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace Phaket.Core.Omrl;
 
@@ -38,7 +40,7 @@ public static class OperationPlanner
             || (condition.Any?.Any(ConditionUsesGameVersion) ?? false)
             || ConditionUsesGameVersion(condition.Not));
 
-    public static OperationPlan Plan(Recipe recipe, PlannerContext context)
+    public static OperationPlan Plan(Recipe recipe, PlannerContext context, IReadOnlyDictionary<string, string>? stepOwnership = null)
     {
         var recipeElement = System.Text.Json.JsonDocument.Parse(RecipeParser.ToJson(recipe)).RootElement;
         var schemaErrors = RecipeSchema.Validate(recipeElement);
@@ -146,7 +148,7 @@ public static class OperationPlanner
                 step.Id, step.Use, targetPath ?? context.ProfileRoot, sourceRef, sizeBytes, sha256,
                 preconditions, operation.Recovery, operation.Recovery,
                 IsWrite(step.Use) ? "record-owner" : "none", operation.Permissions,
-                parameters));
+                parameters, stepOwnership?.TryGetValue(step.Id, out var ownership) == true && ownership == "shared"));
 
             if (targetPath is not null)
             {
@@ -156,7 +158,32 @@ public static class OperationPlanner
             }
         }
 
-        var conflicts = DetectConflicts(writes, context.ExistingOwners ?? [], context.GameRoot);
+        var conflicts = DetectConflicts(writes, context.ExistingOwners ?? [], context.GameRoot).ToList();
+        var warnings = ExecutableWarnings(operations).ToList();
+        foreach (var operation in operations.Where(o => o.Kind == "loader.ensure"))
+        {
+            if (operation.SourceRef is null || !operation.SourceRef.StartsWith("package://", StringComparison.Ordinal))
+            {
+                warnings.Add("loader-overwrite-unknown");
+                continue;
+            }
+            var archive = Path.Combine(context.PackageRoot, operation.SourceRef["package://".Length..]);
+            if (!File.Exists(archive)) { warnings.Add("loader-overwrite-unknown"); continue; }
+            try
+            {
+                using var zip = ZipFile.OpenRead(archive);
+                foreach (var entry in zip.Entries.Where(e => !e.FullName.Replace('\\', '/').EndsWith('/')))
+                {
+                    var destination = PathBoundary.Resolve(context.GameRoot, entry.FullName);
+                    if (!File.Exists(destination)) continue;
+                    using var stream = entry.Open();
+                    var incoming = SHA256.HashData(stream);
+                    if (!incoming.SequenceEqual(SHA256.HashData(File.ReadAllBytes(destination))))
+                        conflicts.Add(new PlanConflict(destination, [operation.OpId], "overwrite"));
+                }
+            }
+            catch (InvalidDataException) { warnings.Add("loader-overwrite-unknown"); }
+        }
 
         var verification = new List<PlannedOperation>();
         foreach (var verify in recipe.Verify)
@@ -174,7 +201,7 @@ public static class OperationPlanner
             new RecipeRef(recipe.Id, recipe.Version),
             context.InstallationId, context.ProfileId,
             operations, conflicts,
-            ExecutableWarnings(operations),
+            warnings,
             requiresDownload,
             verification);
     }

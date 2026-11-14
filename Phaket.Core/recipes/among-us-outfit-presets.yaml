@@ -1,0 +1,73 @@
+schemaVersion: omrl/v0alpha1
+id: community.thunderstore.outfit-presets
+version: 1.1.1
+metadata:
+  title:
+    pl-PL: Outfit Presets
+    en: Outfit Presets
+  description:
+    pl-PL: Zapisywanie strojów w grze. Wymaga TabsBuilderApi i loadera BepInEx 6 IL2CPP.
+    en: Save outfits in game. Requires TabsBuilderApi and the BepInEx 6 IL2CPP loader.
+target:
+  game: among-us
+  systems: [windows, linux]
+  editions:
+    - store: steam
+requires:
+  capabilities: [loader.ensure, archive.extract, file.copy, file.verify]
+  loaders:
+    - id: bepinex
+      version: ">=6.0"
+artifacts:
+  - id: loader-pack
+    source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
+    sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
+    sizeBytes: 31432183
+    format: zip
+  - id: tabsbuilder-api
+    source: https://thunderstore.io/package/download/Cosmella/TabsBuilderApi/1.2.1/
+    sha256: f73799520b987384514f88c3899a92d2f3fc895c6dceec60fd0e776b0666aeec
+    sizeBytes: 36775
+    format: zip
+  - id: outfit-presets
+    source: https://thunderstore.io/package/download/Cosmella/Outfit_Presets/1.1.1/
+    sha256: 46b011e61ff8d5d4d4d7504c6517122df6ce6b148984a5de595ec039b85f10a6
+    sizeBytes: 76767
+    format: zip
+steps:
+  - id: ensure-bepinex
+    use: loader.ensure
+    with:
+      id: bepinex
+      artifact: loader-pack
+      version: 6.0.700
+      stripComponents: 1
+  - id: extract-tabsbuilder
+    use: archive.extract
+    with:
+      from: package://tabsbuilder-api
+      to: staging://tabsbuilder-api
+  - id: install-tabsbuilder
+    use: file.copy
+    with:
+      from: staging://tabsbuilder-api/TabsBuilder.dll
+      to: game://BepInEx/plugins/Cosmella-TabsBuilderApi/TabsBuilder.dll
+  - id: extract-outfit-presets
+    use: archive.extract
+    with:
+      from: package://outfit-presets
+      to: staging://outfit-presets
+  - id: install-outfit-presets
+    use: file.copy
+    with:
+      from: staging://outfit-presets/OutfitsPresets.dll
+      to: game://BepInEx/plugins/Cosmella-Outfit_Presets/OutfitsPresets.dll
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/Cosmella-TabsBuilderApi/TabsBuilder.dll
+      sha256: fcf01de9167a0bca6dfe59d54e5110a9f6923dad774e339fd29eac82fb99b6b0
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/Cosmella-Outfit_Presets/OutfitsPresets.dll
+      sha256: 7cc2720a1979f9782692d312467933aaad5e1b5de3d161c711db44af67c67689
