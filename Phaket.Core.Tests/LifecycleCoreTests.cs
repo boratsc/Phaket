@@ -240,6 +240,40 @@ public class LifecycleCoreTests
     }
 
     [Fact]
+    public void Provision_UsesCatalogManifest_WhenStepDoesNotPinOne()
+    {
+        var definition = GameDefinitionLoader.LoadYaml(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "definitions", "games", "among-us.yaml")));
+        var root = Directory.CreateTempSubdirectory("phaket-manifest-").FullName;
+        try
+        {
+            Recipe ProvisionRecipe(string? stepManifest) => new()
+            {
+                SchemaVersion = "omrl/v0alpha1", Id = "test.provision", Version = "1.0.0",
+                Target = new RecipeTarget { Game = "among-us", Systems = ["linux"] },
+                Requires = new RecipeRequires { Capabilities = ["game.provision"] },
+                Steps = [new RecipeStep { Id = "provision", Use = "game.provision",
+                    With = stepManifest is null
+                        ? ExecutorFixture.Params(("store", "steam"), ("version", "2026.8.18"))
+                        : ExecutorFixture.Params(("store", "steam"), ("version", "2026.8.18"), ("manifestId", stepManifest)) }],
+            };
+            var facts = new PlanFacts("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
+                null, "1397756378225229500");
+            PlannerContext Ctx() => new("i", "p", Path.Combine(root, "game"), Path.Combine(root, "profile"),
+                Path.Combine(root, "staging"), Path.Combine(root, "packages"), definition, facts);
+
+            // No step pin: the selected catalog build's manifest flows into the plan.
+            var plan = OperationPlanner.Plan(ProvisionRecipe(null), Ctx());
+            Assert.Equal("1397756378225229500", plan.Operations[0].Parameters!["manifestId"]);
+
+            // An explicit step pin always wins over the catalog fact.
+            var pinned = OperationPlanner.Plan(ProvisionRecipe("999"), Ctx());
+            Assert.Equal("999", pinned.Operations[0].Parameters!["manifestId"]);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Orchestrator_RespectsInstallationLock()
     {
         var root = Directory.CreateTempSubdirectory("phaket-lock-").FullName;
