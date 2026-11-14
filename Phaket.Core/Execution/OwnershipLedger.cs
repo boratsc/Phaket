@@ -31,6 +31,22 @@ public sealed class OwnershipLedger
 
     public Dictionary<string, LedgerEntry> Entries { get; set; } = new(StringComparer.Ordinal);
 
+    // Directories created by each recipe's extracts/provisions (absolute paths).
+    // Uninstall removes them when empty; non-empty (user content) always survives.
+    public Dictionary<string, IReadOnlyList<string>> CreatedDirectories { get; set; } = new(StringComparer.Ordinal);
+
+    public void RecordCreatedDirs(string recipeId, IReadOnlyList<string>? dirs)
+    {
+        if (dirs is null || dirs.Count == 0) return;
+        var existing = CreatedDirectories.TryGetValue(recipeId, out var list) ? list : [];
+        CreatedDirectories[recipeId] = existing.Union(dirs, StringComparer.Ordinal).ToArray();
+    }
+
+    public IReadOnlyList<string> TakeCreatedDirs(string recipeId) =>
+        CreatedDirectories.TryGetValue(recipeId, out var list) ? list : [];
+
+    public void RemoveCreatedDirs(string recipeId) => CreatedDirectories.Remove(recipeId);
+
     public static OwnershipLedger Load(string path) =>
         File.Exists(path)
             ? JsonSerializer.Deserialize<OwnershipLedger>(File.ReadAllText(path), Options) ?? new OwnershipLedger()

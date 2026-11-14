@@ -150,6 +150,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
 
             var (backupRef, created, removedOwner) = Apply(operation, ledger);
             entry = entry with { BackupRef = backupRef, Applied = true, CreatedFiles = created ?? entry.CreatedFiles, RemovedOwner = removedOwner };
+            ledger.RecordCreatedDirs(context.RecipeId, entry.CreatedDirs);
             entries[entries.FindIndex(e => e.Intent.OpId == opId)] = entry;
             Persist(journal with { Entries = entries.ToArray() });
 
@@ -285,6 +286,13 @@ public sealed class PlanExecutor : IPlanExecutorHost
                 ledger.Save(ledgerPath);
             }
         }
+        // Directories this recipe created are removed when empty (deepest first);
+        // anything the user put inside survives.
+        foreach (var dir in ledger.TakeCreatedDirs(recipeId).OrderByDescending(d => d.Length))
+            if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                Directory.Delete(dir);
+        ledger.RemoveCreatedDirs(recipeId);
+        ledger.Save(ledgerPath);
         // Owner content is removed only AFTER the ledger no longer references it.
         var ownerBackupDir = Path.Combine(backupRoot, "owners", recipeId);
         if (Directory.Exists(ownerBackupDir)) Directory.Delete(ownerBackupDir, recursive: true);
@@ -828,7 +836,8 @@ public sealed class PlanExecutor : IPlanExecutorHost
     }
 
     // Serializes transactions per installation (single-machine PoC guard).
-    private FileStream LockInstallation()
+    // Public so the orchestrator can hold it across the whole transaction.
+    public FileStream LockInstallation()
     {
         Directory.CreateDirectory(stateRoot);
         var path = Path.Combine(stateRoot, ".lock");

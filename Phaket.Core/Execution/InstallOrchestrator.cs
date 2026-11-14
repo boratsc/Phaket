@@ -18,6 +18,9 @@ public sealed class InstallOrchestrator
     public ExecutionJournal Run(OperationPlan plan, IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        // Hold the installation lock across approval, every operation and
+        // completion: a concurrent install/rollback must not interleave.
+        using var gate = executor.LockInstallation();
         var journal = executor.Approve(plan);
         var count = plan.Operations.Count;
         try
