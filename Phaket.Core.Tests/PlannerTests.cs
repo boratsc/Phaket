@@ -31,7 +31,7 @@ public sealed class PlannerFixture : IDisposable
 
         var facts = new PlanFacts("linux", "steam", "2026.3.5",
             OperationCatalog.Capabilities, _ => false,
-            new Dictionary<string, string> { ["bepinex"] = "6.0.0" });
+            new Dictionary<string, string> { ["bepinex"] = "6.0.0" }, Arch: "x86");
         Context = new PlannerContext("install-1", "profile-1",
             GameRoot, ProfileRoot, StagingRoot, PackageRoot,
             TestFixtures.AmongUs, facts, owners);
@@ -62,7 +62,7 @@ public class OperationPlannerTests
         using (var writer = new StreamWriter(zip.CreateEntry("doorstop_config.ini").Open())) writer.Write("loader");
         var recipe = TestFixtures.AmongUsRecipe() with
         {
-            Artifacts = [new RecipeArtifact { Id = "mod-bundle", Source = "package://loader.zip" }]
+            Artifacts = [new RecipeArtifact { Id = "mod-bundle", Source = "package://loader.zip", Arch = "x86" }]
         };
         var plan = OperationPlanner.Plan(recipe, fixture.Context);
         Assert.Equal(conflictExpected, plan.Conflicts.Any(c => c.Resolution == "overwrite"));
@@ -233,6 +233,7 @@ public class OperationPlannerTests
             Artifacts = [new RecipeArtifact
             {
                 Id = "mod-bundle",
+                Arch = "x86",
                 Source = "https://github.com/org/repo/releases/download/v1/mod.zip",
                 Sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             }]

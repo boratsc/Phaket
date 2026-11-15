@@ -52,7 +52,7 @@ public sealed class ExecutorFixture : IDisposable
         "install-1", "profile-1", GameRoot, ProfileRoot, StagingRoot, PackageRoot,
         TestFixtures.AmongUs,
          new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false,
-             new Dictionary<string, string> { ["bepinex"] = "6.0.0" }));
+             new Dictionary<string, string> { ["bepinex"] = "6.0.0" }, Arch: "x86"));
 
     public PlanExecutionContext PlanExecutionContext(string recipeId, string? profileRoot = null) => new(
         GameRoot, profileRoot ?? ProfileRoot, StagingRoot, PackageRoot, TestFixtures.AmongUs, recipeId, "profile-1",
@@ -66,7 +66,7 @@ public sealed class ExecutorFixture : IDisposable
             Id = "test.recipe",
             Artifacts =
             [
-                new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip" },
+                new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip", Arch = "x86" },
                 new RecipeArtifact { Id = "mod-bundle", Source = "package://mod-bundle.zip" },
             ],
             Steps =

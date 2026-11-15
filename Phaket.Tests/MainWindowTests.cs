@@ -24,9 +24,18 @@ public class TestAppBuilder
 public class MainWindowTests
 {
     [AvaloniaFact]
+    public void Library_account_action_opens_accounts_page()
+    {
+        var vm = TestAccounts.ViewModel();
+        vm.Library.OpenAccountsCommand.Execute(null);
+        Assert.Same(vm.Accounts, vm.CurrentPage);
+        Assert.Equal("account", vm.ActiveNav);
+    }
+
+    [AvaloniaFact]
     public void MainWindow_opens_and_exposes_accessible_name()
     {
-        var window = new MainWindow();
+        var window = new MainWindow(TestAccounts.ViewModel());
         window.Show();
 
         Assert.Equal("phaket", window.Title);
@@ -38,7 +47,7 @@ public class MainWindowTests
     [AvaloniaFact]
     public void Navigation_switches_to_recipe_studio_and_back()
     {
-        var window = new MainWindow();
+        var window = new MainWindow(TestAccounts.ViewModel());
         window.Show();
         var vm = (MainWindowViewModel)window.DataContext!;
 
@@ -60,7 +69,7 @@ public class MainWindowTests
     [AvaloniaFact]
     public void Sidebar_without_games_shows_library_empty_state()
     {
-        var vm = new MainWindowViewModel();
+        var vm = TestAccounts.ViewModel();
         vm.Library.SearchText = "no matching game";
         vm.NavigateCommand.Execute("mods");
         Assert.Same(vm.Library, vm.CurrentPage);
@@ -73,7 +82,7 @@ public class MainWindowTests
     [AvaloniaFact]
     public void Game_actions_select_correct_sidebar_section()
     {
-        var vm = new MainWindowViewModel();
+        var vm = TestAccounts.ViewModel();
         vm.Library.OpenGameCommand.Execute(vm.Library.Games.First());
         vm.OpenMods();
         Assert.Equal("mods", vm.ActiveNav);
@@ -90,7 +99,7 @@ public class MainWindowTests
     [Fact]
     public void Library_search_filters_and_restores_catalog()
     {
-        var vm = new LibraryViewModel(_ => { });
+        var vm = new LibraryViewModel(_ => { }, TestAccounts.Create(), null);
         var count = vm.Games.Count;
         vm.SearchText = "valheim";
         Assert.Single(vm.Games);
@@ -104,7 +113,7 @@ public class MainWindowTests
     [AvaloniaFact]
     public void Nav_buttons_expose_automation_names()
     {
-        var window = new MainWindow();
+        var window = new MainWindow(TestAccounts.ViewModel());
         window.Show();
         // The user's persisted language choice must not decide this assertion.
         var loc = LocalizationService.Instance;
@@ -128,7 +137,7 @@ public class MainWindowTests
     [AvaloniaFact]
     public void Language_switch_updates_ui_text_without_rebuild()
     {
-        var window = new MainWindow();
+        var window = new MainWindow(TestAccounts.ViewModel());
         window.Show();
         try
         {

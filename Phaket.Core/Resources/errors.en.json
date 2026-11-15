@@ -18,5 +18,7 @@
   "CONFLICT_UNRESOLVABLE": "The conflict on {path} between {owners} cannot be resolved automatically. Choose a mod order or remove the conflict.",
   "JOURNAL_DIVERGENCE": "The installation state differs from the transaction journal. Choose to resume or restore the previous state.",
   "VALIDATION_FAILED": "The recipe failed validation: {detail}",
-  "BASE_GAME_MISMATCH": "The game directory {path} already contains base game version {have}, but the recipe requires {need}. Switching the base version under existing mods is not available — use a separate installation or uninstall the mods first."
+  "BASE_GAME_MISMATCH": "The game directory {path} already contains base game version {have}, but the recipe requires {need}. Switching the base version under existing mods is not available — use a separate installation or uninstall the mods first.",
+  "INSTALL_FACTS_MISSING": "The recipe requires the game's {fact}, but Phaket does not know it for this installation. Choose the game build or set the architecture, then plan again.",
+  "PLAN_EMPTY": "The recipe matched no steps for this installation, so there is nothing to do. No files were changed and nothing was registered as installed."
 }

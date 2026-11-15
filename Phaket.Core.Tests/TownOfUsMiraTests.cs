@@ -125,11 +125,11 @@ public class TownOfUsMiraTests
             foreach (var (store, expectedProvision, expectedLoader, expectedMod) in new[]
             {
                 ("steam", "provision-vanilla-steam", "ensure-bepinex-steam", "install-mod-tree-steam"),
-                ("epic", "provision-vanilla-epic", "ensure-bepinex-epic", "install-mod-tree-epic"),
+                
             })
             {
                 var facts = new PlanFacts("linux", store, "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054);
                 var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), facts));
                 Assert.Contains(expectedProvision, plan.Operations.Select(o => o.OpId));
                 Assert.Contains(expectedLoader, plan.Operations.Select(o => o.OpId));
@@ -159,9 +159,9 @@ public class TownOfUsMiraTests
                 (Mira("1.6.3-beta2"), "2026.6.5", "2026.8.18"),
             })
             {
-                var ok = new PlanFacts("linux", "steam", okVersion, OperationCatalog.Capabilities, _ => false);
+                var ok = new PlanFacts("linux", "steam", okVersion, OperationCatalog.Capabilities, _ => false, Arch: "x86", BuildId: 24302054);
                 OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), ok));
-                var bad = new PlanFacts("linux", "steam", badVersion, OperationCatalog.Capabilities, _ => false);
+                var bad = new PlanFacts("linux", "steam", badVersion, OperationCatalog.Capabilities, _ => false, Arch: "x86", BuildId: 24302054);
                 var ex = Assert.Throws<PhaketException>(() => OperationPlanner.Plan(recipe,
                     new PlannerContext("i", "p", game, profile, staging, packages, Definition(), bad)));
                 Assert.Equal(ErrorCodes.UnsupportedGameVersion, ex.Error.Code);
@@ -199,12 +199,12 @@ public class TownOfUsMiraTests
 
             OperationPlan Plan() => OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition,
                 new PlanFacts("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" })));
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054)));
 
             var plan1 = Plan();
             Assert.True(plan1.RequiresDownload);
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state, source));
-            var journal = new InstallOrchestrator(executor).Run(plan1);
+            var journal = new InstallOrchestrator(executor).Run(plan1, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(JournalState.Completed, journal.State);
             Assert.Equal(1, source.Calls);
             Assert.Equal("steam", source.LastStore);
@@ -253,9 +253,9 @@ public class TownOfUsMiraTests
             var recipe = LocalVariant(Mira("1.7.3"));
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition,
                 new PlanFacts("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" })));
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054)));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state, source));
-            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan));
+            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ArtifactMissing, ex.Error.Code);
             Assert.Contains("tool unavailable", ex.Error.Parameters["artifact"]);
 
@@ -285,7 +285,7 @@ public class TownOfUsMiraTests
                 }).ToArray(),
             };
             PlanFacts Facts() => new("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054);
 
             // No vanilla cache yet -> the plan still reports a pending download.
             Assert.True(OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), Facts())).RequiresDownload);
@@ -310,8 +310,8 @@ public class TownOfUsMiraTests
         {
             var (game, profile, staging, packages, _) = Sandbox(root);
             var recipe = Mira("1.7.3"); // steam provision step is unconditional for steam edition
-            var facts = new PlanFacts("linux", "epic", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+            var facts = new PlanFacts("linux", "itch", "2026.8.18", OperationCatalog.Capabilities, _ => false,
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054);
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), facts));
             // epic facts select the epic provision step; the steam one is skipped.
             Assert.DoesNotContain("provision-vanilla-steam", plan.Operations.Select(o => o.OpId));

@@ -49,6 +49,12 @@ public static class OperationPlanner
         if (semanticErrors.Count > 0) throw ToException(semanticErrors[0]);
 
         var facts = context.Facts;
+        // Checked BEFORE the top-level condition: without the facts a condition could only
+        // evaluate to false, and an empty plan would look like a completed install (PAK-65).
+        RequireFacts(recipe.When, facts);
+        if (!ConditionEvaluator.Evaluate(recipe.When, facts))
+            return new OperationPlan(OperationPlan.CurrentSchemaVersion, new RecipeRef(recipe.Id, recipe.Version),
+                context.InstallationId, context.ProfileId, [], [], [], false, []);
         if (!recipe.Target.Systems.Contains(facts.Os, StringComparer.Ordinal))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"os '{facts.Os}' not in target systems"));
         if (recipe.Target.Editions is { Count: > 0 } editions
@@ -79,9 +85,10 @@ public static class OperationPlanner
                 throw new PhaketException(ErrorCodes.LoaderUnavailable, ("loader", loader.Id), ("range", loader.Version ?? "*"));
         }
 
-        // A gameVersion condition requires a known, valid build fact (spec §5).
-        foreach (var step in recipe.Steps)
-            RequireVersionFact(step.When, facts);
+        // Conditions that need a concrete fact (gameVersion, arch, buildId) must fail loudly
+        // instead of silently evaluating false and producing an empty "successful" plan (PAK-65).
+        RequireFacts(recipe.When, facts);
+        foreach (var step in recipe.Steps) RequireFacts(step.When, facts);
 
         var artifacts = recipe.Artifacts.ToDictionary(a => a.Id, StringComparer.Ordinal);
         var operations = new List<PlannedOperation>();
@@ -92,6 +99,13 @@ public static class OperationPlanner
         foreach (var step in recipe.Steps)
         {
             if (!ConditionEvaluator.Evaluate(step.When, facts)) continue;
+            if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var loaderId)
+                && artifacts.TryGetValue(loaderId.GetString() ?? "", out var loaderArtifact)
+                && loaderArtifact.Arch is { } loaderArch)
+            {
+                if (facts.Arch != loaderArch)
+                    throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", facts.Arch ?? "unknown"));
+            }
             var operation = OperationCatalog.TryGet(step.Use, out var definition) ? definition! : null;
             if (operation is null) throw new PhaketException(ErrorCodes.UnknownOperation, ("operation", step.Use));
 
@@ -216,7 +230,7 @@ public static class OperationPlanner
             && range!.Contains(version!);
     }
 
-    private static void RequireVersionFact(RecipeCondition? condition, PlanFacts facts)
+    private static void RequireFacts(RecipeCondition? condition, PlanFacts facts)
     {
         if (condition is null) return;
         if (condition.GameVersion is not null)
@@ -226,9 +240,14 @@ public static class OperationPlanner
             if (!NumericVersion.TryParse(facts.GameVersion, out _))
                 throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
         }
-        if (condition.All is { } all) foreach (var c in all) RequireVersionFact(c, facts);
-        if (condition.Any is { } any) foreach (var c in any) RequireVersionFact(c, facts);
-        if (condition.Not is { } not) RequireVersionFact(not, facts);
+        if (condition.Arch is not null && facts.Arch is null)
+            throw new PhaketException(ErrorCodes.InstallFactsMissing, ("fact", "arch"));
+        if (condition.BuildId is not null && facts.BuildId is null)
+            throw new PhaketException(ErrorCodes.InstallFactsMissing, ("fact", "buildId"));
+        if (condition.All is { } all) foreach (var c in all) RequireFacts(c, facts);
+        // Each branch of any/of must state its own facts: a fact missing in one branch only means
+        // that branch cannot match (PAK-65: no silent empty plan without saying why).
+        if (condition.Not is { } not) RequireFacts(not, facts);
     }
 
     private static bool IsWrite(string use) => use is "directory.ensure" or "file.copy" or "file.remove"

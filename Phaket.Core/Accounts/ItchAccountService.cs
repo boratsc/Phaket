@@ -27,7 +27,7 @@ public sealed class ItchAccountService : IAccountService
     public ItchAccountService(string? clientId = null, string? storePath = null, string? redirectUri = null)
         : this(clientId, storePath, redirectUri, null, url => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })) { }
 
-    internal ItchAccountService(string? clientId, string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser)
+    internal ItchAccountService(string? clientId, string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser, ISecretStore? secretStore = null)
     {
         this.clientId = clientId;
         if (!Uri.TryCreate(redirectUri ?? "http://127.0.0.1/callback", UriKind.Absolute, out var uri) ||
@@ -37,7 +37,7 @@ public sealed class ItchAccountService : IAccountService
         redirect = uri;
         http = handler is null ? SharedHttp : new HttpClient(handler);
         this.openBrowser = openBrowser;
-        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "itch.bin")));
+        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "itch.bin")), secretStore);
         try
         {
             byte[]? plaintext = store.Load();

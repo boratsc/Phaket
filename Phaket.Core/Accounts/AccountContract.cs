@@ -62,41 +62,98 @@ internal static class LoopbackCallback
     }
 }
 
-// Encrypted (TokenProtector) atomic file store for provider tokens.
-internal sealed class EncryptedStore(string path)
+// Provider tokens are stored by the platform secret store; legacy files are read only.
+internal sealed class EncryptedStore(string path, ISecretStore? store = null)
 {
-    private readonly TokenProtector protector = new(path);
+    private readonly TokenProtector protector = new(path, store);
+    public bool NeedsMigration { get; private set; }
 
-    public byte[]? Load()
+    public byte[]? Load() => Task.Run(() => LoadAsync()).GetAwaiter().GetResult();
+
+    internal async Task<byte[]?> LoadAsync(CancellationToken ct = default)
     {
-        try { return protector.Unprotect(Convert.FromBase64String(File.ReadAllText(path))); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or CryptographicException) { return null; }
+        await SecretMigration.Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+            string directory = Path.GetDirectoryName(fullPath)!;
+            string name = Path.GetFileNameWithoutExtension(fullPath);
+            string metadata = Path.Combine(directory, "secrets-meta");
+            string pending = Path.Combine(metadata, name + ".pending");
+            string migrated = Path.Combine(metadata, name + ".migrated");
+            string backup = Path.Combine(directory, "migrated", name + ".bak");
+            bool inProgress = File.Exists(pending);
+            byte[]? value = await protector.UnprotectAsync(ct).ConfigureAwait(false);
+            NeedsMigration = false;
+            if (!inProgress && value is null && File.Exists(migrated)) throw MigrationError();
+            if (inProgress && !File.Exists(fullPath))
+            {
+                if (value is null || !File.Exists(backup)) throw MigrationError();
+                File.WriteAllText(migrated, "1");
+                File.Delete(pending);
+                return value;
+            }
+            if (!inProgress && (value is not null || !File.Exists(fullPath))) return value;
+            byte[] legacy = TokenProtector.LegacyRead(fullPath);
+            NeedsMigration = true;
+            if (!File.Exists(Path.Combine(metadata, "migration-consent")))
+            {
+                if (inProgress) throw MigrationError();
+                return legacy;
+            }
+            if (!inProgress)
+            {
+                Directory.CreateDirectory(metadata);
+                using (File.Create(pending)) { }
+            }
+            if (value is null)
+            {
+                await protector.ProtectAsync(legacy, ct).ConfigureAwait(false);
+                value = await protector.UnprotectAsync(ct).ConfigureAwait(false);
+            }
+            if (value is null || !CryptographicOperations.FixedTimeEquals(value, legacy)) throw MigrationError();
+            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+            File.Move(fullPath, backup, false);
+            File.WriteAllText(migrated, "1");
+            File.Delete(pending);
+            NeedsMigration = false;
+            return value;
+        }
+        finally { SecretMigration.Gate.Release(); }
     }
+
+    private static CryptographicException MigrationError() => new("SECRET_STORE_MIGRATION_FAILED: Nie udało się zweryfikować migracji / Secret migration verification failed.");
 
     public async Task SaveAsync(byte[] plaintext, CancellationToken ct)
     {
-        byte[] encrypted = protector.Protect(plaintext);
-        string directory = Path.GetDirectoryName(path)!;
-        Directory.CreateDirectory(directory);
-        string temp = Path.Combine(directory, "." + Guid.NewGuid().ToString("N") + ".tmp");
+        await SecretMigration.Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
-            if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            await using (var stream = new FileStream(temp, options))
-            {
-                byte[] bytes = Encoding.ASCII.GetBytes(Convert.ToBase64String(encrypted));
-                await stream.WriteAsync(bytes, ct);
-                await stream.FlushAsync(ct);
-            }
-            File.Move(temp, path, true);
+            string metadata = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "secrets-meta");
+            if (File.Exists(Path.Combine(metadata, Path.GetFileNameWithoutExtension(path) + ".pending"))) throw MigrationError();
+            await protector.ProtectAsync(plaintext, ct).ConfigureAwait(false);
+            NeedsMigration = false;
         }
-        finally { File.Delete(temp); }
+        finally { SecretMigration.Gate.Release(); }
     }
 
     public void Delete()
     {
-        try { File.Delete(path); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        SecretMigration.Gate.Wait();
+        try
+        {
+            Task.Run(() => protector.DeleteAsync()).GetAwaiter().GetResult();
+            try { File.Delete(path); }
+            catch (DirectoryNotFoundException) { }
+            string metadata = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "secrets-meta");
+            string name = Path.GetFileNameWithoutExtension(path);
+            if (Directory.Exists(metadata))
+            {
+                File.Delete(Path.Combine(metadata, name + ".pending"));
+                File.Delete(Path.Combine(metadata, name + ".migrated"));
+            }
+            NeedsMigration = false;
+        }
+        finally { SecretMigration.Gate.Release(); }
     }
 }

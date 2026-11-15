@@ -37,7 +37,11 @@ public static class RecipeValidator
             && !VersionRange.TryParse([gameVersion], out _))
             Add(ErrorCodes.InvalidVersionRange, ("range", gameVersion));
 
+        if (recipe.When is { } condition) ValidateCondition(condition, 1, Add);
         var editions = recipe.Target.Editions ?? [];
+        foreach (var edition in editions)
+            if (edition.Store is not ("steam" or "epic" or "itch" or "msstore"))
+                Add(ErrorCodes.ValidationFailed, ("detail", $"invalid edition store: {edition.Store}"));
         var editionKeys = editions.Select(e => e.Store + ":" + string.Join(",", (e.Os ?? []).OrderBy(x => x, StringComparer.Ordinal)));
         if (editionKeys.Distinct(StringComparer.Ordinal).Count() != editions.Count)
             Add(ErrorCodes.AmbiguousTarget, ("reason", "duplicate edition targets"));
@@ -53,6 +57,8 @@ public static class RecipeValidator
         var artifactIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var artifact in recipe.Artifacts)
         {
+            if (artifact.Arch is not null and not ("x86" or "x64"))
+                Add(ErrorCodes.ValidationFailed, ("detail", $"invalid artifact arch: {artifact.Arch}"));
             if (!artifactIds.Add(artifact.Id))
                 Add(ErrorCodes.ValidationFailed, ("detail", $"duplicate artifact id: {artifact.Id}"));
             if (artifact.Source.StartsWith("package://", StringComparison.Ordinal))
@@ -63,7 +69,7 @@ public static class RecipeValidator
             }
             else if (artifact.Source.StartsWith("https://", StringComparison.Ordinal))
             {
-                if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source))
+                if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source, artifact.Sha256))
                     Add(ErrorCodes.ValidationFailed, ("detail", $"https source not on allowlist: {artifact.Source}"));
                 if (artifact.Sha256 is null)
                     Add(ErrorCodes.ValidationFailed, ("detail", $"sha256 required for remote artifact: {artifact.Id}"));
@@ -80,6 +86,10 @@ public static class RecipeValidator
             if (!stepIds.Add(step.Id))
                 Add(ErrorCodes.ValidationFailed, ("detail", $"duplicate step id: {step.Id}"));
             ValidateOperation(step.Use, step.With, step.Id, game, artifactIds, declaredCapabilities, Add);
+            if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var loaderRef)
+                && loaderRef.ValueKind == JsonValueKind.String
+                && recipe.Artifacts.FirstOrDefault(a => a.Id == loaderRef.GetString()) is { Arch: not ("x86" or "x64") })
+                Add(ErrorCodes.ValidationFailed, ("detail", $"step '{step.Id}': loader artifact requires x86 or x64 arch"));
             if (step.When is { } when) ValidateCondition(when, 1, Add);
         }
 
@@ -169,7 +179,7 @@ public static class RecipeValidator
         {
             condition.All is not null, condition.Any is not null, condition.Not is not null,
             condition.Os is not null, condition.GameVersion is not null, condition.FileExists is not null,
-            condition.Capability is not null, condition.Store is not null,
+            condition.Capability is not null, condition.Store is not null, condition.Arch is not null, condition.BuildId is not null,
         };
         if (kinds.Count(k => k) != 1)
         {
@@ -181,9 +191,15 @@ public static class RecipeValidator
         if (condition.Not is { } not) ValidateCondition(not, depth + 1, add);
         if (condition.GameVersion is { } range && !VersionRange.TryParse([range], out _))
             add(ErrorCodes.InvalidVersionRange, [("range", range)]);
+        if (condition.BuildId is { } buildRange && !ConditionEvaluator.TryParseBuildRange(buildRange, out _, out _))
+            add(ErrorCodes.InvalidVersionRange, [("range", buildRange)]);
         if (condition.FileExists is { } uri && !VirtualUri.TryParse(uri, out _, out _))
             add(ErrorCodes.InvalidUri, [("uri", uri)]);
         if (condition.Capability is { } capability && !OperationCatalog.Capabilities.Contains(capability))
             add(ErrorCodes.ValidationFailed, [("detail", $"unknown capability in condition: {capability}")]);
+        if (condition.Arch is not null and not ("x86" or "x64"))
+            add(ErrorCodes.ValidationFailed, [("detail", $"invalid condition arch: {condition.Arch}")]);
+        if (condition.Store is not null and not ("steam" or "epic" or "itch" or "msstore"))
+            add(ErrorCodes.ValidationFailed, [("detail", $"invalid condition store: {condition.Store}")]);
     }
 }

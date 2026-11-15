@@ -29,7 +29,7 @@ public static class OperationCatalog
                 ["loader.ensure"], ["read", "write"], ["declared-artifact", "approved-loader-layout"], ["compatible-loader-present", "ownership-recorded"], "remove-new-loader-files-per-ledger"),
             new OperationDefinition("profile.activate", """{"type":"object","additionalProperties":false,"required":["profile"],"properties":{"profile":{"type":"string","minLength":1}}}""",
                 ["profile.activate"], ["write"], ["profile-exists"], ["profile-active"], "restore-previous-active-profile"),
-            new OperationDefinition("game.provision", """{"type":"object","additionalProperties":false,"required":["store","version"],"properties":{"store":{"enum":["steam","epic"]},"version":{"type":"string","pattern":"^([0-9]+(\\.[0-9]+)*|latest)$"},"manifestId":{"type":"string","minLength":1}}}""",
+            new OperationDefinition("game.provision", """{"type":"object","additionalProperties":false,"required":["store","version"],"properties":{"store":{"enum":["steam","epic","itch","msstore"]},"version":{"type":"string","pattern":"^([0-9]+(\\.[0-9]+)*|latest)$"},"manifestId":{"type":"string","minLength":1}}}""",
                 ["game.provision"], ["read", "write"], ["base-game-source", "approved-path"], ["base-game-present", "ownership-recorded"], "remove-provisioned-files-per-ledger")
         }.ToDictionary(operation => operation.Name, StringComparer.Ordinal);
 

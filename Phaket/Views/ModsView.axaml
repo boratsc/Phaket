@@ -144,6 +144,11 @@
               <TextBlock Text="{Binding InstallStatus}" TextWrapping="Wrap" />
               <TextBlock Text="{Binding [ModInstall.ChooseTarget], Source={x:Static services:LocalizationService.Instance}}" />
               <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" IsEnabled="{Binding !IsPreparing}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [ModInstall.ChooseTarget], Source={x:Static services:LocalizationService.Instance}}"><ComboBox.ItemTemplate><DataTemplate DataType="{x:Type vm:InstallTargetChoice}"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" /></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{Binding [ModInstall.Arch], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Architectures}" SelectedItem="{Binding SelectedArch}" IsEnabled="{Binding !IsPreparing}" AutomationProperties.Name="{Binding [ModInstall.Arch], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <TextBlock Text="{Binding [ModInstall.ArchHint], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding SandboxSelected}" TextWrapping="Wrap" />
               <Button Command="{Binding ChooseFolderCommand}" IsEnabled="{Binding !IsPreparing}" Content="{Binding [ModInstall.ChooseFolder], Source={x:Static services:LocalizationService.Instance}}" />
               <ProgressBar IsVisible="{Binding IsPreparing}" Value="{Binding InstallProgress}" Minimum="0" Maximum="100" AutomationProperties.Name="{Binding [ModInstall.Progress], Source={x:Static services:LocalizationService.Instance}}" />
               <StackPanel IsVisible="{Binding HasConflicts}" Spacing="6">
@@ -159,6 +164,7 @@
                 <TextBlock IsVisible="{Binding !IsSandboxTarget}" Text="{Binding [ModInstall.RealWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
                 <SelectableTextBlock Text="{Binding TargetDescription}" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding [ModInstall.Warning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding PlanWarnings}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                 <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Packages], Source={x:Static services:LocalizationService.Instance}}" />
                 <ItemsControl ItemsSource="{Binding Preview}"><ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type services:InstallPreview}"><StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding FullName}" FontWeight="Bold"/><TextBlock Text="{Binding Version}"/><TextBlock Text="{Binding [ModInstall.Size], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding SizeBytes}"/><ItemsControl ItemsSource="{Binding Files}"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                 <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Operations], Source={x:Static services:LocalizationService.Instance}}" />

@@ -30,6 +30,7 @@ public sealed class EpicAccountsTests
     {
         string dir = Path.Combine(Path.GetTempPath(), "phaket-epic-test-" + Guid.NewGuid());
         string path = Path.Combine(dir, "epic.bin");
+        var memory = new InMemorySecretStore();
         var ct = TestContext.Current.CancellationToken;
         try
         {
@@ -42,7 +43,7 @@ public sealed class EpicAccountsTests
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(result, Encoding.UTF8, "application/json") };
             });
             string? browser = null;
-            var service = new EpicAccountService(path, handler, url => browser = url);
+            var service = new EpicAccountService(path, handler, url => browser = url, memory);
             int changes = 0;
             service.AccountChanged += () => changes++;
             Task<AccountInfo> login = service.LoginAsync(ct);
@@ -62,12 +63,12 @@ public sealed class EpicAccountsTests
             Assert.EndsWith("/oauth/verify", requests[1].Url);
             Assert.Equal("Bearer access", requests[1].Auth);
 
-            var encrypted = new EncryptedStore(path);
+            var encrypted = new EncryptedStore(path, memory);
             var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(encrypted.Load()!)!;
             var updated = data.ToDictionary(kv => kv.Key, kv => (object)kv.Value);
             updated["expires_at"] = DateTimeOffset.UtcNow.AddMinutes(-1);
             await encrypted.SaveAsync(JsonSerializer.SerializeToUtf8Bytes(updated), ct);
-            var restored = new EpicAccountService(path, handler, _ => throw new Exception("Unexpected browser"));
+            var restored = new EpicAccountService(path, handler, _ => throw new Exception("Unexpected browser"), memory);
             Assert.Equal("Player", restored.Current!.Username);
             await restored.LoginAsync(ct);
             Assert.Contains("grant_type=refresh_token", requests[2].Body);
@@ -94,7 +95,7 @@ public sealed class EpicAccountsTests
                     ? "{\"AccountId\":\"id1\",\"DisplayName\":\"Player\"}"
                     : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
             }));
-            var service = new EpicAccountService(path, handler, _ => { });
+            var service = new EpicAccountService(path, handler, _ => { }, new InMemorySecretStore());
             Task<AccountInfo> login = service.LoginAsync(TestContext.Current.CancellationToken);
             service.SubmitCode(Code);
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() => login);
@@ -111,7 +112,7 @@ public sealed class EpicAccountsTests
     public async Task CancellationStopsWaiting()
     {
         string path = Path.Combine(Path.GetTempPath(), "phaket-epic-" + Guid.NewGuid(), "epic.bin");
-        var service = new EpicAccountService(path, new FakeHandler(_ => throw new Exception("Unexpected HTTP")), _ => { });
+        var service = new EpicAccountService(path, new FakeHandler(_ => throw new Exception("Unexpected HTTP")), _ => { }, new InMemorySecretStore());
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var login = service.LoginAsync(cts.Token);
         cts.Cancel();

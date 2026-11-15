@@ -15,16 +15,24 @@ public partial class AccountsViewModel : ViewModelBase
     private readonly ProviderAccountViewModel epicProvider;
     private EpicAuthWindow? epicAuth;
 
-    public AccountsViewModel()
+    // Steam sign-in for installs (PAK-60): status, one-time sign-in dialog, deletion.
+    public SteamSigninDialogViewModel SteamSignin { get; }
+
+    public AccountsViewModel() : this(new AccountServices()) { }
+
+    public AccountsViewModel(AccountServices accounts)
     {
         string clientId = ProviderAccountViewModel.LoadClientId();
         // Epic sign-in runs in an embedded WebView dialog (with a manual
         // fallback) instead of a bare system-browser tab.
-        epicService = new EpicAccountService(null, url => Dispatcher.UIThread.Post(() => OpenEpicAuth(url)));
+        epicService = accounts.Epic;
+        SteamSignin = new SteamSigninDialogViewModel(accounts.SteamCredentials);
+        _ = SteamSignin.RefreshCommand.ExecuteAsync(null);
+        accounts.OpenEpicAuth += url => Dispatcher.UIThread.Post(() => OpenEpicAuth(url));
         Providers =
         [
             new(new DiscordAccountService(), "Discord", nameof(MaterialIconKind.Chat), "Account.Login"),
-            new(new SteamAccountService(), "Steam", nameof(MaterialIconKind.Steam), "Account.LoginSteam"),
+            new(accounts.Steam, "Steam", nameof(MaterialIconKind.Steam), "Account.LoginSteam"),
             new(epicService, "Epic Games", nameof(MaterialIconKind.GamepadVariant), "Account.LoginEpic"),
             new(new ItchAccountService(clientId), "itch.io", nameof(MaterialIconKind.Store), "Account.LoginItch", clientId)
         ];

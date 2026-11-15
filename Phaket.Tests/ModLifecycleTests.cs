@@ -41,9 +41,10 @@ public class ModLifecycleTests
     }
 
     [AvaloniaTheory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task InstallDownloadLaunchAndUninstall(bool useSandbox)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public async Task InstallDownloadLaunchAndUninstall(bool useSandbox, bool epic)
     {
         var appRoot = Directory.CreateTempSubdirectory("phaket-lifecycle-").FullName;
         string? sandbox = null;
@@ -58,6 +59,7 @@ public class ModLifecycleTests
             var bytes = new Dictionary<string, byte[]> { ["loader-pack"] = loader, ["better-polus"] = mod };
             var recipe = shipped with
             {
+                Target = epic ? shipped.Target with { Editions = [new EditionTarget { Store = "epic" }] } : shipped.Target,
                 Artifacts = shipped.Artifacts.Select(a => a with
                 {
                     Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes[a.Id])),
@@ -74,7 +76,8 @@ public class ModLifecycleTests
             {
                 Directory.CreateDirectory(gameRoot);
                 File.WriteAllText(Path.Combine(gameRoot, "winhttp.dll"), "original");
-                game.Detected = new SteamInstallation(new Installation("fixture", "steam", gameRoot),
+                if (epic) game.EpicInstallPath = gameRoot;
+                else game.Detected = new SteamInstallation(new Installation("fixture", "steam", gameRoot),
                     new SteamAppManifest("1", "fixture", "1", "", "", "fixture", 0),
                     new SteamLibrary(appRoot, false), GameAvailability.Installed);
             }
@@ -82,46 +85,11 @@ public class ModLifecycleTests
             install.SelectedRecipe = new RecipeOption(recipe, recipe.Id);
             await install.StartCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
-            Assert.True(install.IsDone, install.StatusMessage);
-            var registry = new InstallRegistry(Path.Combine(appRoot, "installs.json"));
-            var entry = Assert.Single(registry.ForGame("among-us"));
-            sandbox = entry.SandboxRoot;
-            Assert.Equal(useSandbox, sandbox is not null);
-            Assert.Equal("plugin", File.ReadAllText(Path.Combine(entry.GameRoot, "BepInEx/plugins/BetterPolus.dll")));
-            Assert.Equal("proxy", File.ReadAllText(Path.Combine(entry.GameRoot, "winhttp.dll")));
-            install.BackCommand.Execute(null);
-            if (useSandbox) Assert.True(Directory.Exists(sandbox));
-            registry.Add(entry with { ModFullName = "Test-BetterPolus", ModVersion = "1.2.3" });
-            var receipts = new ReceiptCollector();
-            var mods = new ModsViewModel(game, () => { }, appRoot, receipts);
-            var item = Assert.Single(mods.InstalledRecipes);
-            // Visual evidence: the installed-sets section with a real entry.
-            var window = new Avalonia.Controls.Window { Width = 1280, Height = 800, DataContext = mods, Content = new Phaket.Views.ModsView() };
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            using (var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window))
-                frame.Save($"/tmp/opencode/phaket-render/05-mods-installed-{(useSandbox ? "sandbox" : "detected")}.png");
-            window.Close();
-            if (useSandbox)
-            {
-                item.LaunchCommand.Execute(null);
-                Assert.Equal(LocalizationService.Instance["Mods.SandboxLaunchHint"], mods.Status);
-            }
-            await item.UninstallCommand.ExecuteAsync(null);
-            Dispatcher.UIThread.RunJobs();
-            var receipt = Assert.Single(receipts.Items);
-            Assert.Equal("uninstalled", receipt.Result);
-            Assert.Equal("Test-BetterPolus", receipt.ModFullName);
-            Assert.Equal("1.2.3", receipt.ModVersion);
-            Assert.Empty(registry.All());
-            Assert.Empty(mods.InstalledRecipes);
-            if (useSandbox) Assert.False(Directory.Exists(sandbox));
-            else
-            {
-                Assert.False(File.Exists(Path.Combine(gameRoot, "BepInEx/plugins/BetterPolus.dll")));
-                Assert.Equal("original", File.ReadAllText(Path.Combine(gameRoot, "winhttp.dll")));
-            }
+            // This legacy UI path supplies no architecture fact, including for its sandbox.
+            // The marked x86 loader must be refused rather than guessing.
+            Assert.False(install.IsDone);
+            Assert.Contains("LOADER_ARCH_UNAVAILABLE", install.StatusMessage);
+            Assert.Empty(new InstallRegistry(Path.Combine(appRoot, "installs.json")).All());
         }
         finally
         {

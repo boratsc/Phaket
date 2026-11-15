@@ -5,10 +5,11 @@ using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
 using Phaket.Core.Omrl;
+using Phaket.Core.Platforms;
 
 namespace Phaket.Services;
 
-public sealed record InstallTarget(string GameRoot, string Store, bool Sandbox);
+public sealed record InstallTarget(string GameRoot, string Store, bool Sandbox, string? Arch = null);
 public sealed record InstallPreview(string FullName, string Version, IReadOnlyList<string> Files, long SizeBytes);
 public sealed record InstallPreparation(string GameId, string ModFullName, string Version, string Endpoint,
     InstallTarget Target, IReadOnlyList<OperationPlan> Plans, IReadOnlyList<string> PackageRoots, IReadOnlyList<ConflictProposal> Conflicts,
@@ -39,6 +40,7 @@ public sealed class ModInstallService
         CancellationToken ct = default)
     {
         if (gameId is not ("among-us" or "valheim")) throw new ArgumentException("Unsupported game id.", nameof(gameId));
+        if (target.Arch is not (null or "x86" or "x64")) throw new ArgumentException("Unsupported target architecture.", nameof(target));
         var definition = GameDefinitions.LoadAll().First(g => g.Slug == gameId);
         if (!target.Sandbox && (string.IsNullOrWhiteSpace(target.GameRoot) || !Path.IsPathFullyQualified(target.GameRoot)
             || string.IsNullOrEmpty(definition.MainExecutable) || !File.Exists(Path.Combine(target.GameRoot, definition.MainExecutable))))
@@ -67,27 +69,76 @@ public sealed class ModInstallService
             Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "plugins"));
             File.WriteAllText(Path.Combine(gameRoot, definition.MainExecutable ?? "game.exe"), "sandbox fixture");
         }
+        // Explicit user/build choice wins; then the real installation's PE header; a sandbox with
+        // nothing to probe falls back to the current retail architecture from the game definition
+        // (PAK-65: a sandbox must plan, not refuse). A real install is never guessed about.
+        var arch = target.Arch ?? InstallationArchProbe.Probe(gameRoot, definition)
+            ?? (target.Sandbox ? definition.DefaultArch : null);
+        long? buildId = null;
+        if (!target.Sandbox && target.Store == "steam" && definition.StoreIds?.TryGetValue("steam", out var appId) == true
+            && appId.All(char.IsAsciiDigit))
+        {
+            var gameDirectory = new DirectoryInfo(gameRoot);
+            var steamApps = gameDirectory.Parent?.Parent;
+            if (gameDirectory.Parent?.Name == "common" && steamApps is not null)
+            {
+                var manifestPath = Path.Combine(steamApps.FullName, $"appmanifest_{appId}.acf");
+                try
+                {
+                    if (File.Exists(manifestPath))
+                    {
+                        var manifest = SteamAdapter.ParseAppManifest(manifestPath);
+                        if (manifest?.AppId == appId && manifest.InstallDir == gameDirectory.Name
+                            && long.TryParse(manifest.BuildId, System.Globalization.NumberStyles.None,
+                                System.Globalization.CultureInfo.InvariantCulture, out var parsedBuild))
+                            buildId = parsedBuild;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException) { }
+            }
+        }
         var plans = new List<OperationPlan>();
         var packageRoots = new List<string>();
         var previews = new List<InstallPreview>();
         foreach (var mod in resolution.Pinned)
         {
             ct.ThrowIfCancellationRequested();
-            var bytes = await packageTransport.OpenReadAsync(mod.DownloadUrl, ct);
             var modPackages = Path.Combine(packages, SafeFile(mod.FullName) + "-" + SafeFile(mod.Version));
             Directory.CreateDirectory(modPackages);
-            var packagePath = Path.Combine(modPackages, "package.zip");
-            await using (var output = File.Create(packagePath)) await bytes.CopyToAsync(output, ct);
-            var hash = Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(packagePath, ct)));
-            using var zip = ZipFile.OpenRead(packagePath);
+            var loader = mod.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase);
+            var hash = new string('0', 64);
+            string[] entries = [];
+            byte[]? packageBytes = null;
+            if (!loader)
+            {
+                await using var sourceStream = await packageTransport.OpenReadAsync(mod.DownloadUrl, ct);
+                using var buffer = new MemoryStream();
+                var chunk = new byte[81920];
+                int count;
+                while ((count = await sourceStream.ReadAsync(chunk, ct)) > 0)
+                {
+                    if (buffer.Length + count > 512L * 1024 * 1024) throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable, ("detail", "download too large"));
+                    await buffer.WriteAsync(chunk.AsMemory(0, count), ct);
+                }
+                packageBytes = buffer.ToArray();
+                hash = Convert.ToHexStringLower(SHA256.HashData(packageBytes));
+                buffer.Position = 0;
+                using var sourceZip = new ZipArchive(buffer, ZipArchiveMode.Read);
+                entries = sourceZip.Entries.Select(e => e.FullName).ToArray();
+            }
             var generated = RecipeGenerator.Generate(mod.FullName, mod.Version, mod.DownloadUrl, hash,
-                zip.Entries.Select(e => e.FullName), definition);
+                entries, definition, arch);
             var recipe = generated.Recipe;
+            if (loader && arch is null) throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", "unknown"));
+            await PackageDownloader.EnsureArtifactsAsync(recipe, modPackages,
+                packageBytes is null ? packageTransport : new BufferedPackageTransport(mod.DownloadUrl, packageBytes, packageTransport), cancellationToken: ct);
+            using var zip = ZipFile.OpenRead(Path.Combine(modPackages, recipe.Artifacts[0].Id + ".zip"));
             var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", target.Store, null,
                 OperationCatalog.Capabilities, uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                     && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
                 mod.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase)
-                    ? new Dictionary<string, string> { ["bepinex"] = mod.Version } : null);
+                    ? new Dictionary<string, string> { ["bepinex"] = mod.Version } : null,
+                Arch: arch, BuildId: buildId);
             var context = new PlannerContext("install", "mod-profile", gameRoot, profileRoot, stagingRoot, modPackages, definition, facts);
             plans.Add(OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership)));
             packageRoots.Add(modPackages);
@@ -101,6 +152,10 @@ public sealed class ModInstallService
         IProgress<InstallProgress>? progress = null, CancellationToken ct = default)
     {
         if (!planAccepted) throw new PhaketException("PLAN_NOT_ACCEPTED");
+        // PAK-65: a plan with no operations means the recipe did not match this installation.
+        // Running it would "succeed" and register an install that changed nothing.
+        if (preparation.Plans.Count == 0 || preparation.Plans.Any(p => p.Operations.Count == 0))
+            throw new PhaketException(ErrorCodes.PlanEmpty);
         var receiptTransport = this.receiptTransport ?? new HttpReceiptTransport(new HttpClient { BaseAddress = new Uri(preparation.Endpoint) });
         var journals = new List<ExecutionJournal>();
         var executed = new List<(OperationPlan Plan, PlanExecutionContext Context, int Index)>();
@@ -153,6 +208,13 @@ public sealed class ModInstallService
     }
 
     private static string SafeFile(string value) => string.Concat(value.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_'));
+
+    private sealed class BufferedPackageTransport(string url, byte[] bytes, IPackageTransport fallback) : IPackageTransport
+    {
+        public Task<Stream> OpenReadAsync(string source, CancellationToken cancellationToken) => source == url
+            ? Task.FromResult<Stream>(new MemoryStream(bytes, writable: false))
+            : fallback.OpenReadAsync(source, cancellationToken);
+    }
 
     private sealed class CatalogVersionSource(ModCatalogClient client, IReadOnlyDictionary<string, ThunderstoreMod> mods) : IModVersionSource
     {

@@ -4,6 +4,7 @@
              xmlns:services="using:Phaket.Services"
              x:Class="Phaket.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Spacing="16" MaxWidth="640" HorizontalAlignment="Left">
         <TextBlock Classes="pageTitle" Text="{Binding [Settings.Title], Source={x:Static services:LocalizationService.Instance}}" />
         <Border Classes="card">
@@ -15,5 +16,53 @@
                           AutomationProperties.Name="{Binding [Settings.Language], Source={x:Static services:LocalizationService.Instance}}" />
             </StackPanel>
         </Border>
+        <Border Classes="card">
+            <StackPanel Spacing="8">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Settings.SteamKey], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding [Settings.SteamKeyHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <TextBox Text="{Binding SteamApiKey}" PasswordChar="●" AutomationProperties.Name="{Binding [Settings.SteamKey], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Content="{Binding [Settings.SteamKeySave], Source={x:Static services:LocalizationService.Instance}}" Command="{Binding SaveSteamApiKeyCommand}" />
+                <TextBlock Text="{Binding SteamKeyStatus}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+        <Border Classes="card">
+            <StackPanel Spacing="8">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Settings.Secrets.Title], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding [Settings.Secrets.Hint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding [Settings.Secrets.Provider], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding SecretProvider}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding SecretStateText}" FontWeight="SemiBold" />
+                    <Button Content="{Binding [Settings.Secrets.Refresh], Source={x:Static services:LocalizationService.Instance}}"
+                            Command="{Binding RefreshStatusCommand}" Padding="10,4" />
+                </StackPanel>
+                <TextBlock Text="{Binding SecretHintText}" IsVisible="{Binding HasSecretHint}" TextWrapping="Wrap" />
+                <StackPanel Spacing="6" IsVisible="{Binding NeedsMigration}">
+                    <TextBlock Text="{Binding [Settings.Secrets.NeedsMigration], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                    <CheckBox IsChecked="{Binding MigrationConsent}" Content="{Binding [Settings.Secrets.MigrateConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Content="{Binding [Settings.Secrets.Migrate], Source={x:Static services:LocalizationService.Instance}}"
+                            Classes="cta" HorizontalAlignment="Left" Command="{Binding MigrateSecretsCommand}" />
+                </StackPanel>
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="muted" Text="{Binding [Settings.Secrets.FallbackHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                    <CheckBox IsChecked="{Binding FallbackConsent}" Content="{Binding [Settings.Secrets.FallbackConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                    <StackPanel Spacing="6" IsVisible="{Binding FallbackConsent}">
+                        <TextBox Text="{Binding FallbackPassword}" PasswordChar="●" MaxWidth="320" HorizontalAlignment="Left"
+                                 PlaceholderText="{Binding [Settings.Secrets.FallbackPassword], Source={x:Static services:LocalizationService.Instance}}"
+                                 AutomationProperties.Name="{Binding [Settings.Secrets.FallbackPassword], Source={x:Static services:LocalizationService.Instance}}" />
+                        <Button Content="{Binding [Settings.Secrets.UnlockFallback], Source={x:Static services:LocalizationService.Instance}}"
+                                HorizontalAlignment="Left" Command="{Binding UnlockFallbackCommand}" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Spacing="6">
+                    <CheckBox IsChecked="{Binding ConfirmDelete}" Content="{Binding [Settings.Secrets.DeleteConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Content="{Binding [Settings.Secrets.Delete], Source={x:Static services:LocalizationService.Instance}}"
+                            HorizontalAlignment="Left" Command="{Binding DeleteSecretsCommand}" />
+                </StackPanel>
+                <TextBlock Text="{Binding SecretStatusText}" IsVisible="{Binding HasSecretStatus}" TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Assertive" />
+            </StackPanel>
+        </Border>
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

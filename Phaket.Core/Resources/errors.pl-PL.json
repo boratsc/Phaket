@@ -18,5 +18,7 @@
   "CONFLICT_UNRESOLVABLE": "Konflikt na zasobie {path} między {owners} nie może być rozstrzygnięty automatycznie. Wybierz kolejność modów lub usuń konflikt.",
   "JOURNAL_DIVERGENCE": "Stan instalacji różni się od zapisanego w dzienniku transakcji. Wybierz wznowienie lub przywrócenie poprzedniego stanu.",
   "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}",
-  "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody."
+  "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody.",
+  "INSTALL_FACTS_MISSING": "Przepis wymaga informacji o {fact} tej instalacji, a Phaket jej nie zna. Wybierz build gry lub ustaw architekturę i zaplanuj ponownie.",
+  "PLAN_EMPTY": "Przepis nie pasuje do tej instalacji — nie ma żadnej operacji do wykonania. Nic nie zmieniono i nie zapisano jako zainstalowane."
 }

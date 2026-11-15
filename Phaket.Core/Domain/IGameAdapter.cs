@@ -4,7 +4,7 @@ namespace Phaket.Core.Domain;
 
 // Adapter inputs are snapshots; controlled file access and process isolation belong to the host.
 public sealed record InstallationFacts(Installation Installation, IReadOnlyList<string> Versions,
-    IReadOnlyList<string> Capabilities);
+    IReadOnlyList<string> Capabilities, string? Arch = null);
 public sealed record PlatformSnapshot(IReadOnlyList<InstallationFacts> Installations);
 public sealed record ModdingMethod(string Id, IReadOnlyList<string> Capabilities, IReadOnlyList<string> Limitations);
 public sealed record LaunchSpec(string Executable, IReadOnlyList<string> Arguments,

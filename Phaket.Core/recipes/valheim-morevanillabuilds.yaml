@@ -20,6 +20,7 @@ requires:
       version: ">=5.4"
 artifacts:
   - id: loader-pack
+    arch: x64
     source: https://thunderstore.io/package/download/denikson/BepInExPack_Valheim/5.4.2202/
     sha256: d9c3b16992aa6a02069a921a3e4d613240fe291282bb67fe92261b00c6fabf8c
     sizeBytes: 711730

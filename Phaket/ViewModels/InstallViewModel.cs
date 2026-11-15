@@ -7,6 +7,7 @@ using Phaket.Core.Catalog;
 using Phaket.Core.Execution;
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
+using Phaket.Core.Platforms;
 using Phaket.Core.Recipes;
 using Phaket.Services;
 
@@ -30,10 +31,12 @@ public sealed class RecipeOption(Recipe recipe, string title)
 
 // A selectable game version: "latest" or a concrete catalog build with its
 // publisher release date (the backend discovers both from public sources).
-public sealed class VersionOption(string value, string label)
+public sealed class VersionOption(string value, string label, string? arch = null)
 {
     public string Value { get; } = value;
     public string Label { get; } = label;
+    // Architecture the catalog observed for this build: a fact, not a guess.
+    public string? Arch { get; } = arch;
     public override string ToString() => Label;
 }
 
@@ -126,7 +129,7 @@ public partial class InstallViewModel : ViewModelBase
                 .Where(b => b.AvailabilityStatus is "known" or "verified" or "downloadable")
                 .OrderByDescending(b => b.ReleasedAt ?? b.ObservedAt ?? DateTimeOffset.MinValue))
                 Versions.Add(new VersionOption(build.VersionLabel,
-                    $"{build.VersionLabel} · {loc["Builds.Released"]} {build.ReleasedText}"));
+                    $"{build.VersionLabel} · {loc["Builds.Released"]} {build.ReleasedText}", build.Arch));
         }
         catch (Exception) { /* offline: only "latest" remains, resolved later */ }
         SelectedVersion = Versions.FirstOrDefault();
@@ -162,14 +165,17 @@ public partial class InstallViewModel : ViewModelBase
         cancellation = new CancellationTokenSource();
         // Snapshot consent/target on the UI thread: the worker must never observe
         // a checkbox the user toggled after Start was pressed.
-        var detectedRoot = UseDetectedInstall && game.IsInstalled
-            ? game.Detected!.Installation.RootPath : null;
+        var installation = UseDetectedInstall ? game.SelectedInstallation : null;
+        var detectedRoot = installation?.RootPath;
         try
         {
             var token = cancellation.Token;
             var recipe = SelectedRecipe.Recipe;
-            var store = "steam";
+            var store = installation?.Store ?? "steam";
             var versionChoice = SelectedVersion.Value;
+            // A catalog build knows its own architecture; that is a fact, the definition default is
+            // the fallback for "latest" and for a sandbox with nothing to probe.
+            var chosenArch = SelectedVersion?.Arch;
             var usedVersionFallback = false;
             await Task.Run(async () =>
             {
@@ -208,12 +214,19 @@ public partial class InstallViewModel : ViewModelBase
                 }
                 Directory.CreateDirectory(profileRoot); Directory.CreateDirectory(staging); Directory.CreateDirectory(packages); Directory.CreateDirectory(state);
 
-                var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", store, gameVersion,
+                // PAK-65: conditions need facts. An existing installation is read from its PE
+                // header — never guessed from the catalog; a sandbox uses the selected catalog
+                // build's architecture or, failing that, the game's current retail one. A recipe
+                // conditioning on a fact nobody supplied is refused, never silently planned empty.
+                var arch = detectedRoot is not null
+                    ? InstallationArchProbe.Probe(detectedRoot, definition)
+                    : chosenArch ?? definition.DefaultArch;
+                var facts = new PlanFacts(HostOs(), store, gameVersion,
                     OperationCatalog.Capabilities,
                     uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                         && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
                     new Dictionary<string, string> { ["bepinex"] = "6.0.700" },
-                    selectedBuild?.ManifestIds.FirstOrDefault());
+                    selectedBuild?.ManifestIds.FirstOrDefault(), arch, ParseBuildId(installation?.BuildId ?? selectedBuild?.BuildId));
                 var context = new PlannerContext("install", "install-profile", gameRoot, profileRoot, staging, packages,
                     definition, facts,
                     LatestGameVersion: s =>
@@ -222,6 +235,8 @@ public partial class InstallViewModel : ViewModelBase
                         return catalog.GetLatestBuild(game.Definition.Slug, s)?.VersionLabel;
                     });
                 var plan = OperationPlanner.Plan(recipe, context);
+                // Nothing matched: run no tool and register nothing (PAK-65).
+                if (plan.Operations.Count == 0) throw new PhaketException(ErrorCodes.PlanEmpty);
                 token.ThrowIfCancellationRequested();
                 if (plan.RequiresDownload)
                     await PackageDownloader.EnsureArtifactsAsync(recipe, packages, transport ?? new HttpPackageTransport(),
@@ -256,6 +271,12 @@ public partial class InstallViewModel : ViewModelBase
             OnPropertyChanged(nameof(CanRollback)); OnPropertyChanged(nameof(CanStart));
         }
     }
+
+    private static string HostOs() => OperatingSystem.IsWindows() ? "windows" : "linux";
+
+    // Steam build ids are decimal; an unparsable or missing one is simply no fact.
+    static long? ParseBuildId(string? buildId) =>
+        long.TryParse(buildId, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0 ? value : null;
 
     [RelayCommand]
     private async Task RollbackAsync()

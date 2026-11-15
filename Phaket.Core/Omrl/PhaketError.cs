@@ -23,6 +23,11 @@ public static class ErrorCodes
     public const string ConflictUnresolvable = "CONFLICT_UNRESOLVABLE";
     public const string JournalDivergence = "JOURNAL_DIVERGENCE";
     public const string ValidationFailed = "VALIDATION_FAILED";
+    // A recipe conditions on arch/buildId but the host supplied no such fact: refusing to plan
+    // beats silently producing an empty plan that looks like a successful install.
+    public const string InstallFactsMissing = "INSTALL_FACTS_MISSING";
+    // The recipe matched no steps for these facts: nothing to write, so nothing is installed.
+    public const string PlanEmpty = "PLAN_EMPTY";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)

@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Phaket.Core.Accounts;
+using Phaket.Core.Tests;
 
 public sealed class SteamAccountsTests
 {
+    private readonly InMemorySecretStore memory = new();
     private const string Id = "76561198000000001";
 
     [Fact]
@@ -15,20 +17,20 @@ public sealed class SteamAccountsTests
         {
             string path = Path.Combine(dir, "steam.bin"), redirect = Redirect();
             var handler = new FakeHandler();
-            var service = new SteamAccountService(path, redirect, handler, Browser());
+            var service = new SteamAccountService(path, redirect, handler, Browser(), memory);
             int changes = 0;
             service.AccountChanged += () => changes++;
             var account = await service.LoginAsync(TestContext.Current.CancellationToken);
             Assert.Equal(new AccountInfo("steam", Id, "Player", null, account.ObtainedAt), account);
             Assert.Equal(1, changes);
-            Assert.DoesNotContain(Id, await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
-            var reload = new SteamAccountService(path, redirect, handler, _ => throw new Exception("Unexpected browser"));
+            Assert.False(File.Exists(path));
+            var reload = new SteamAccountService(path, redirect, handler, _ => throw new Exception("Unexpected browser"), memory);
             Assert.Equal(account, await reload.LoginAsync(TestContext.Current.CancellationToken));
             await service.LogoutAsync(TestContext.Current.CancellationToken);
             Assert.Null(service.Current);
             Assert.False(File.Exists(path));
             Assert.Equal(2, changes);
-            Assert.Null(new SteamAccountService(path, redirect, handler, Browser()).Current);
+            Assert.Null(new SteamAccountService(path, redirect, handler, Browser(), memory).Current);
         }
         finally { Directory.Delete(dir, true); }
     }
@@ -42,7 +44,7 @@ public sealed class SteamAccountsTests
         try
         {
             var handler = new FakeHandler { Valid = valid };
-            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), Redirect(), handler, Browser(foreign));
+            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), Redirect(), handler, Browser(foreign), memory);
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(TestContext.Current.CancellationToken));
             Assert.Null(service.Current);
             Assert.Equal(foreign ? 0 : 1, handler.Checks);
@@ -56,7 +58,7 @@ public sealed class SteamAccountsTests
         string dir = Directory.CreateTempSubdirectory("phaket-steam-").FullName;
         try
         {
-            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), Redirect(), new FakeHandler { FailProfile = true }, Browser());
+            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), Redirect(), new FakeHandler { FailProfile = true }, Browser(), memory);
             Assert.Equal(Id, (await service.LoginAsync(TestContext.Current.CancellationToken)).Username);
         }
         finally { Directory.Delete(dir, true); }
@@ -133,6 +135,7 @@ public sealed class SteamAccountsTests
 
 public class SteamAdoptTests
 {
+    private readonly InMemorySecretStore memory = new();
     [Fact]
     public async Task AdoptLocalSavesDetectedAccount()
     {
@@ -141,13 +144,13 @@ public class SteamAdoptTests
         {
             string vdf = Path.Combine(dir, "loginusers.vdf");
             File.WriteAllText(vdf, "\"users\"\n{\n\t\"76561198000000000\"\n\t{\n\t\t\"PersonaName\"\t\"TestUser\"\n\t\t\"Timestamp\"\t\"1700000000\"\n\t}\n}\n");
-            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), "http://127.0.0.1:53125/steam/callback");
+            var service = new SteamAccountService(Path.Combine(dir, "steam.bin"), "http://127.0.0.1:53125/steam/callback", null, _ => { }, memory);
             var account = await service.AdoptLocalAsync(vdf, TestContext.Current.CancellationToken);
             Assert.NotNull(account);
             Assert.Equal("76561198000000000", account!.UserId);
             Assert.Equal("TestUser", account.Username);
             Assert.Equal(account, service.Current);
-            var reloaded = new SteamAccountService(Path.Combine(dir, "steam.bin"), "http://127.0.0.1:53125/steam/callback");
+            var reloaded = new SteamAccountService(Path.Combine(dir, "steam.bin"), "http://127.0.0.1:53125/steam/callback", null, _ => { }, memory);
             Assert.Equal(account.UserId, reloaded.Current?.UserId);
         }
         finally { Directory.Delete(dir, true); }

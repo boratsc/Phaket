@@ -18,6 +18,11 @@
     },
     "writableAreas": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "mainExecutable": { "type": "string", "minLength": 1 },
+    "platforms": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "enum": ["windows", "linux"] }
+    },
+    "defaultArch": { "enum": ["x86", "x64"] },
     "launchRequirements": {
       "type": "array",
       "items": {

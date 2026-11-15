@@ -50,7 +50,17 @@ public sealed class ModInstallServiceTests
     private sealed class Packages(IReadOnlyDictionary<string, byte[]> files) : IPackageTransport
     {
         public Task<Stream> OpenReadAsync(string url, CancellationToken cancellationToken) =>
-            Task.FromResult<Stream>(new MemoryStream(files[url], writable: false));
+            Task.FromResult<Stream>(new MemoryStream(files[url == "https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/" ? LoaderUrl : url], writable: false));
+    }
+
+    private sealed class CountingPackage(byte[] bytes) : IPackageTransport
+    {
+        public int Count { get; private set; }
+        public Task<Stream> OpenReadAsync(string url, CancellationToken cancellationToken)
+        {
+            Count++;
+            return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+        }
     }
 
     private sealed class Receipts : IReceiptTransport
@@ -90,7 +100,93 @@ public sealed class ModInstallServiceTests
     }
 
     private static (byte[] Root, byte[] Loader) TestPackages() =>
-        (Zip(("plugins/Mod.dll", "plugin")), Zip(("BepInExPack_Test/winhttp.dll", "loader"), ("BepInExPack_Test/doorstop_config.ini", "loader"), ("BepInExPack_Test/BepInEx/core/BepInEx.Unity.IL2CPP.dll", "loader")));
+        (Zip(("plugins/Mod.dll", "plugin")), File.ReadAllBytes("/tmp/opencode/phaket-research/artifacts/amongus-loader-6.0.700.zip"));
+
+    [Fact]
+    public async Task SandboxLoaderWithoutOverrideUsesTheDefinitionDefaultArchitecture()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-unknown-arch-").FullName;
+        try
+        {
+            var loader = Version(LoaderName, "1.0.0", LoaderUrl, []);
+            var x64 = new Dictionary<string, byte[]>
+            {
+                ["https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip"] =
+                    File.ReadAllBytes("/tmp/opencode/phaket-research/artifacts/bepinex-il2cpp-x64-be793.zip")
+            };
+            var (service, _) = await CreateService(root, x64, (LoaderName, [loader]));
+            // PAK-65: a sandbox has nothing to probe, so the current retail architecture from the
+            // game definition is the plan's fact — the x64 loader pack, not a refusal.
+            var prep = await service.PrepareAsync("among-us", LoaderName, "1.0.0", "", new("", "steam", true),
+                ct: TestContext.Current.CancellationToken);
+            var loaderStep = Assert.Single(Assert.Single(prep.Plans).Operations);
+            Assert.Equal("loader.ensure", loaderStep.Kind);
+            Assert.Equal("6.0.0-be.793", loaderStep.Parameters!["version"]);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task SandboxLoaderWithExplicitX86OverrideUsesTheX86Pack()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-sandbox-x86-").FullName;
+        try
+        {
+            var (modZip, loaderZip) = TestPackages();
+            var loader = Version(LoaderName, "1.0.0", LoaderUrl, loaderZip);
+            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [LoaderUrl] = loaderZip }, (LoaderName, [loader]));
+            var prep = await service.PrepareAsync("among-us", LoaderName, "1.0.0", "", new("", "steam", true, "x86"),
+                ct: TestContext.Current.CancellationToken);
+            var loaderStep = Assert.Single(Assert.Single(prep.Plans).Operations);
+            Assert.Equal("6.0.700", loaderStep.Parameters!["version"]);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task RealInstallWithUndetectableArchitectureIsRejected()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-real-unknown-arch-").FullName;
+        try
+        {
+            // A real game directory whose executable is not a PE: the architecture is unknown and
+            // must never be guessed (PAK-65).
+            var gameRoot = Path.Combine(root, "game");
+            Directory.CreateDirectory(gameRoot);
+            File.WriteAllText(Path.Combine(gameRoot, "Among Us.exe"), "not a PE");
+            var loader = Version(LoaderName, "1.0.0", LoaderUrl, []);
+            var (service, _) = await CreateService(root, new Dictionary<string, byte[]>(), (LoaderName, [loader]));
+            var ex = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", LoaderName,
+                "1.0.0", "", new(gameRoot, "steam", false), ct: TestContext.Current.CancellationToken));
+            Assert.Equal("LOADER_ARCH_UNAVAILABLE", ex.Error.Code);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task PrepareDownloadsModArchiveOnlyOnce()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-one-download-").FullName;
+        try
+        {
+            var zip = Zip(("plugins/Mod.dll", "plugin"));
+            var version = Version(RootName, "1.0.0", RootUrl, zip);
+            var mod = Mod(RootName, version);
+            var details = new Dictionary<string, ThunderstoreModDetails>
+            {
+                [RootName] = new(mod, [version], DateTimeOffset.UnixEpoch)
+            };
+            using var store = new ModCatalogStore(Path.Combine(root, "catalog.db"));
+            var client = new ModCatalogClient(new Catalog(new Details(details), [mod]), store);
+            var transport = new CountingPackage(zip);
+            var service = new ModInstallService(root, client, transport);
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"),
+                ct: TestContext.Current.CancellationToken);
+            Assert.Equal(1, transport.Count);
+            Assert.True(File.Exists(Path.Combine(prep.PackageRoots[0], "package.zip")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
 
     [AvaloniaFact]
     public async Task DetectedRealTargetRequiresAcceptanceAndInstallsIntoFixture()
@@ -117,7 +213,7 @@ public sealed class ModInstallServiceTests
             Assert.True(vm.SelectedTarget!.Target.Sandbox);
             vm.SelectedTarget = Assert.Single(vm.Targets, t => !t.Target.Sandbox);
             InstallPreparation? plan = null;
-            vm.PrepareOverride = async (name, version, endpoint, target, overrides) => plan = await service.PrepareAsync("among-us", name, version, endpoint, target, overrides);
+            vm.PrepareOverride = async (name, version, endpoint, target, overrides) => plan = await service.PrepareAsync("among-us", name, version, endpoint, target with { Arch = "x86" }, overrides);
             vm.ExecuteOverride = (p, accepted, progress) => service.ExecuteAsync(p, accepted, progress);
             vm.SelectedMod = Mod(RootName, mod);
             await vm.InstallVersionCommand.ExecuteAsync(mod);
@@ -202,7 +298,7 @@ public sealed class ModInstallServiceTests
         {
             var (service, receipts) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip },
                 (LoaderName, [loader]), (RootName, [mod]));
-            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true));
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
             var outcome = await service.ExecuteAsync(prep, true);
             Assert.True(outcome.Success, outcome.ErrorCode);
             Assert.Equal(2, outcome.Journals.Count);
@@ -259,7 +355,7 @@ public sealed class ModInstallServiceTests
             Assert.Equal(LoaderName, conflict.Package);
             Assert.Equal("2.0.0", conflict.SuggestedVersion);
             packages["https://thunderstore.io/package/download/Test/Loader/2.0.0/"] = loaderZip;
-            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true),
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"),
                 new Dictionary<string, string> { [LoaderName] = "2.0.0" });
             Assert.Empty(prep.Conflicts);
             Assert.NotEmpty(prep.Plans);
@@ -291,7 +387,7 @@ public sealed class ModInstallServiceTests
         try
         {
             var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
-            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true));
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
             using var cts = new CancellationTokenSource(); cts.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ExecuteAsync(prep, true, ct: cts.Token));
             var game = Path.Combine(prep.SandboxRoot, "game");
@@ -316,7 +412,7 @@ public sealed class ModInstallServiceTests
             var (service, receipts) = await CreateService(root,
                 new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip, [corruptUrl] = modZip },
                 (LoaderName, [loader]), (RootName, [mod, corruptMod]));
-            var prep = await service.PrepareAsync("among-us", RootName, "2.0.0", "", new("", "steam", true), ct: TestContext.Current.CancellationToken);
+            var prep = await service.PrepareAsync("among-us", RootName, "2.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
             await File.WriteAllBytesAsync(Path.Combine(prep.PackageRoots[1], "package.zip"), [1, 2, 3], TestContext.Current.CancellationToken);
             var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);
             Assert.False(outcome.Success);
@@ -344,7 +440,7 @@ public sealed class ModInstallServiceTests
             var client = new ModCatalogClient(new HttpCatalogTransport(http), db);
             var service = new ModInstallService(root.FullName, client, new HttpPackageTransport(packageHttp),
                 profiles: new ProfileStore(Path.Combine(root.FullName, "profiles")));
-            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", "http://127.0.0.1:18081", new("", "steam", true));
+            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", "http://127.0.0.1:18081", new("", "steam", true, "x86"));
             var outcome = await service.ExecuteAsync(prep, true);
             Assert.True(outcome.Success, outcome.ErrorCode);
             var game = Path.Combine(prep.SandboxRoot, "game");

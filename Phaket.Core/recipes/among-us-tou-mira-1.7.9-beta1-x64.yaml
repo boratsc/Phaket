@@ -1,0 +1,1331 @@
+schemaVersion: omrl/v0alpha1
+id: community.github.town-of-us-mira
+version: 1.7.9-beta1
+metadata:
+  title:
+    pl-PL: Town of Us Mira
+    en: Town of Us Mira
+  description:
+    pl-PL: Wydanie x64; warunek buildId dotyczy Steam. Nieznany build (np. Epic) blokuje instalację.
+    en: x64 release; buildId gate uses Steam. An unknown build (e.g. Epic) blocks installation.
+target:
+  game: among-us
+  systems: [windows, linux]
+  editions:
+    - store: steam
+    - store: epic
+    - store: msstore
+when:
+  all:
+    - arch: x64
+    - buildId: ">=25134893"
+requires:
+  capabilities: [archive.extract, file.copy, file.verify]
+artifacts:
+  - id: tou-mira-x64
+    source: https://github.com/AU-Avengers/TOU-Mira/releases/download/1.7.9-beta1/TouMira.v1.7.9-beta1-x64-Steam-Epic-MsStore.zip
+    sha256: b2e2163f7d0f41fb3cdf50352119925c42c80bc55a804507cf9e923aeb150afd
+    arch: x64
+    format: zip
+steps:
+  - id: extract
+    use: archive.extract
+    with:
+      from: package://tou-mira-x64
+      to: staging://tou
+      stripComponents: 1
+  - id: copy-000
+    use: file.copy
+    with:
+      from: "staging://tou/.doorstop_version"
+      to: "game://.doorstop_version"
+  - id: copy-001
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/0Harmony.dll"
+      to: "game://BepInEx/core/0Harmony.dll"
+  - id: copy-002
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AsmResolver.dll"
+      to: "game://BepInEx/core/AsmResolver.dll"
+  - id: copy-003
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AsmResolver.DotNet.dll"
+      to: "game://BepInEx/core/AsmResolver.DotNet.dll"
+  - id: copy-004
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AsmResolver.PE.dll"
+      to: "game://BepInEx/core/AsmResolver.PE.dll"
+  - id: copy-005
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AsmResolver.PE.File.dll"
+      to: "game://BepInEx/core/AsmResolver.PE.File.dll"
+  - id: copy-006
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AssetRipper.CIL.dll"
+      to: "game://BepInEx/core/AssetRipper.CIL.dll"
+  - id: copy-007
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/AssetRipper.Primitives.dll"
+      to: "game://BepInEx/core/AssetRipper.Primitives.dll"
+  - id: copy-008
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Core.dll"
+      to: "game://BepInEx/core/BepInEx.Core.dll"
+  - id: copy-009
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Core.xml"
+      to: "game://BepInEx/core/BepInEx.Core.xml"
+  - id: copy-010
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Preloader.Core.dll"
+      to: "game://BepInEx/core/BepInEx.Preloader.Core.dll"
+  - id: copy-011
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Preloader.Core.xml"
+      to: "game://BepInEx/core/BepInEx.Preloader.Core.xml"
+  - id: copy-012
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Unity.Common.dll"
+      to: "game://BepInEx/core/BepInEx.Unity.Common.dll"
+  - id: copy-013
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Unity.Common.xml"
+      to: "game://BepInEx/core/BepInEx.Unity.Common.xml"
+  - id: copy-014
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Unity.IL2CPP.dll"
+      to: "game://BepInEx/core/BepInEx.Unity.IL2CPP.dll"
+  - id: copy-015
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Unity.IL2CPP.dll.config"
+      to: "game://BepInEx/core/BepInEx.Unity.IL2CPP.dll.config"
+  - id: copy-016
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/BepInEx.Unity.IL2CPP.xml"
+      to: "game://BepInEx/core/BepInEx.Unity.IL2CPP.xml"
+  - id: copy-017
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Cpp2IL.Core.dll"
+      to: "game://BepInEx/core/Cpp2IL.Core.dll"
+  - id: copy-018
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Disarm.dll"
+      to: "game://BepInEx/core/Disarm.dll"
+  - id: copy-019
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/dobby.dll"
+      to: "game://BepInEx/core/dobby.dll"
+  - id: copy-020
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Gee.External.Capstone.dll"
+      to: "game://BepInEx/core/Gee.External.Capstone.dll"
+  - id: copy-021
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Iced.dll"
+      to: "game://BepInEx/core/Iced.dll"
+  - id: copy-022
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Common.dll"
+      to: "game://BepInEx/core/Il2CppInterop.Common.dll"
+  - id: copy-023
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Common.xml"
+      to: "game://BepInEx/core/Il2CppInterop.Common.xml"
+  - id: copy-024
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Generator.dll"
+      to: "game://BepInEx/core/Il2CppInterop.Generator.dll"
+  - id: copy-025
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.HarmonySupport.dll"
+      to: "game://BepInEx/core/Il2CppInterop.HarmonySupport.dll"
+  - id: copy-026
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Runtime.deps.json"
+      to: "game://BepInEx/core/Il2CppInterop.Runtime.deps.json"
+  - id: copy-027
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Runtime.dll"
+      to: "game://BepInEx/core/Il2CppInterop.Runtime.dll"
+  - id: copy-028
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Il2CppInterop.Runtime.xml"
+      to: "game://BepInEx/core/Il2CppInterop.Runtime.xml"
+  - id: copy-029
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/LibCpp2IL.dll"
+      to: "game://BepInEx/core/LibCpp2IL.dll"
+  - id: copy-030
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Mono.Cecil.dll"
+      to: "game://BepInEx/core/Mono.Cecil.dll"
+  - id: copy-031
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Mono.Cecil.Mdb.dll"
+      to: "game://BepInEx/core/Mono.Cecil.Mdb.dll"
+  - id: copy-032
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Mono.Cecil.Pdb.dll"
+      to: "game://BepInEx/core/Mono.Cecil.Pdb.dll"
+  - id: copy-033
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/Mono.Cecil.Rocks.dll"
+      to: "game://BepInEx/core/Mono.Cecil.Rocks.dll"
+  - id: copy-034
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/MonoMod.Backports.dll"
+      to: "game://BepInEx/core/MonoMod.Backports.dll"
+  - id: copy-035
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/MonoMod.ILHelpers.dll"
+      to: "game://BepInEx/core/MonoMod.ILHelpers.dll"
+  - id: copy-036
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/MonoMod.RuntimeDetour.dll"
+      to: "game://BepInEx/core/MonoMod.RuntimeDetour.dll"
+  - id: copy-037
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/MonoMod.Utils.dll"
+      to: "game://BepInEx/core/MonoMod.Utils.dll"
+  - id: copy-038
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/SemanticVersioning.dll"
+      to: "game://BepInEx/core/SemanticVersioning.dll"
+  - id: copy-039
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/StableNameDotNet.dll"
+      to: "game://BepInEx/core/StableNameDotNet.dll"
+  - id: copy-040
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/core/WasmDisassembler.dll"
+      to: "game://BepInEx/core/WasmDisassembler.dll"
+  - id: copy-041
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/patchers/BepInEx.SplashScreen/Among Us.SplashScreen.GUI.exe"
+      to: "game://BepInEx/patchers/BepInEx.SplashScreen/Among Us.SplashScreen.GUI.exe"
+  - id: copy-042
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/patchers/BepInEx.SplashScreen/BepInEx.SplashScreen.GUI.exe.config"
+      to: "game://BepInEx/patchers/BepInEx.SplashScreen/BepInEx.SplashScreen.GUI.exe.config"
+  - id: copy-043
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/patchers/BepInEx.SplashScreen/BepInEx.SplashScreen.Patcher.BepInEx6.dll"
+      to: "game://BepInEx/patchers/BepInEx.SplashScreen/BepInEx.SplashScreen.Patcher.BepInEx6.dll"
+  - id: copy-044
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/patchers/BepInEx.SplashScreen/LICENSE"
+      to: "game://BepInEx/patchers/BepInEx.SplashScreen/LICENSE"
+  - id: copy-045
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/patchers/BepInEx.SplashScreen/README.md"
+      to: "game://BepInEx/patchers/BepInEx.SplashScreen/README.md"
+  - id: copy-046
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/AchievementsAPI.dll"
+      to: "game://BepInEx/plugins/AchievementsAPI.dll"
+  - id: copy-047
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/CorsacCosmetics.dll"
+      to: "game://BepInEx/plugins/CorsacCosmetics.dll"
+  - id: copy-048
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/Mini.RegionInstall.dll"
+      to: "game://BepInEx/plugins/Mini.RegionInstall.dll"
+  - id: copy-049
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/MiraAPI.dll"
+      to: "game://BepInEx/plugins/MiraAPI.dll"
+  - id: copy-050
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/Reactor.dll"
+      to: "game://BepInEx/plugins/Reactor.dll"
+  - id: copy-051
+    use: file.copy
+    with:
+      from: "staging://tou/BepInEx/plugins/TownOfUsMira.dll"
+      to: "game://BepInEx/plugins/TownOfUsMira.dll"
+  - id: copy-052
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.15Streamers.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.15Streamers.ccb"
+  - id: copy-053
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Atony.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Atony.ccb"
+  - id: copy-054
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.GhostEjims.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.GhostEjims.ccb"
+  - id: copy-055
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.HannahTheBeef.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.HannahTheBeef.ccb"
+  - id: copy-056
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Kazumai.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Kazumai.ccb"
+  - id: copy-057
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.LittleDooDoo.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.LittleDooDoo.ccb"
+  - id: copy-058
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.OneOffs.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.OneOffs.ccb"
+  - id: copy-059
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Ophidian.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Ophidian.ccb"
+  - id: copy-060
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.PhasmoFireGod.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.PhasmoFireGod.ccb"
+  - id: copy-061
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Pigoletto.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Pigoletto.ccb"
+  - id: copy-062
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Ressnie.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Ressnie.ccb"
+  - id: copy-063
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Rum.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Rum.ccb"
+  - id: copy-064
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Sarinjin.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Sarinjin.ccb"
+  - id: copy-065
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.SugaNope.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.SugaNope.ccb"
+  - id: copy-066
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Sweetrolled.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Sweetrolled.ccb"
+  - id: copy-067
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.TheLastShaymin.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.TheLastShaymin.ccb"
+  - id: copy-068
+    use: file.copy
+    with:
+      from: "staging://tou/CorsacCosmetics/Bundles/TownOfUs.Tori.ccb"
+      to: "game://CorsacCosmetics/Bundles/TownOfUs.Tori.ccb"
+  - id: copy-069
+    use: file.copy
+    with:
+      from: "staging://tou/doorstop_config.ini"
+      to: "game://doorstop_config.ini"
+  - id: copy-070
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/.version"
+      to: "game://dotnet/.version"
+  - id: copy-071
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/clretwrc.dll"
+      to: "game://dotnet/clretwrc.dll"
+  - id: copy-072
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/clrjit.dll"
+      to: "game://dotnet/clrjit.dll"
+  - id: copy-073
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/coreclr.dll"
+      to: "game://dotnet/coreclr.dll"
+  - id: copy-074
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/dbgshim.dll"
+      to: "game://dotnet/dbgshim.dll"
+  - id: copy-075
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/hostpolicy.dll"
+      to: "game://dotnet/hostpolicy.dll"
+  - id: copy-076
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Bcl.AsyncInterfaces.dll"
+      to: "game://dotnet/Microsoft.Bcl.AsyncInterfaces.dll"
+  - id: copy-077
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.CSharp.dll"
+      to: "game://dotnet/Microsoft.CSharp.dll"
+  - id: copy-078
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.DiaSymReader.Native.amd64.dll"
+      to: "game://dotnet/Microsoft.DiaSymReader.Native.amd64.dll"
+  - id: copy-079
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.DependencyInjection.Abstractions.dll"
+      to: "game://dotnet/Microsoft.Extensions.DependencyInjection.Abstractions.dll"
+  - id: copy-080
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.DependencyInjection.dll"
+      to: "game://dotnet/Microsoft.Extensions.DependencyInjection.dll"
+  - id: copy-081
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.Logging.Abstractions.dll"
+      to: "game://dotnet/Microsoft.Extensions.Logging.Abstractions.dll"
+  - id: copy-082
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.Logging.dll"
+      to: "game://dotnet/Microsoft.Extensions.Logging.dll"
+  - id: copy-083
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.Options.dll"
+      to: "game://dotnet/Microsoft.Extensions.Options.dll"
+  - id: copy-084
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Extensions.Primitives.dll"
+      to: "game://dotnet/Microsoft.Extensions.Primitives.dll"
+  - id: copy-085
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.NETCore.App.deps.json"
+      to: "game://dotnet/Microsoft.NETCore.App.deps.json"
+  - id: copy-086
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.NETCore.App.runtimeconfig.json"
+      to: "game://dotnet/Microsoft.NETCore.App.runtimeconfig.json"
+  - id: copy-087
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.VisualBasic.Core.dll"
+      to: "game://dotnet/Microsoft.VisualBasic.Core.dll"
+  - id: copy-088
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.VisualBasic.dll"
+      to: "game://dotnet/Microsoft.VisualBasic.dll"
+  - id: copy-089
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Win32.Primitives.dll"
+      to: "game://dotnet/Microsoft.Win32.Primitives.dll"
+  - id: copy-090
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/Microsoft.Win32.Registry.dll"
+      to: "game://dotnet/Microsoft.Win32.Registry.dll"
+  - id: copy-091
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/mscordaccore.dll"
+      to: "game://dotnet/mscordaccore.dll"
+  - id: copy-092
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/mscordaccore_amd64_amd64_6.0.722.32202.dll"
+      to: "game://dotnet/mscordaccore_amd64_amd64_6.0.722.32202.dll"
+  - id: copy-093
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/mscordbi.dll"
+      to: "game://dotnet/mscordbi.dll"
+  - id: copy-094
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/mscorlib.dll"
+      to: "game://dotnet/mscorlib.dll"
+  - id: copy-095
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/mscorrc.dll"
+      to: "game://dotnet/mscorrc.dll"
+  - id: copy-096
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/msquic.dll"
+      to: "game://dotnet/msquic.dll"
+  - id: copy-097
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/netstandard.dll"
+      to: "game://dotnet/netstandard.dll"
+  - id: copy-098
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.AppContext.dll"
+      to: "game://dotnet/System.AppContext.dll"
+  - id: copy-099
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Buffers.dll"
+      to: "game://dotnet/System.Buffers.dll"
+  - id: copy-100
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Collections.Concurrent.dll"
+      to: "game://dotnet/System.Collections.Concurrent.dll"
+  - id: copy-101
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Collections.dll"
+      to: "game://dotnet/System.Collections.dll"
+  - id: copy-102
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Collections.Immutable.dll"
+      to: "game://dotnet/System.Collections.Immutable.dll"
+  - id: copy-103
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Collections.NonGeneric.dll"
+      to: "game://dotnet/System.Collections.NonGeneric.dll"
+  - id: copy-104
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Collections.Specialized.dll"
+      to: "game://dotnet/System.Collections.Specialized.dll"
+  - id: copy-105
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.Annotations.dll"
+      to: "game://dotnet/System.ComponentModel.Annotations.dll"
+  - id: copy-106
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.DataAnnotations.dll"
+      to: "game://dotnet/System.ComponentModel.DataAnnotations.dll"
+  - id: copy-107
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.dll"
+      to: "game://dotnet/System.ComponentModel.dll"
+  - id: copy-108
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.EventBasedAsync.dll"
+      to: "game://dotnet/System.ComponentModel.EventBasedAsync.dll"
+  - id: copy-109
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.Primitives.dll"
+      to: "game://dotnet/System.ComponentModel.Primitives.dll"
+  - id: copy-110
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ComponentModel.TypeConverter.dll"
+      to: "game://dotnet/System.ComponentModel.TypeConverter.dll"
+  - id: copy-111
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Configuration.dll"
+      to: "game://dotnet/System.Configuration.dll"
+  - id: copy-112
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Console.dll"
+      to: "game://dotnet/System.Console.dll"
+  - id: copy-113
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Core.dll"
+      to: "game://dotnet/System.Core.dll"
+  - id: copy-114
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Data.Common.dll"
+      to: "game://dotnet/System.Data.Common.dll"
+  - id: copy-115
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Data.DataSetExtensions.dll"
+      to: "game://dotnet/System.Data.DataSetExtensions.dll"
+  - id: copy-116
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Data.dll"
+      to: "game://dotnet/System.Data.dll"
+  - id: copy-117
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.Contracts.dll"
+      to: "game://dotnet/System.Diagnostics.Contracts.dll"
+  - id: copy-118
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.Debug.dll"
+      to: "game://dotnet/System.Diagnostics.Debug.dll"
+  - id: copy-119
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.DiagnosticSource.dll"
+      to: "game://dotnet/System.Diagnostics.DiagnosticSource.dll"
+  - id: copy-120
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.FileVersionInfo.dll"
+      to: "game://dotnet/System.Diagnostics.FileVersionInfo.dll"
+  - id: copy-121
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.Process.dll"
+      to: "game://dotnet/System.Diagnostics.Process.dll"
+  - id: copy-122
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.StackTrace.dll"
+      to: "game://dotnet/System.Diagnostics.StackTrace.dll"
+  - id: copy-123
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.TextWriterTraceListener.dll"
+      to: "game://dotnet/System.Diagnostics.TextWriterTraceListener.dll"
+  - id: copy-124
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.Tools.dll"
+      to: "game://dotnet/System.Diagnostics.Tools.dll"
+  - id: copy-125
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.TraceSource.dll"
+      to: "game://dotnet/System.Diagnostics.TraceSource.dll"
+  - id: copy-126
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Diagnostics.Tracing.dll"
+      to: "game://dotnet/System.Diagnostics.Tracing.dll"
+  - id: copy-127
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.dll"
+      to: "game://dotnet/System.dll"
+  - id: copy-128
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Drawing.dll"
+      to: "game://dotnet/System.Drawing.dll"
+  - id: copy-129
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Drawing.Primitives.dll"
+      to: "game://dotnet/System.Drawing.Primitives.dll"
+  - id: copy-130
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Dynamic.Runtime.dll"
+      to: "game://dotnet/System.Dynamic.Runtime.dll"
+  - id: copy-131
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Formats.Asn1.dll"
+      to: "game://dotnet/System.Formats.Asn1.dll"
+  - id: copy-132
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Globalization.Calendars.dll"
+      to: "game://dotnet/System.Globalization.Calendars.dll"
+  - id: copy-133
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Globalization.dll"
+      to: "game://dotnet/System.Globalization.dll"
+  - id: copy-134
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Globalization.Extensions.dll"
+      to: "game://dotnet/System.Globalization.Extensions.dll"
+  - id: copy-135
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Compression.Brotli.dll"
+      to: "game://dotnet/System.IO.Compression.Brotli.dll"
+  - id: copy-136
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Compression.dll"
+      to: "game://dotnet/System.IO.Compression.dll"
+  - id: copy-137
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Compression.FileSystem.dll"
+      to: "game://dotnet/System.IO.Compression.FileSystem.dll"
+  - id: copy-138
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Compression.Native.dll"
+      to: "game://dotnet/System.IO.Compression.Native.dll"
+  - id: copy-139
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Compression.ZipFile.dll"
+      to: "game://dotnet/System.IO.Compression.ZipFile.dll"
+  - id: copy-140
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.dll"
+      to: "game://dotnet/System.IO.dll"
+  - id: copy-141
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.FileSystem.AccessControl.dll"
+      to: "game://dotnet/System.IO.FileSystem.AccessControl.dll"
+  - id: copy-142
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.FileSystem.dll"
+      to: "game://dotnet/System.IO.FileSystem.dll"
+  - id: copy-143
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.FileSystem.DriveInfo.dll"
+      to: "game://dotnet/System.IO.FileSystem.DriveInfo.dll"
+  - id: copy-144
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.FileSystem.Primitives.dll"
+      to: "game://dotnet/System.IO.FileSystem.Primitives.dll"
+  - id: copy-145
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.FileSystem.Watcher.dll"
+      to: "game://dotnet/System.IO.FileSystem.Watcher.dll"
+  - id: copy-146
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.IsolatedStorage.dll"
+      to: "game://dotnet/System.IO.IsolatedStorage.dll"
+  - id: copy-147
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.MemoryMappedFiles.dll"
+      to: "game://dotnet/System.IO.MemoryMappedFiles.dll"
+  - id: copy-148
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Pipes.AccessControl.dll"
+      to: "game://dotnet/System.IO.Pipes.AccessControl.dll"
+  - id: copy-149
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.Pipes.dll"
+      to: "game://dotnet/System.IO.Pipes.dll"
+  - id: copy-150
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.IO.UnmanagedMemoryStream.dll"
+      to: "game://dotnet/System.IO.UnmanagedMemoryStream.dll"
+  - id: copy-151
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Linq.dll"
+      to: "game://dotnet/System.Linq.dll"
+  - id: copy-152
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Linq.Expressions.dll"
+      to: "game://dotnet/System.Linq.Expressions.dll"
+  - id: copy-153
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Linq.Parallel.dll"
+      to: "game://dotnet/System.Linq.Parallel.dll"
+  - id: copy-154
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Linq.Queryable.dll"
+      to: "game://dotnet/System.Linq.Queryable.dll"
+  - id: copy-155
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Memory.dll"
+      to: "game://dotnet/System.Memory.dll"
+  - id: copy-156
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.dll"
+      to: "game://dotnet/System.Net.dll"
+  - id: copy-157
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Http.dll"
+      to: "game://dotnet/System.Net.Http.dll"
+  - id: copy-158
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Http.Json.dll"
+      to: "game://dotnet/System.Net.Http.Json.dll"
+  - id: copy-159
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.HttpListener.dll"
+      to: "game://dotnet/System.Net.HttpListener.dll"
+  - id: copy-160
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Mail.dll"
+      to: "game://dotnet/System.Net.Mail.dll"
+  - id: copy-161
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.NameResolution.dll"
+      to: "game://dotnet/System.Net.NameResolution.dll"
+  - id: copy-162
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.NetworkInformation.dll"
+      to: "game://dotnet/System.Net.NetworkInformation.dll"
+  - id: copy-163
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Ping.dll"
+      to: "game://dotnet/System.Net.Ping.dll"
+  - id: copy-164
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Primitives.dll"
+      to: "game://dotnet/System.Net.Primitives.dll"
+  - id: copy-165
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Quic.dll"
+      to: "game://dotnet/System.Net.Quic.dll"
+  - id: copy-166
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Requests.dll"
+      to: "game://dotnet/System.Net.Requests.dll"
+  - id: copy-167
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Security.dll"
+      to: "game://dotnet/System.Net.Security.dll"
+  - id: copy-168
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.ServicePoint.dll"
+      to: "game://dotnet/System.Net.ServicePoint.dll"
+  - id: copy-169
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.Sockets.dll"
+      to: "game://dotnet/System.Net.Sockets.dll"
+  - id: copy-170
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.WebClient.dll"
+      to: "game://dotnet/System.Net.WebClient.dll"
+  - id: copy-171
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.WebHeaderCollection.dll"
+      to: "game://dotnet/System.Net.WebHeaderCollection.dll"
+  - id: copy-172
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.WebProxy.dll"
+      to: "game://dotnet/System.Net.WebProxy.dll"
+  - id: copy-173
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.WebSockets.Client.dll"
+      to: "game://dotnet/System.Net.WebSockets.Client.dll"
+  - id: copy-174
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Net.WebSockets.dll"
+      to: "game://dotnet/System.Net.WebSockets.dll"
+  - id: copy-175
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Numerics.dll"
+      to: "game://dotnet/System.Numerics.dll"
+  - id: copy-176
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Numerics.Vectors.dll"
+      to: "game://dotnet/System.Numerics.Vectors.dll"
+  - id: copy-177
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ObjectModel.dll"
+      to: "game://dotnet/System.ObjectModel.dll"
+  - id: copy-178
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Private.CoreLib.dll"
+      to: "game://dotnet/System.Private.CoreLib.dll"
+  - id: copy-179
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Private.DataContractSerialization.dll"
+      to: "game://dotnet/System.Private.DataContractSerialization.dll"
+  - id: copy-180
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Private.Uri.dll"
+      to: "game://dotnet/System.Private.Uri.dll"
+  - id: copy-181
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Private.Xml.dll"
+      to: "game://dotnet/System.Private.Xml.dll"
+  - id: copy-182
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Private.Xml.Linq.dll"
+      to: "game://dotnet/System.Private.Xml.Linq.dll"
+  - id: copy-183
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.DispatchProxy.dll"
+      to: "game://dotnet/System.Reflection.DispatchProxy.dll"
+  - id: copy-184
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.dll"
+      to: "game://dotnet/System.Reflection.dll"
+  - id: copy-185
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Emit.dll"
+      to: "game://dotnet/System.Reflection.Emit.dll"
+  - id: copy-186
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Emit.ILGeneration.dll"
+      to: "game://dotnet/System.Reflection.Emit.ILGeneration.dll"
+  - id: copy-187
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Emit.Lightweight.dll"
+      to: "game://dotnet/System.Reflection.Emit.Lightweight.dll"
+  - id: copy-188
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Extensions.dll"
+      to: "game://dotnet/System.Reflection.Extensions.dll"
+  - id: copy-189
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Metadata.dll"
+      to: "game://dotnet/System.Reflection.Metadata.dll"
+  - id: copy-190
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.Primitives.dll"
+      to: "game://dotnet/System.Reflection.Primitives.dll"
+  - id: copy-191
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Reflection.TypeExtensions.dll"
+      to: "game://dotnet/System.Reflection.TypeExtensions.dll"
+  - id: copy-192
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Resources.Reader.dll"
+      to: "game://dotnet/System.Resources.Reader.dll"
+  - id: copy-193
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Resources.ResourceManager.dll"
+      to: "game://dotnet/System.Resources.ResourceManager.dll"
+  - id: copy-194
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Resources.Writer.dll"
+      to: "game://dotnet/System.Resources.Writer.dll"
+  - id: copy-195
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.CompilerServices.Unsafe.dll"
+      to: "game://dotnet/System.Runtime.CompilerServices.Unsafe.dll"
+  - id: copy-196
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.CompilerServices.VisualC.dll"
+      to: "game://dotnet/System.Runtime.CompilerServices.VisualC.dll"
+  - id: copy-197
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.dll"
+      to: "game://dotnet/System.Runtime.dll"
+  - id: copy-198
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Extensions.dll"
+      to: "game://dotnet/System.Runtime.Extensions.dll"
+  - id: copy-199
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Handles.dll"
+      to: "game://dotnet/System.Runtime.Handles.dll"
+  - id: copy-200
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.InteropServices.dll"
+      to: "game://dotnet/System.Runtime.InteropServices.dll"
+  - id: copy-201
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.InteropServices.RuntimeInformation.dll"
+      to: "game://dotnet/System.Runtime.InteropServices.RuntimeInformation.dll"
+  - id: copy-202
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Intrinsics.dll"
+      to: "game://dotnet/System.Runtime.Intrinsics.dll"
+  - id: copy-203
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Loader.dll"
+      to: "game://dotnet/System.Runtime.Loader.dll"
+  - id: copy-204
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Numerics.dll"
+      to: "game://dotnet/System.Runtime.Numerics.dll"
+  - id: copy-205
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Serialization.dll"
+      to: "game://dotnet/System.Runtime.Serialization.dll"
+  - id: copy-206
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Serialization.Formatters.dll"
+      to: "game://dotnet/System.Runtime.Serialization.Formatters.dll"
+  - id: copy-207
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Serialization.Json.dll"
+      to: "game://dotnet/System.Runtime.Serialization.Json.dll"
+  - id: copy-208
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Serialization.Primitives.dll"
+      to: "game://dotnet/System.Runtime.Serialization.Primitives.dll"
+  - id: copy-209
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Runtime.Serialization.Xml.dll"
+      to: "game://dotnet/System.Runtime.Serialization.Xml.dll"
+  - id: copy-210
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.AccessControl.dll"
+      to: "game://dotnet/System.Security.AccessControl.dll"
+  - id: copy-211
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Claims.dll"
+      to: "game://dotnet/System.Security.Claims.dll"
+  - id: copy-212
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.Algorithms.dll"
+      to: "game://dotnet/System.Security.Cryptography.Algorithms.dll"
+  - id: copy-213
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.Cng.dll"
+      to: "game://dotnet/System.Security.Cryptography.Cng.dll"
+  - id: copy-214
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.Csp.dll"
+      to: "game://dotnet/System.Security.Cryptography.Csp.dll"
+  - id: copy-215
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.Encoding.dll"
+      to: "game://dotnet/System.Security.Cryptography.Encoding.dll"
+  - id: copy-216
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.OpenSsl.dll"
+      to: "game://dotnet/System.Security.Cryptography.OpenSsl.dll"
+  - id: copy-217
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.Primitives.dll"
+      to: "game://dotnet/System.Security.Cryptography.Primitives.dll"
+  - id: copy-218
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Cryptography.X509Certificates.dll"
+      to: "game://dotnet/System.Security.Cryptography.X509Certificates.dll"
+  - id: copy-219
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.dll"
+      to: "game://dotnet/System.Security.dll"
+  - id: copy-220
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Principal.dll"
+      to: "game://dotnet/System.Security.Principal.dll"
+  - id: copy-221
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.Principal.Windows.dll"
+      to: "game://dotnet/System.Security.Principal.Windows.dll"
+  - id: copy-222
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Security.SecureString.dll"
+      to: "game://dotnet/System.Security.SecureString.dll"
+  - id: copy-223
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ServiceModel.Web.dll"
+      to: "game://dotnet/System.ServiceModel.Web.dll"
+  - id: copy-224
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ServiceProcess.dll"
+      to: "game://dotnet/System.ServiceProcess.dll"
+  - id: copy-225
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.Encoding.CodePages.dll"
+      to: "game://dotnet/System.Text.Encoding.CodePages.dll"
+  - id: copy-226
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.Encoding.dll"
+      to: "game://dotnet/System.Text.Encoding.dll"
+  - id: copy-227
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.Encoding.Extensions.dll"
+      to: "game://dotnet/System.Text.Encoding.Extensions.dll"
+  - id: copy-228
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.Encodings.Web.dll"
+      to: "game://dotnet/System.Text.Encodings.Web.dll"
+  - id: copy-229
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.Json.dll"
+      to: "game://dotnet/System.Text.Json.dll"
+  - id: copy-230
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Text.RegularExpressions.dll"
+      to: "game://dotnet/System.Text.RegularExpressions.dll"
+  - id: copy-231
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Channels.dll"
+      to: "game://dotnet/System.Threading.Channels.dll"
+  - id: copy-232
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.dll"
+      to: "game://dotnet/System.Threading.dll"
+  - id: copy-233
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Overlapped.dll"
+      to: "game://dotnet/System.Threading.Overlapped.dll"
+  - id: copy-234
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Tasks.Dataflow.dll"
+      to: "game://dotnet/System.Threading.Tasks.Dataflow.dll"
+  - id: copy-235
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Tasks.dll"
+      to: "game://dotnet/System.Threading.Tasks.dll"
+  - id: copy-236
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Tasks.Extensions.dll"
+      to: "game://dotnet/System.Threading.Tasks.Extensions.dll"
+  - id: copy-237
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Tasks.Parallel.dll"
+      to: "game://dotnet/System.Threading.Tasks.Parallel.dll"
+  - id: copy-238
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Thread.dll"
+      to: "game://dotnet/System.Threading.Thread.dll"
+  - id: copy-239
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.ThreadPool.dll"
+      to: "game://dotnet/System.Threading.ThreadPool.dll"
+  - id: copy-240
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Threading.Timer.dll"
+      to: "game://dotnet/System.Threading.Timer.dll"
+  - id: copy-241
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Transactions.dll"
+      to: "game://dotnet/System.Transactions.dll"
+  - id: copy-242
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Transactions.Local.dll"
+      to: "game://dotnet/System.Transactions.Local.dll"
+  - id: copy-243
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.ValueTuple.dll"
+      to: "game://dotnet/System.ValueTuple.dll"
+  - id: copy-244
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Web.dll"
+      to: "game://dotnet/System.Web.dll"
+  - id: copy-245
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Web.HttpUtility.dll"
+      to: "game://dotnet/System.Web.HttpUtility.dll"
+  - id: copy-246
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Windows.dll"
+      to: "game://dotnet/System.Windows.dll"
+  - id: copy-247
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.dll"
+      to: "game://dotnet/System.Xml.dll"
+  - id: copy-248
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.Linq.dll"
+      to: "game://dotnet/System.Xml.Linq.dll"
+  - id: copy-249
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.ReaderWriter.dll"
+      to: "game://dotnet/System.Xml.ReaderWriter.dll"
+  - id: copy-250
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.Serialization.dll"
+      to: "game://dotnet/System.Xml.Serialization.dll"
+  - id: copy-251
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.XDocument.dll"
+      to: "game://dotnet/System.Xml.XDocument.dll"
+  - id: copy-252
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.XmlDocument.dll"
+      to: "game://dotnet/System.Xml.XmlDocument.dll"
+  - id: copy-253
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.XmlSerializer.dll"
+      to: "game://dotnet/System.Xml.XmlSerializer.dll"
+  - id: copy-254
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.XPath.dll"
+      to: "game://dotnet/System.Xml.XPath.dll"
+  - id: copy-255
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/System.Xml.XPath.XDocument.dll"
+      to: "game://dotnet/System.Xml.XPath.XDocument.dll"
+  - id: copy-256
+    use: file.copy
+    with:
+      from: "staging://tou/dotnet/WindowsBase.dll"
+      to: "game://dotnet/WindowsBase.dll"
+  - id: copy-257
+    use: file.copy
+    with:
+      from: "staging://tou/winhttp.dll"
+      to: "game://winhttp.dll"
+verify:
+  - use: file.verify
+    with:
+      path: game://BepInEx/plugins/TownOfUsMira.dll
+      sha256: 87e1881010828ff81ddc0c054857da5ebddeb2ce1472e60d3e6891c5b0b8bff5

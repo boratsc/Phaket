@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
 using Phaket.Core.Accounts;
+using Phaket.Core.Tests;
 
 public sealed class ItchAccountsTests
 {
+    private readonly InMemorySecretStore memory = new();
     [Fact]
     public async Task LoginReloadAndLogout()
     {
@@ -12,15 +14,15 @@ public sealed class ItchAccountsTests
         {
             string path = Path.Combine(dir, "itch.bin");
             var handler = new FakeHandler();
-            var service = new ItchAccountService("client", path, "http://127.0.0.1:12345/callback", handler, Browser(handler, false));
+            var service = new ItchAccountService("client", path, "http://127.0.0.1:12345/callback", handler, Browser(handler, false), memory);
             int changes = 0;
             service.AccountChanged += () => changes++;
             var account = await service.LoginAsync(TestContext.Current.CancellationToken);
             Assert.Equal(new AccountInfo("itch", "42", "Display", "https://example.test/avatar", account.ObtainedAt), account);
             Assert.Equal(account, service.Current);
             Assert.Equal(1, changes);
-            Assert.DoesNotContain("secret-token", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
-            var reloaded = new ItchAccountService("client", path, null, handler, _ => throw new Exception());
+            Assert.False(File.Exists(path));
+            var reloaded = new ItchAccountService("client", path, null, handler, _ => throw new Exception(), memory);
             Assert.Equal(account, reloaded.Current);
             Assert.Equal(account, await reloaded.LoginAsync(TestContext.Current.CancellationToken));
             Assert.Equal(1, handler.Exchanges);
@@ -40,7 +42,7 @@ public sealed class ItchAccountsTests
         try
         {
             var handler = new FakeHandler();
-            var service = new ItchAccountService("client", Path.Combine(dir, "itch.bin"), null, handler, Browser(handler, true));
+            var service = new ItchAccountService("client", Path.Combine(dir, "itch.bin"), null, handler, Browser(handler, true), memory);
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(TestContext.Current.CancellationToken));
             Assert.Null(service.Current);
             Assert.Equal(0, handler.Exchanges);
@@ -54,7 +56,7 @@ public sealed class ItchAccountsTests
         string dir = Directory.CreateTempSubdirectory("phaket-itch-").FullName;
         try
         {
-            var service = new ItchAccountService(null, Path.Combine(dir, "itch.bin"));
+            var service = new ItchAccountService(null, Path.Combine(dir, "itch.bin"), null, null, _ => { }, memory);
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(TestContext.Current.CancellationToken));
             Assert.Contains("Zarejestruj", error.Message);
             Assert.Contains("Register", error.Message);
@@ -67,7 +69,7 @@ public sealed class ItchAccountsTests
     [InlineData("http://localhost/callback")]
     [InlineData("http://127.0.0.1/callback?x=1")]
     [InlineData("http://127.0.0.1/callback#x")]
-    public void InvalidRedirectIsRejected(string redirect) => Assert.Throws<ArgumentException>(() => new ItchAccountService("client", redirectUri: redirect));
+    public void InvalidRedirectIsRejected(string redirect) => Assert.Throws<ArgumentException>(() => new ItchAccountService("client", null, redirect, null, _ => { }, memory));
 
     private static Dictionary<string, string> Parse(string text) => text.TrimStart('?').Split('&').Select(x => x.Split('=', 2)).ToDictionary(x => Uri.UnescapeDataString(x[0].Replace('+', ' ')), x => Uri.UnescapeDataString(x[1].Replace('+', ' ')));
 

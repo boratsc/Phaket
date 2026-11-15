@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
@@ -15,7 +16,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
     public HelpViewModel Help { get; } = new();
-    public AccountsViewModel Accounts { get; } = new();
+    public AccountsViewModel Accounts { get; }
     public GameViewModel? Game { get; private set; }
     public ModsViewModel? Mods { get; private set; }
     public ProfilesViewModel? Profiles { get; private set; }
@@ -29,11 +30,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private GameCatalogItem? currentGame;
 
-    public MainWindowViewModel()
+    public MainWindowViewModel() : this(new AccountServices(), new SettingsViewModel()) { }
+
+    internal MainWindowViewModel(AccountServices accounts, SettingsViewModel settings)
     {
-        Library = new LibraryViewModel(OpenGame);
+        Accounts = new AccountsViewModel(accounts);
+        Library = new LibraryViewModel(OpenGame, accounts, () => Navigate("account"));
         RecipeStudio = new RecipeStudioViewModel();
-        Settings = new SettingsViewModel();
+        Settings = settings;
         currentPage = Library;
         Library.ScanCommand.Execute(null);
     }

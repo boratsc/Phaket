@@ -74,7 +74,7 @@ public sealed class SandboxRealArtifactTests
         public OperationPlan Plan(Recipe recipe) => OperationPlanner.Plan(recipe, new PlannerContext("sandbox", "profile",
             Game, Profile, Staging, Packages, Definition,
             new PlanFacts("linux", "steam", "2026.11.14", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string,string> { ["bepinex"] = recipe.Id.Contains("among-us") ? "6.0.700" : "5.4.2360" })));
+                new Dictionary<string,string> { ["bepinex"] = recipe.Id.Contains("among-us") ? "6.0.700" : "5.4.2360" }, Arch: Definition.Slug == "valheim" ? "x64" : "x86")));
         public PlanExecutor Executor(Recipe recipe, Action<string>? fault = null) => new(new PlanExecutionContext(
             Game, Profile, Staging, Packages, Definition, recipe.Id, "profile", State), fault);
     }

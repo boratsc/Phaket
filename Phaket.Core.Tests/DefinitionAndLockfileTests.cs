@@ -77,7 +77,7 @@ public class DefinitionTests
                 },
                 Artifacts =
                 [
-                    new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip" },
+                    new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip", Arch = "x86" },
                     new RecipeArtifact { Id = "mod-bundle", Source = "package://mod-bundle.zip" },
                 ],
                 Steps =
@@ -96,7 +96,7 @@ public class DefinitionTests
                 ],
             };
 
-            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false);
+            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false, Arch: "x86");
             var plannerContext = new PlannerContext("install-1", "profile-1",
                 game, profile, staging, packages, definition, facts);
             var plan = OperationPlanner.Plan(recipe, plannerContext);
@@ -144,11 +144,11 @@ public class DefinitionTests
                 Version = "1.0.0",
                 Target = new RecipeTarget { Game = "among-us", Systems = ["windows", "linux"] },
                 Requires = new RecipeRequires { Capabilities = ["loader.ensure"] },
-                Artifacts = [new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip" }],
+                Artifacts = [new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip", Arch = "x86" }],
                 Steps = [new RecipeStep { Id = "ensure", Use = "loader.ensure",
                     With = ExecutorFixture.Params(("id", "bepinex"), ("artifact", "loader-bundle")) }],
             };
-            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false);
+            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game,
                 Path.Combine(root, "profile"), Path.Combine(root, "staging"), root, definition, facts));
             var executor = new PlanExecutor(new PlanExecutionContext(game,
@@ -169,7 +169,7 @@ public class DefinitionTests
             fixture.GameRoot, fixture.ProfileRoot, fixture.StagingRoot, fixture.PackageRoot,
             _ => fixture.FullRecipe());
         var installation = new Installation("install-1", "among-us-steam", fixture.GameRoot);
-        var facts = new InstallationFacts(installation, ["2026.3.5"], [.. OperationCatalog.Capabilities]);
+        var facts = new InstallationFacts(installation, ["2026.3.5"], [.. OperationCatalog.Capabilities], "x86");
         var profile = new Profile("profile-1", installation.InstallationId, [new RecipeRef("test.recipe", "1.0.0")]);
 
         var methods = adapter.SupportedMethods(facts);

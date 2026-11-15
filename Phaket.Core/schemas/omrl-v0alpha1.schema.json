@@ -34,7 +34,7 @@
             "additionalProperties": false,
             "required": ["store"],
             "properties": {
-              "store": { "enum": ["steam", "epic"] },
+              "store": { "enum": ["steam", "epic", "itch", "msstore"] },
               "os": { "type": "array", "uniqueItems": true, "items": { "enum": ["windows", "linux"] } }
             }
           }
@@ -46,6 +46,7 @@
         }
       }
     },
+    "when": { "$ref": "#/$defs/condition" },
     "requires": {
       "type": "object",
       "additionalProperties": false,
@@ -75,6 +76,7 @@
           "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
           "source": { "type": "string", "minLength": 1 },
           "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "arch": { "enum": ["x86", "x64"] },
           "sizeBytes": { "type": "integer", "minimum": 1 },
           "format": { "enum": ["zip"] }
         }
@@ -120,7 +122,9 @@
         "gameVersion": { "type": "string", "minLength": 1 },
         "fileExists": { "type": "string", "minLength": 1 },
         "capability": { "type": "string", "minLength": 1 },
-        "store": { "enum": ["steam", "epic"] }
+        "store": { "enum": ["steam", "epic", "itch", "msstore"] },
+        "arch": { "enum": ["x86", "x64"] },
+        "buildId": { "type": "string", "minLength": 1 }
       }
     }
   }

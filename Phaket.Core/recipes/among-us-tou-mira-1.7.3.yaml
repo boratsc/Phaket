@@ -1,18 +1,5 @@
-# Town of Us Mira 1.7.3 for Among Us (Steam + Epic editions).
-# Real digests of the GitHub release assets (fetched 2026-11-13):
-#   TouMira.v1.7.3-x86-steam-itch.zip  9037afe3... (91654060 B)
-#   BepInExPack_AmongUs 6.0.700        88bbefc7... (31432183 B, Thunderstore)
-#   BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip  616ec7eb... (GitHub; Epic needs x64,
-#   exactly like SUSModder's variant selection: Epic => x64 BepInEx)
-# The mod DLLs are byte-identical in the steam and epic packs, but each pack ships
-# its own doorstop layer (x86 for Steam, x64 for Epic), so the mod artifact is
-# per-store exactly like SUSModder's platform/arch variant selection.
-# The mod pack is extracted as a whole tree (plugins + configs + its doorstop
-# layer), like SUSModder's CopyContent, but with ownership: files shared with the
-# loader show up as plan conflicts and are recomputed from remaining owners on
-# uninstall. Game version pin: TOU Mira 1.7.3 targets Among Us v17.4 == 2026.8.18;
-# vanilla is provisioned per store with an exact pin (DepotDownloader -manifest on
-# Steam, legendary on Epic) — never copied from the user's Steam library.
+# Town of Us Mira 1.7.3: x86 Steam/itch release, capped at Steam build 24302054.
+# Steam provisions the pinned vanilla version; itch uses the selected installation.
 schemaVersion: omrl/v0alpha1
 id: community.github.town-of-us-mira
 version: 1.7.3
@@ -30,9 +17,13 @@ target:
     - linux
   editions:
     - store: steam
-    - store: epic
+    - store: itch
   constraints:
     gameVersion: "=2026.8.18"
+when:
+  all:
+    - arch: x86
+    - buildId: "<=24302054"
 requires:
   capabilities:
     - game.provision
@@ -44,11 +35,13 @@ requires:
       version: ">=6.0"
 artifacts:
   - id: loader-x86
+    arch: x86
     source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
     sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
     sizeBytes: 31432183
     format: zip
   - id: loader-x64
+    arch: x64
     source: https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip
     sha256: 616ec7eb06cf11b2a0000e8fcef04d1b12bb58e84a2e0bdac9523234fc193ceb
     sizeBytes: 34146254

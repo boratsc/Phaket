@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Phaket\Phaket.csproj" />
+    <Compile Include="..\Phaket.Core.Tests\InMemorySecretStore.cs" Link="InMemorySecretStore.cs" />
   </ItemGroup>
 
   <ItemGroup>

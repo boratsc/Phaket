@@ -27,6 +27,35 @@ public sealed class EpicAccountService : IAccountService
     public AccountInfo? Current { get; private set; }
     public event Action? AccountChanged;
 
+    public async Task<string> GetAccessTokenAsync(CancellationToken ct = default)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (stored is null) throw new InvalidOperationException("Nie zalogowano do Epic / Not signed in to Epic.");
+            if (stored.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                var token = await TokenAsync(new() { ["grant_type"] = "refresh_token", ["refresh_token"] = stored.RefreshToken, ["token_type"] = "eg1" }, ct);
+                stored = stored with { AccessToken = token.AccessToken, RefreshToken = token.RefreshToken, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn) };
+                await SaveAsync(stored, ct);
+            }
+            return stored.AccessToken;
+        }
+        finally { gate.Release(); }
+    }
+
+    internal async Task<Platforms.LegendaryTokens> GetLegendaryTokensAsync(CancellationToken ct = default)
+    {
+        await GetAccessTokenAsync(ct);
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (stored is null) throw new InvalidOperationException("Nie zalogowano do Epic / Not signed in to Epic.");
+            return new(stored.AccessToken, stored.RefreshToken, stored.ExpiresAt, stored.AccountId, stored.DisplayName);
+        }
+        finally { gate.Release(); }
+    }
+
     public EpicAccountService(string? storePath = null)
         : this(storePath, null, url => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })) { }
 
@@ -34,11 +63,11 @@ public sealed class EpicAccountService : IAccountService
     public EpicAccountService(string? storePath, Action<string> openBrowser)
         : this(storePath, null, openBrowser) { }
 
-    internal EpicAccountService(string? storePath, HttpMessageHandler? handler, Action<string> openBrowser)
+    internal EpicAccountService(string? storePath, HttpMessageHandler? handler, Action<string> openBrowser, ISecretStore? secretStore = null)
     {
         http = handler is null ? SharedHttp : new HttpClient(handler);
         this.openBrowser = openBrowser;
-        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "epic.bin")));
+        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "epic.bin")), secretStore);
         try
         {
             byte[]? data = store.Load();

@@ -23,13 +23,30 @@ public sealed record GameDefinition(
     string? DetectionStrategy = null,
     IReadOnlyDictionary<string, string>? Title = null,
     string? MainExecutable = null,
-    IReadOnlyList<GameLaunchRequirement>? LaunchRequirements = null)
+    IReadOnlyList<GameLaunchRequirement>? LaunchRequirements = null,
+    // Operating systems the shipped game binary actually runs on. Null = every
+    // system the definition is used on. Among Us ships a Windows-only executable,
+    // so under Proton on Linux its depot artifact is still "windows".
+    IReadOnlyList<string>? Platforms = null,
+    // Architecture a fresh sandbox/install is assumed to be when nothing was probed
+    // or chosen: the CURRENT retail build, so the default loader pack matches it.
+    string? DefaultArch = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
 
-    public LoaderLayout? Loader(string id) =>
-        LoaderLayouts?.FirstOrDefault(layout => layout.Id == id);
+    // OS to download/install the artifact for: the game's own platform, never the host's.
+    public string ArtifactOs(string hostOs) =>
+        Platforms is { Count: > 0 } systems && !systems.Contains(hostOs, StringComparer.Ordinal)
+            ? systems[0] : hostOs;
+
+    public LoaderLayout? Loader(string id, string? arch = null)
+    {
+        var layouts = LoaderLayouts?.Where(layout => layout.Id == id).ToArray() ?? [];
+        if (arch is null) return layouts.FirstOrDefault();
+        return layouts.FirstOrDefault(layout => layout.Variant == arch)
+            ?? layouts.FirstOrDefault(layout => layout.Variant is not ("x86" or "x64"));
+    }
 
     public IReadOnlyList<GameLaunchRequirement> LaunchRequirementsFor(string os) =>
         (LaunchRequirements ?? [])
@@ -91,6 +108,8 @@ public static class GameDefinitionLoader
         public IReadOnlyDictionary<string, string>? Title { get; init; }
         public string? MainExecutable { get; init; }
         public IReadOnlyList<GameLaunchRequirement>? LaunchRequirements { get; init; }
+        public IReadOnlyList<string>? Platforms { get; init; }
+        public string? DefaultArch { get; init; }
     }
 
     private sealed record DetectionDto
@@ -109,7 +128,8 @@ public static class GameDefinitionLoader
         if (dto.SchemaVersion != "game-definition/v0alpha1")
             throw new PhaketException(ErrorCodes.UnsupportedSchemaVersion, ("schemaVersion", dto.SchemaVersion));
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
-            dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements);
+            dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
+            dto.Platforms, dto.DefaultArch);
     }
 }
 
@@ -132,10 +152,12 @@ public static class SourcePolicy
 
     public static void AllowGitHubRepository(string ownerAndRepo) => GitHubRepos.Add(ownerAndRepo);
 
-    public static bool IsAllowedHttpsSource(string source)
+    public static bool IsAllowedHttpsSource(string source, string? sha256 = null)
     {
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
         if (uri.Scheme != "https") return false;
+        if (uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase))
+            return sha256 is not null;
         if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
         {
             var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, "^/([^/]+/[^/]+)/releases/download/");

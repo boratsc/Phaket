@@ -7,6 +7,7 @@ using Phaket.Core.Catalog;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
+using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
 
@@ -14,6 +15,24 @@ namespace Phaket.Tests;
 
 public class ModInstallViewModelTests
 {
+    [AvaloniaTheory]
+    [InlineData("steam")]
+    [InlineData("epic")]
+    public async Task PreviewShowsPlanWarningsAndLoaderFailure(string store)
+    {
+        var vm = new ModCatalogViewModel("among-us", "/tmp/opencode/ui4-test", autoSync: false);
+        var preparation = Preparation();
+        var plan = preparation.Plans[0] with { Warnings = ["ARCH_UNKNOWN", "BUILD_UNKNOWN", "future-warning"] };
+        vm.PrepareOverride = (_, _, _, _, _) => Task.FromResult(preparation with { Plans = [plan] });
+        await vm.BeginInstallAsync("Owner-Mod", "2.0", Target with { Store = store });
+        Assert.Equal(3, vm.PlanWarnings.Count);
+        Assert.Contains(LocalizationService.Instance["ModInstall.WarningArchUnknown"], vm.PlanWarnings);
+        Assert.Contains("future-warning", vm.PlanWarnings[2]);
+        vm.PrepareOverride = (_, _, _, _, _) => throw new PhaketException("LOADER_ARCH_UNAVAILABLE");
+        await vm.BeginInstallAsync("Owner-Mod", "2.0", Target with { Store = store });
+        Assert.Empty(vm.PlanWarnings);
+        Assert.Equal(LocalizationService.Instance["ModInstall.LoaderArchUnavailable"], vm.InstallStatus);
+    }
     private static readonly InstallTarget Target = new("", "steam", true);
     private static InstallPreparation Preparation(IReadOnlyList<ConflictProposal>? conflicts = null) => new(
         "among-us", "Owner-Mod", "2.0", "http://localhost", Target,

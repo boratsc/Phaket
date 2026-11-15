@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Phaket.Core.Catalog;
 
 namespace Phaket.Core.Tests;
@@ -31,6 +32,69 @@ public class CatalogClientTests
         var transport = new FakeTransport();
         var store = new CatalogStore(Path.Combine(dir, "catalog.db"));
         return (transport, store, new CatalogClient(transport, store), dir);
+    }
+
+    [Fact]
+    public async Task SnapshotAndDeltaCacheArchitectureAndPreserveEtag()
+    {
+        var (transport, store, client, dir) = Setup();
+        try
+        {
+            var x64 = BuildJson("one").Replace("\"store\":", "\"arch\":\"x64\",\"store\":");
+            var unknown = BuildJson("two").Replace("\"store\":", "\"arch\":\"unknown\",\"store\":");
+            var nullArch = BuildJson("three").Replace("\"store\":", "\"arch\":null,\"store\":");
+            transport.Responses.Enqueue(new CatalogResponse(200, "\"snapshot\"", $$"""
+                {"revision":1,"items":[{{x64}},{{unknown}},{{nullArch}},{{BuildJson("four")}}],"nextCursor":null}
+                """));
+            await client.FullSyncAsync(TestContext.Current.CancellationToken);
+            var builds = store.GetBuilds("among-us");
+            Assert.Equal("x64", builds.Single(b => b.Id == "one").Arch);
+            Assert.All(builds.Where(b => b.Id != "one"), b => Assert.Null(b.Arch));
+            Assert.Equal("public", builds.Single(b => b.Id == "one").Branch);
+            Assert.Equal("b1", builds.Single(b => b.Id == "one").BuildId);
+
+            var x86 = x64.Replace("x64", "x86");
+            transport.Responses.Enqueue(new CatalogResponse(200, null, $$"""
+                {"revision":2,"nextSince":2,"hasMore":false,"changes":[
+                  {"revision":2,"type":"upsert","buildId":"one","payload":{{x86}}}]}
+                """));
+            await client.SyncAsync(TestContext.Current.CancellationToken);
+            Assert.Equal("x86", store.GetBuilds("among-us").Single(b => b.Id == "one").Arch);
+            Assert.Equal("\"snapshot\"", store.ETag);
+            Assert.Equal(2, store.Revision);
+            Assert.DoesNotContain(transport.Requests, r => r.Contains("etag="));
+        }
+        finally { store.Dispose(); Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void OldDatabaseMigratesWithoutLosingBuildsOrMetadata()
+    {
+        var dir = Directory.CreateTempSubdirectory("phaket-catalog-old-").FullName;
+        var path = Path.Combine(dir, "catalog.db");
+        try
+        {
+            using (var store = new CatalogStore(path))
+            {
+                store.ReplaceAll(JsonSerializer.SerializeToElement(new[] { JsonSerializer.Deserialize<JsonElement>(BuildJson("old")) }), 7, "old-etag");
+            }
+            using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                connection.Open();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE catalog_builds DROP COLUMN arch; ALTER TABLE catalog_builds DROP COLUMN released_at";
+                cmd.ExecuteNonQuery();
+            }
+            using (var store = new CatalogStore(path))
+            {
+                Assert.Null(Assert.Single(store.GetBuilds("among-us")).Arch);
+                Assert.Equal(7, store.Revision);
+                Assert.Equal("old-etag", store.ETag);
+            }
+            using var reopened = new CatalogStore(path);
+            Assert.Single(reopened.GetBuilds("among-us"));
+        }
+        finally { Directory.Delete(dir, true); }
     }
 
     [Fact]

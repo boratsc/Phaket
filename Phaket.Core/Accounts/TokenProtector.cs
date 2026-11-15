@@ -2,54 +2,38 @@ using System.Security.Cryptography;
 
 namespace Phaket.Core.Accounts;
 
-internal interface ITokenProtector
+internal sealed class TokenProtector(string storePath, ISecretStore? store = null)
 {
-    byte[] Protect(byte[] data);
-    byte[] Unprotect(byte[] data);
-}
+    private readonly ISecretStore store = store ?? SecretStoreFactory.Create();
+    private readonly string key = Path.GetFileNameWithoutExtension(storePath);
 
-internal sealed class TokenProtector(string storePath) : ITokenProtector
-{
-    private string KeyPath => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(storePath))!, "key.bin");
-
-    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
-    private byte[] Key()
+    public async Task ProtectAsync(byte[] data, CancellationToken ct = default)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(KeyPath)!);
-        try
-        {
-            using var file = new FileStream(KeyPath, new FileStreamOptions
-            {
-                Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None,
-                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-            });
-            byte[] key = RandomNumberGenerator.GetBytes(32);
-            file.Write(key);
-            return key;
-        }
-        catch (IOException) when (File.Exists(KeyPath)) { }
-        File.SetUnixFileMode(KeyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        byte[] existing = File.ReadAllBytes(KeyPath);
-        if (existing.Length != 32) throw new CryptographicException("Invalid account key.");
-        return existing;
+        try { await store.SetAsync(key, data, ct).ConfigureAwait(false); }
+        catch (SecretStoreException ex) { throw new CryptographicException($"{ex.Code}: {ex.Message}", ex); }
     }
 
-    public byte[] Protect(byte[] data)
+    public async Task<byte[]?> UnprotectAsync(CancellationToken ct = default)
     {
-        if (OperatingSystem.IsWindows()) return ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
-        byte[] output = new byte[12 + data.Length + 16];
-        RandomNumberGenerator.Fill(output.AsSpan(0, 12));
-        using var aes = new AesGcm(Key(), 16);
-        aes.Encrypt(output.AsSpan(0, 12), data, output.AsSpan(12, data.Length), output.AsSpan(12 + data.Length, 16));
-        return output;
+        try { return await store.GetAsync(key, ct).ConfigureAwait(false); }
+        catch (SecretStoreException ex) { throw new CryptographicException($"{ex.Code}: {ex.Message}", ex); }
     }
 
-    public byte[] Unprotect(byte[] data)
+    public async Task DeleteAsync(CancellationToken ct = default)
     {
+        try { await store.DeleteAsync(key, ct).ConfigureAwait(false); }
+        catch (SecretStoreException ex) { throw new CryptographicException($"{ex.Code}: {ex.Message}", ex); }
+    }
+
+    internal static byte[] LegacyRead(string path)
+    {
+        byte[] data = Convert.FromBase64String(File.ReadAllText(path));
         if (OperatingSystem.IsWindows()) return ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
         if (data.Length < 28) throw new CryptographicException("Invalid account data.");
+        byte[] key = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "key.bin"));
+        if (key.Length != 32) throw new CryptographicException("Invalid account key.");
         byte[] output = new byte[data.Length - 28];
-        using var aes = new AesGcm(Key(), 16);
+        using var aes = new AesGcm(key, 16);
         aes.Decrypt(data.AsSpan(0, 12), data.AsSpan(12, output.Length), data.AsSpan(12 + output.Length, 16), output);
         return output;
     }

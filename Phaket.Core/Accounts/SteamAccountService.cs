@@ -30,14 +30,14 @@ public sealed class SteamAccountService : IAccountService
     public SteamAccountService(string? storePath = null, string? redirectUri = null)
         : this(storePath, redirectUri, null, url => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })) { }
 
-    internal SteamAccountService(string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser)
+    internal SteamAccountService(string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser, ISecretStore? secretStore = null)
     {
         redirect = new Uri(redirectUri ?? "http://127.0.0.1:53125/steam/callback", UriKind.Absolute);
         if (redirect.Scheme != "http" || redirect.Host != "127.0.0.1" || redirect.Port <= 0 || !string.IsNullOrEmpty(redirect.Query) || !string.IsNullOrEmpty(redirect.Fragment) || !string.IsNullOrEmpty(redirect.UserInfo))
             throw new ArgumentException("Nieprawidłowy adres zwrotny / Invalid callback address.", nameof(redirectUri));
         http = handler is null ? SharedHttp : new HttpClient(handler);
         this.openBrowser = openBrowser;
-        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "steam.bin")));
+        store = new EncryptedStore(Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "steam.bin")), secretStore);
         try
         {
             byte[]? bytes = store.Load();

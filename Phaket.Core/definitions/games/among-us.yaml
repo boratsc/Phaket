@@ -9,9 +9,16 @@ storeIds:
 detection:
   strategy: steam-manifest
 mainExecutable: Among Us.exe
+# Since v19.0.0 (2026.9.29) the Steam build is x64; older builds and itch are x86.
+defaultArch: x64
+# InnerSushi ships one Windows executable; under Proton on Linux the Windows depot
+# is the correct artifact, so the download OS is the game's, never the host's.
+platforms:
+  - windows
 writableAreas:
   - BepInEx/**
   - dotnet/**
+  - CorsacCosmetics/**
   - winhttp.dll
   - doorstop_config.ini
   - .doorstop_version

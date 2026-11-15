@@ -2,27 +2,13 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Phaket.Core.Accounts;
+using Phaket.Core.Tests;
 
 public sealed class AccountsTests
 {
+    private readonly InMemorySecretStore memory = new();
     [Fact]
     public void PkceMatchesRfc7636() => Assert.Equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", AccountPkce.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
-
-    [Fact]
-    public void ProtectorRoundTrip()
-    {
-        string dir = Directory.CreateTempSubdirectory("phaket-account-").FullName;
-        try
-        {
-            var protector = new TokenProtector(Path.Combine(dir, "account.bin"));
-            byte[] plain = Encoding.UTF8.GetBytes("test secret");
-            byte[] encrypted = protector.Protect(plain);
-            Assert.NotEqual(plain, encrypted);
-            Assert.Equal(plain, protector.Unprotect(encrypted));
-            if (!OperatingSystem.IsWindows()) Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(dir, "key.bin")));
-        }
-        finally { Directory.Delete(dir, true); }
-    }
 
     [Fact]
     public async Task LoginReloadRefreshAndLogout()
@@ -33,15 +19,15 @@ public sealed class AccountsTests
             string store = Path.Combine(dir, "account.bin");
             string redirect = Redirect();
             var handler = new FakeHandler();
-            var service = new DiscordAccountService("https://config.example/", store, redirect, handler, Browser(redirect, false));
+            var service = new DiscordAccountService("https://config.example/", store, redirect, handler, Browser(redirect, false), memory);
             int changes = 0;
             service.AccountChanged += () => changes++;
             var account = await service.LoginAsync(TestContext.Current.CancellationToken);
             Assert.Equal("42", account.UserId);
             Assert.Equal(account, service.Current);
             Assert.Equal(1, changes);
-            Assert.DoesNotContain("access-secret", await File.ReadAllTextAsync(store, TestContext.Current.CancellationToken));
-            var reloaded = new DiscordAccountService("https://config.example/", store, redirect, handler, Browser(redirect, false));
+            Assert.False(File.Exists(store));
+            var reloaded = new DiscordAccountService("https://config.example/", store, redirect, handler, Browser(redirect, false), memory);
             Assert.Equal(account, reloaded.Current);
             await reloaded.RefreshAsync(TestContext.Current.CancellationToken);
             Assert.Equal(1, handler.Refreshes);
@@ -62,7 +48,7 @@ public sealed class AccountsTests
         {
             string redirect = Redirect();
             var handler = new FakeHandler();
-            var service = new DiscordAccountService("https://config.example/", Path.Combine(dir, "account.bin"), redirect, handler, Browser(redirect, true));
+            var service = new DiscordAccountService("https://config.example/", Path.Combine(dir, "account.bin"), redirect, handler, Browser(redirect, true), memory);
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.LoginAsync(TestContext.Current.CancellationToken));
             Assert.Null(service.Current);
             Assert.Equal(0, handler.Exchanges);

@@ -11,6 +11,7 @@ public sealed record Recipe
     public required string Version { get; init; }
     public RecipeMetadata? Metadata { get; init; }
     public required RecipeTarget Target { get; init; }
+    public RecipeCondition? When { get; init; }
     public RecipeRequires? Requires { get; init; }
     public IReadOnlyList<RecipeArtifact> Artifacts { get; init; } = [];
     public required IReadOnlyList<RecipeStep> Steps { get; init; }
@@ -59,6 +60,7 @@ public sealed record RecipeArtifact
     public required string Id { get; init; }
     public required string Source { get; init; }
     public string? Sha256 { get; init; }
+    public string? Arch { get; init; }
     public long? SizeBytes { get; init; }
     public string Format { get; init; } = "zip";
 }
@@ -88,4 +90,6 @@ public sealed record RecipeCondition
     public string? FileExists { get; init; }
     public string? Capability { get; init; }
     public string? Store { get; init; }
+    public string? Arch { get; init; }
+    public string? BuildId { get; init; }
 }

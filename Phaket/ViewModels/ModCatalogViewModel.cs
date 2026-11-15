@@ -10,6 +10,7 @@ using Phaket.Core.Catalog;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
+using Phaket.Core.Omrl;
 using Phaket.Services;
 
 namespace Phaket.ViewModels;
@@ -35,12 +36,11 @@ public partial class ModCatalogViewModel : ViewModelBase
         Targets.Add(new InstallTargetChoice(LocalizationService.Instance["ModInstall.Sandbox"], new("", "steam", true)));
         if (game is not null)
         {
-            var installations = game.Installations.AsEnumerable();
-            if (game.Detected is { } detected) installations = installations.Append(detected);
-            foreach (var path in installations.Select(i => i.Installation.RootPath).Where(Directory.Exists).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
-                Targets.Add(new InstallTargetChoice($"Steam — {path}", new(path, "steam", false)));
+            foreach (var installation in game.AvailableInstallations)
+                Targets.Add(new InstallTargetChoice(installation.Label, new(installation.RootPath, installation.Store, false)));
         }
         SelectedTarget = Targets[0];
+        SelectedArch = game?.Definition.DefaultArch;
         if (autoSync) _ = RefreshCommand.ExecuteAsync(null);
     }
     public ObservableCollection<ThunderstoreMod> Mods { get; } = [];
@@ -126,7 +126,7 @@ public partial class ModCatalogViewModel : ViewModelBase
     [ObservableProperty] private bool isSandboxTarget;
     public ObservableCollection<InstallTargetChoice> Targets { get; } = [];
     [ObservableProperty] private InstallTargetChoice? selectedTarget;
-    partial void OnSelectedTargetChanged(InstallTargetChoice? value) { if (!IsPreparing) ClearInstall(); }
+    partial void OnSelectedTargetChanged(InstallTargetChoice? value) { OnPropertyChanged(nameof(SandboxSelected)); if (!IsPreparing) ClearInstall(); }
 
     [RelayCommand]
     private async Task ChooseFolderAsync()
@@ -146,8 +146,18 @@ public partial class ModCatalogViewModel : ViewModelBase
         }
         catch (Exception) { InstallStatus = LocalizationService.Instance["ModInstall.FolderFailed"]; }
     }
+    // PAK-65: a sandbox has no binary to probe, so its architecture is an explicit choice that
+    // defaults to the game definition's current retail build. Real installations keep the
+    // service-side PE probe; the choice is not stamped onto them.
+    public ObservableCollection<string> Architectures { get; } = ["x64", "x86"];
+    [ObservableProperty] private string? selectedArch;
+    // Only a sandbox needs a declared architecture; a real install is probed from its binary.
+    public bool SandboxSelected => SelectedTarget?.Target.Sandbox == true;
+    partial void OnSelectedArchChanged(string? value) { if (!IsPreparing) ClearInstall(); }
+
     public ObservableCollection<InstallPreview> Preview { get; } = [];
     public ObservableCollection<PlannedOperation> Operations { get; } = [];
+    public ObservableCollection<string> PlanWarnings { get; } = [];
     public ObservableCollection<ConflictProposal> Conflicts { get; } = [];
     partial void OnPlanAcceptedChanged(bool value) => ExecuteInstallCommand.NotifyCanExecuteChanged();
     partial void OnHasPreviewChanged(bool value) => ExecuteInstallCommand.NotifyCanExecuteChanged();
@@ -170,24 +180,45 @@ public partial class ModCatalogViewModel : ViewModelBase
     private async Task PrepareInstallAsync()
     {
         PlanAccepted = false; HasPreview = false; HasConflicts = false; preparation = null;
-        Preview.Clear(); Operations.Clear(); Conflicts.Clear(); InstallStatus = ""; IsPreparing = true;
+        Preview.Clear(); Operations.Clear(); PlanWarnings.Clear(); Conflicts.Clear(); InstallStatus = ""; IsPreparing = true;
         try
         {
+            // Only the sandbox has no binary to probe, so only there the chosen architecture is a fact.
+            var installTarget = target.Sandbox && SelectedArch is { } chosen ? target with { Arch = chosen } : target;
             InstallPreparation result;
-            if (PrepareOverride is not null) result = await PrepareOverride(requestedName, requestedVersion, Endpoint, target, overrides);
+            if (PrepareOverride is not null) result = await PrepareOverride(requestedName, requestedVersion, Endpoint, installTarget, overrides);
             else
             {
                 using var http = transport is null ? CreateHttp() : null;
                 using var db = new ModCatalogStore(Path.Combine(appDataRoot, "catalog.db"));
                 var service = new ModInstallService(appDataRoot, new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), db));
-                result = await service.PrepareAsync(gameId, requestedName, requestedVersion, Endpoint, target, overrides);
+                result = await service.PrepareAsync(gameId, requestedName, requestedVersion, Endpoint, installTarget, overrides);
             }
             foreach (var conflict in result.Conflicts) Conflicts.Add(conflict);
             HasConflicts = Conflicts.Count > 0;
+            // PAK-65: a recipe that matched no operations must not offer an "install" that
+            // changes nothing; there is nothing to accept and nothing to register.
+            if (!HasConflicts && result.Plans.Count > 0 && result.Plans.Any(p => p.Operations.Count == 0))
+            {
+                InstallStatus = ErrorMessages.Format(ErrorCodes.PlanEmpty, LocalizationService.Instance.CurrentLanguage);
+                return;
+            }
             if (!HasConflicts)
             {
                 preparation = result;
                 foreach (var package in result.Preview) Preview.Add(package);
+                foreach (var warning in result.Plans.SelectMany(p => p.Warnings).Distinct())
+                {
+                    var loc = LocalizationService.Instance;
+                    var text = warning switch
+                    {
+                        "ARCH_UNKNOWN" => loc["ModInstall.WarningArchUnknown"],
+                        "BUILD_UNKNOWN" => loc["ModInstall.WarningBuildUnknown"],
+                        "loader-overwrite-unknown" => loc["ModInstall.WarningLoaderOverwriteUnknown"],
+                        _ => loc["ModInstall.WarningOther"] + " " + warning
+                    };
+                    PlanWarnings.Add(text);
+                }
                 IsSandboxTarget = result.Target.Sandbox;
                 TargetDescription = result.Target.Sandbox ? Path.Combine(result.SandboxRoot, "game") : result.Target.GameRoot;
                 foreach (var operation in result.Plans.SelectMany(p => p.Operations))
@@ -197,6 +228,10 @@ public partial class ModCatalogViewModel : ViewModelBase
                 HasPreview = true;
             }
         }
+        catch (PhaketException ex) when (ex.Error.Code == "LOADER_ARCH_UNAVAILABLE") { InstallStatus = LocalizationService.Instance["ModInstall.LoaderArchUnavailable"]; }
+        // The planner refused because a needed fact (arch/build) is unknown: say which one.
+        catch (PhaketException ex) when (ex.Error.Code == ErrorCodes.InstallFactsMissing)
+        { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
         catch (Exception) { InstallStatus = LocalizationService.Instance["ModInstall.PrepareFailed"]; }
         finally { IsPreparing = false; }
     }
@@ -216,7 +251,7 @@ public partial class ModCatalogViewModel : ViewModelBase
     private void ClearInstall()
     {
         PlanAccepted = false; HasPreview = false; HasConflicts = false; preparation = null;
-        Preview.Clear(); Operations.Clear(); Conflicts.Clear();
+        Preview.Clear(); Operations.Clear(); PlanWarnings.Clear(); Conflicts.Clear();
     }
     [RelayCommand(CanExecute = nameof(CanExecuteInstall))]
     private async Task ExecuteInstallAsync()

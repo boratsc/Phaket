@@ -8,6 +8,8 @@ storeIds:
 detection:
   strategy: steam-manifest
 mainExecutable: valheim.exe
+# Valheim ships native Windows and Linux builds, and BepInExPack_Valheim is x64 only.
+defaultArch: x64
 writableAreas:
   # Real BepInExPack_Valheim 5.4.2360 installs these root files/directories.
   - BepInEx/**

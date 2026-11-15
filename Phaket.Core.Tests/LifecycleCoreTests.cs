@@ -39,6 +39,28 @@ public class LifecycleCoreTests
     };
 
     [Fact]
+    public async Task Downloader_BepInExBuildRequiresAndChecksHash()
+    {
+        const string url = "https://builds.bepinex.dev/projects/bepinex_be/793/loader.zip";
+        var root = Directory.CreateTempSubdirectory("phaket-dl-").FullName;
+        try
+        {
+            var bytes = "loader"u8.ToArray();
+            var recipe = RemoteRecipe(bytes, source: url);
+            var transport = new FakeTransport(bytes);
+            Assert.False(SourcePolicy.IsAllowedHttpsSource(url));
+            Assert.True(SourcePolicy.IsAllowedHttpsSource(url, Hash(bytes)));
+            Assert.False(SourcePolicy.IsAllowedHttpsSource("https://builds.bepinex.dev.evil.example/loader.zip", Hash(bytes)));
+            var unpinned = recipe with { Artifacts = [recipe.Artifacts[0] with { Sha256 = null }] };
+            await Assert.ThrowsAsync<PhaketException>(() => PackageDownloader.EnsureArtifactsAsync(unpinned, root, transport, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(0, transport.Calls);
+            Assert.Single(await PackageDownloader.EnsureArtifactsAsync(recipe, root, transport, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(1, transport.Calls);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task Downloader_FetchesVerifiesAndCaches()
     {
         var root = Directory.CreateTempSubdirectory("phaket-dl-").FullName;
@@ -206,7 +228,7 @@ public class LifecycleCoreTests
                 Requires = new RecipeRequires { Capabilities = ["loader.ensure", "archive.extract", "file.copy"] },
                 Artifacts =
                 [
-                    new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip" },
+                    new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip", Arch = "x86" },
                     new RecipeArtifact { Id = "better-polus", Source = "package://better-polus.zip" },
                 ],
                 Steps =
@@ -225,7 +247,7 @@ public class LifecycleCoreTests
                 ],
             };
             var facts = new PlanFacts("linux", "steam", "2026.1.1", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition, facts));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state));
             var journal = new InstallOrchestrator(executor).Run(plan);

@@ -20,6 +20,7 @@ requires:
       version: ">=6.0"
 artifacts:
   - id: loader-pack
+    arch: x86
     source: https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/
     sha256: 88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564
     sizeBytes: 31432183

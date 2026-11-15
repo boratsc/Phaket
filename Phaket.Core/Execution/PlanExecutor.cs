@@ -55,6 +55,8 @@ public sealed class PlanExecutor : IPlanExecutorHost
 
     public ExecutionJournal Approve(OperationPlan plan)
     {
+        if (plan.Operations.Count == 0)
+            throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "Cannot execute an empty plan."));
         var journal = new ExecutionJournal(ExecutionJournal.CurrentSchemaVersion,
             Guid.NewGuid().ToString("N"), plan.PlanId, JournalState.Approved, []);
         Persist(journal);

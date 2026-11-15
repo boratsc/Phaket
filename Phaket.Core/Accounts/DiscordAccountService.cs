@@ -10,6 +10,8 @@ using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Phaket.Core.Tests")]
+[assembly: InternalsVisibleTo("Phaket")]
+[assembly: InternalsVisibleTo("Phaket.Tests")]
 namespace Phaket.Core.Accounts;
 
 public sealed class DiscordAccountService : IAccountService
@@ -33,7 +35,7 @@ public sealed class DiscordAccountService : IAccountService
     public DiscordAccountService(string? configEndpoint = null, string? storePath = null, string? redirectUri = null)
         : this(configEndpoint, storePath, redirectUri, null, url => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })) { }
 
-    internal DiscordAccountService(string? configEndpoint, string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser)
+    internal DiscordAccountService(string? configEndpoint, string? storePath, string? redirectUri, HttpMessageHandler? handler, Action<string> openBrowser, ISecretStore? secretStore = null)
     {
         this.configEndpoint = configEndpoint ?? "https://clairbot.app/api/susmodder/config";
         this.storePath = Path.GetFullPath(storePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "account.bin"));
@@ -43,7 +45,7 @@ public sealed class DiscordAccountService : IAccountService
             throw new ArgumentException("Nieprawidłowy adres zwrotny / Invalid callback address.", nameof(redirectUri));
         http = handler is null ? SharedHttp : new HttpClient(handler);
         this.openBrowser = openBrowser;
-        store = new EncryptedStore(this.storePath);
+        store = new EncryptedStore(this.storePath, secretStore);
         try
         {
             var plaintext = store.Load();

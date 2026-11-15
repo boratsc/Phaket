@@ -28,6 +28,16 @@ public sealed class RecipeGeneratorTests
     }
 
     [Theory]
+    [InlineData("among-us", new[] { "epic", "steam" })]
+    [InlineData("valheim", new[] { "steam" })]
+    public void EditionsFollowGameDefinition(string slug, string[] stores)
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition(slug)));
+        var recipe = RecipeGenerator.Generate("owner-Mod", "1.2.3", "https://thunderstore.io/package/download/owner/Mod/1.2.3/", new string('a', 64), ["A.dll"], game).Recipe;
+        Assert.Equal(stores, recipe.Target.Editions!.Select(edition => edition.Store).Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
     [InlineData("among-us")]
     [InlineData("valheim")]
     public void LoaderPackGeneratesValidEnsure(string slug)
@@ -39,9 +49,10 @@ public sealed class RecipeGeneratorTests
     }
 
     [Theory]
-    [InlineData("among-us")]
-    [InlineData("valheim")]
-    public void RoundTripThroughValidatorAndPlanner(string slug)
+    [InlineData("among-us", "steam")]
+    [InlineData("among-us", "epic")]
+    [InlineData("valheim", "steam")]
+    public void RoundTripThroughValidatorAndPlanner(string slug, string store)
     {
         var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition(slug)));
         foreach (var (name, entries, expected) in new[]
@@ -56,8 +67,8 @@ public sealed class RecipeGeneratorTests
             using var fixture = new PlannerFixture();
             var context = new PlannerContext("install-1", "profile-1", fixture.GameRoot, fixture.ProfileRoot,
                 fixture.StagingRoot, fixture.PackageRoot,
-                slug == "among-us" ? TestFixtures.AmongUs : TestFixtures.Valheim,
-                new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false,
+                game,
+                new PlanFacts("linux", store, "2026.3.5", OperationCatalog.Capabilities, _ => false,
                     new Dictionary<string, string> { ["bepinex"] = "6.0.0" }));
             Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "plugins"));
             Directory.CreateDirectory(Path.Combine(fixture.StagingRoot, "package", "config"));

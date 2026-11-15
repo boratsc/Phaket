@@ -35,7 +35,7 @@ public class RealRecipeTests
             foreach (var path in new[] { game, Path.Combine(root, "profile"), Path.Combine(root, "staging"), Path.Combine(root, "packages") })
                 Directory.CreateDirectory(path);
             var facts = new PlanFacts("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "5.4.2360" });
+                new Dictionary<string, string> { ["bepinex"] = "5.4.2360" }, Arch: recipe.Target.Game == "valheim" ? "x64" : "x86", BuildId: 24302054);
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, Path.Combine(root, "profile"),
                 Path.Combine(root, "staging"), Path.Combine(root, "packages"), definition, facts));
             Assert.NotEmpty(plan.Operations);

@@ -1,10 +1,24 @@
 using System.Text.Json;
+using Json.Schema;
 using Phaket.Core.Omrl;
 
 namespace Phaket.Core.Tests;
 
 public class OperationCatalogTests
 {
+    [Theory]
+    [InlineData("steam", true)]
+    [InlineData("epic", true)]
+    [InlineData("itch", true)]
+    [InlineData("msstore", true)]
+    [InlineData("unknown", false)]
+    public void ProvisionStoreValidation(string store, bool valid)
+    {
+        Assert.True(OperationCatalog.TryGet("game.provision", out var operation));
+        var schema = JsonSchema.FromText(operation!.ParameterSchema);
+        Assert.Equal(valid, schema.Evaluate(JsonSerializer.SerializeToElement(new { store, version = "latest" })).IsValid);
+    }
+
     [Fact]
     public void CatalogHasNineUniqueOperationsWithClosedParameterSchemas()
     {

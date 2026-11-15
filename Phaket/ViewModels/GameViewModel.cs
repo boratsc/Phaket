@@ -16,32 +16,103 @@ public partial class GameCatalogItem : ViewModelBase
         Definition = definition;
         Cover = cover;
         Hero = hero;
+        Installations.CollectionChanged += (_, _) => UpdateAvailability();
     }
 
     public GameDefinition Definition { get; }
     public string Cover { get; }
     public string Hero { get; }
+    public bool HasCover => !string.IsNullOrEmpty(Cover);
     public string Title => Definition.Title?.GetValueOrDefault(LocalizationService.Instance.CurrentLanguage)
         ?? Definition.Title?.GetValueOrDefault("en") ?? Definition.Slug;
     public string SteamAppId => Definition.StoreIds?.GetValueOrDefault("steam") ?? "";
+    public bool IsSupported => !Definition.Slug.StartsWith("epic-owned-", StringComparison.Ordinal) && !Definition.Slug.StartsWith("steam-owned-", StringComparison.Ordinal);
+    [ObservableProperty] private bool epicOwned;
+    [ObservableProperty] private bool steamOwned;
+    [ObservableProperty] private string? epicInstallPath;
+    public bool EpicInstalled => EpicInstallPath is not null;
+    public bool SteamInstalled => Detected is not null && Directory.Exists(Detected.Installation.RootPath);
+    public bool CanOpenGame => IsSupported;
+    public bool OwnedNotInstalled => (EpicOwned || SteamOwned) && !IsInstalled;
+    public bool SteamOwnedNotInstalled => SteamOwned && !SteamInstalled;
+    public bool CanInstallSteam => SteamOwnedNotInstalled && IsSupported && !string.IsNullOrWhiteSpace(Definition.MainExecutable);
+    public bool ShowSteam => SteamOwned || SteamInstalled;
+    public bool EpicOwnedNotInstalled => EpicOwned && !EpicInstalled;
+    public bool CanInstallEpic => EpicOwnedNotInstalled && IsSupported && !string.IsNullOrWhiteSpace(Definition.MainExecutable);
+    public bool EpicUnsupported => EpicOwned && (!IsSupported || string.IsNullOrWhiteSpace(Definition.MainExecutable));
+    public bool NotDetected => !EpicOwned && !SteamOwned && !IsInstalled;
 
     [ObservableProperty] private SteamInstallation? detected;
     public ObservableCollection<SteamInstallation> Installations { get; } = [];
+    public IReadOnlyList<InstallationChoice> AvailableInstallations
+    {
+        get
+        {
+            var paths = Installations.AsEnumerable();
+            if (Detected is { } detected) paths = paths.Append(detected);
+            var choices = paths.Select(i => new InstallationChoice("steam", i.Installation.RootPath, i.Manifest.BuildId))
+                .Where(i => Directory.Exists(i.RootPath)).Distinct().ToList();
+            if (EpicInstallPath is { } epic && Directory.Exists(epic)) choices.Add(new("epic", epic));
+            return choices;
+        }
+    }
+    private InstallationChoice? selectedInstallation;
+    public InstallationChoice? SelectedInstallation
+    {
+        get => AvailableInstallations.FirstOrDefault(i => i == selectedInstallation) ?? AvailableInstallations.FirstOrDefault();
+        set { selectedInstallation = value; OnPropertyChanged(); OnPropertyChanged(nameof(RootPath)); OnPropertyChanged(nameof(IsSelectedSteam)); OnPropertyChanged(nameof(InstallationArchitecture)); }
+    }
+    public bool IsSelectedSteam => SelectedInstallation?.Store == "steam";
     [ObservableProperty] private string profileName = "Profil domyślny";
     [ObservableProperty] private int modCount;
 
-    public bool IsInstalled => Detected is not null && Directory.Exists(Detected.Installation.RootPath);
+    public bool IsInstalled => SteamInstalled || EpicInstalled;
     public string StatusKey => IsInstalled ? "Library.State.Moddable" : "Library.State.NotDetected";
     public string Build => Detected?.Manifest.BuildId ?? "—";
-    public string RootPath => Detected?.Installation.RootPath ?? "—";
+    public string RootPath => SelectedInstallation?.RootPath ?? "—";
+    public string InstallationArchitecture => SelectedInstallation is { } installation
+        ? InstallationArchProbe.Probe(installation.RootPath, Definition) ?? LocalizationService.Instance["Game.ArchitectureUnknown"]
+        : LocalizationService.Instance["Game.ArchitectureUnknown"];
 
     partial void OnDetectedChanged(SteamInstallation? value)
     {
-        OnPropertyChanged(nameof(IsInstalled));
-        OnPropertyChanged(nameof(StatusKey));
+        OnPropertyChanged(nameof(SteamInstalled));
+        UpdateAvailability();
         OnPropertyChanged(nameof(Build));
         OnPropertyChanged(nameof(RootPath));
+        OnPropertyChanged(nameof(InstallationArchitecture));
     }
+    partial void OnEpicOwnedChanged(bool value) => UpdateAvailability();
+    partial void OnSteamOwnedChanged(bool value) => UpdateAvailability();
+    partial void OnEpicInstallPathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(EpicInstalled));
+        UpdateAvailability();
+    }
+    private void UpdateAvailability()
+    {
+        OnPropertyChanged(nameof(AvailableInstallations));
+        OnPropertyChanged(nameof(SelectedInstallation));
+        OnPropertyChanged(nameof(RootPath));
+        OnPropertyChanged(nameof(InstallationArchitecture));
+        OnPropertyChanged(nameof(IsSelectedSteam));
+        OnPropertyChanged(nameof(CanOpenGame));
+        OnPropertyChanged(nameof(IsInstalled));
+        OnPropertyChanged(nameof(OwnedNotInstalled));
+        OnPropertyChanged(nameof(SteamOwnedNotInstalled));
+        OnPropertyChanged(nameof(CanInstallSteam));
+        OnPropertyChanged(nameof(ShowSteam));
+        OnPropertyChanged(nameof(EpicOwnedNotInstalled));
+        OnPropertyChanged(nameof(CanInstallEpic));
+        OnPropertyChanged(nameof(EpicUnsupported));
+        OnPropertyChanged(nameof(NotDetected));
+        OnPropertyChanged(nameof(StatusKey));
+    }
+}
+
+public sealed record InstallationChoice(string Store, string RootPath, string? BuildId = null)
+{
+    public string Label => $"{(Store == "epic" ? "Epic" : "Steam")} — {RootPath}";
 }
 
 public partial class GameViewModel : ViewModelBase
@@ -114,6 +185,11 @@ public partial class GameViewModel : ViewModelBase
         if (!Game.IsInstalled)
         {
             StatusMessage = loc["Game.NotDetectedHint"];
+            return;
+        }
+        if (Game.SelectedInstallation?.Store != "steam")
+        {
+            StatusMessage = loc["Game.EpicLaunchManual"];
             return;
         }
         var ok = launch.LaunchGame(Game.SteamAppId);

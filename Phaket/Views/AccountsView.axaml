@@ -55,6 +55,45 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Border Classes="card" AutomationProperties.Name="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}">
+                <StackPanel Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <mi:MaterialIcon Kind="Steam" Width="20" Height="20" />
+                        <TextBlock Classes="sectionTitle" Text="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}" />
+                    </StackPanel>
+                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.SteamCred.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+                    <TextBlock Text="{Binding SteamSignin.StateText}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                    <SelectableTextBlock Text="{Binding SteamSignin.StatusMessage}" TextWrapping="Wrap" IsVisible="{Binding SteamSignin.HasStatusMessage}" AutomationProperties.LiveSetting="Assertive" />
+                    <WrapPanel>
+                        <Button Classes="cta" Margin="0,0,8,0" Command="{Binding SteamSignin.StartCommand}"
+                                Content="{Binding SteamSignin.ActionText}"
+                                AutomationProperties.Name="{Binding SteamSignin.ActionText}" />
+                        <Button Classes="secondary" Command="{Binding SteamSignin.DeleteCommand}" IsVisible="{Binding SteamSignin.HasCredentials}"
+                                Content="{Binding [Account.SteamCred.Delete], Source={x:Static services:LocalizationService.Instance}}"
+                                AutomationProperties.Name="{Binding [Account.SteamCred.Delete], Source={x:Static services:LocalizationService.Instance}}" />
+                    </WrapPanel>
+                    <CheckBox IsVisible="{Binding SteamSignin.HasCredentials}" IsChecked="{Binding SteamSignin.ConfirmDelete}"
+                              Content="{Binding [Account.SteamCred.DeleteConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                    <StackPanel Spacing="6" IsVisible="{Binding SteamSignin.IsOpen}">
+                        <TextBlock Text="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBox Text="{Binding SteamSignin.Username}" PlaceholderText="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}"
+                                 AutomationProperties.Name="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBlock Text="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBox PasswordChar="●" Text="{Binding SteamSignin.Password}"
+                                 AutomationProperties.Name="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                        <CheckBox IsChecked="{Binding SteamSignin.Remember}"
+                                  Content="{Binding [Account.SteamCred.Remember], Source={x:Static services:LocalizationService.Instance}}" />
+                        <WrapPanel>
+                            <Button Classes="cta" Margin="0,0,8,0" Command="{Binding SteamSignin.ConfirmCommand}"
+                                    Content="{Binding [Account.SteamCred.Confirm], Source={x:Static services:LocalizationService.Instance}}"
+                                    AutomationProperties.Name="{Binding [Account.SteamCred.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+                            <Button Classes="secondary" Command="{Binding SteamSignin.CancelCommand}"
+                                    Content="{Binding [Account.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                                    AutomationProperties.Name="{Binding [Account.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.Privacy], Source={x:Static services:LocalizationService.Instance}}" />
         </StackPanel>
     </ScrollViewer>

@@ -1,5 +1,6 @@
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
+using Phaket.Core.Platforms;
 
 namespace Phaket.Core.Execution;
 
@@ -59,7 +60,8 @@ public sealed class DefinitionGameAdapter : IGameAdapter
             facts.Versions.Count == 1 ? facts.Versions[0] : null,
             facts.Capabilities.ToHashSet(StringComparer.Ordinal),
             uri => VirtualUri.TryParse(uri, out var scheme, out var path)
-                && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)));
+                && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
+            Arch: facts.Arch ?? InstallationArchProbe.Probe(gameRoot, definition));
         var context = new PlannerContext(facts.Installation.InstallationId, profile.ProfileId,
             gameRoot, profileRoot, stagingRoot, packageRoot, definition, planFacts);
         return OperationPlanner.Plan(recipe, context);

@@ -126,7 +126,7 @@ public class LinuxP0VerticalTests
                 },
                 Artifacts =
                 [
-                    new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip" },
+                    new RecipeArtifact { Id = "loader-bundle", Source = "package://loader-bundle.zip", Arch = "x86" },
                     new RecipeArtifact { Id = "mod-bundle", Source = "package://mod-bundle.zip" },
                 ],
                 Steps =
@@ -145,7 +145,7 @@ public class LinuxP0VerticalTests
                 ],
             };
 
-            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false);
+            var facts = new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false, Arch: "x86");
             var plannerContext = new PlannerContext(installation.Installation.InstallationId, "profile-1",
                 gameDir, profileRoot, stagingRoot, packageRoot, definition, facts);
             var plan = OperationPlanner.Plan(recipe, plannerContext);

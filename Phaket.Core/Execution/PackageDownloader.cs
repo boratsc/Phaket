@@ -45,13 +45,13 @@ public static class PackageDownloader
             cancellationToken.ThrowIfCancellationRequested();
             if (!artifact.Source.StartsWith("https://", StringComparison.Ordinal)) continue;
             var target = Path.Combine(packageRoot, artifact.Id + ".zip");
-            if (File.Exists(target) && HashFile(target) == artifact.Sha256) continue;
-            if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source))
+            if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source, artifact.Sha256))
                 throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable,
                     ("artifact", artifact.Id), ("detail", "source is not on the https allowlist"));
             if (artifact.Sha256 is null)
                 throw new PhaketException(ErrorCodes.ValidationFailed,
                     ("detail", $"remote artifact '{artifact.Id}' declares no sha256; refusing unverified download"));
+            if (File.Exists(target) && HashFile(target) == artifact.Sha256) continue;
 
             var temp = target + ".phaket-tmp";
             try

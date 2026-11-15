@@ -46,7 +46,7 @@ public class FirstRecipeTests
             foreach (var d in new[] { game, Path.Combine(root, "profile"), Path.Combine(root, "staging"), Path.Combine(root, "packages") })
                 Directory.CreateDirectory(d);
             var facts = new PlanFacts("linux", "steam", "2023.7.12", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(FirstRecipe(), new PlannerContext(
                 "i", "p", game, Path.Combine(root, "profile"), Path.Combine(root, "staging"), Path.Combine(root, "packages"),
                 ShippedDefinition(), facts));
@@ -93,7 +93,7 @@ public class FirstRecipeTests
             {
                 Artifacts =
                 [
-                    new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip" },
+                    new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip", Arch = "x86" },
                     new RecipeArtifact { Id = "better-polus", Source = "package://better-polus.zip" },
                 ],
                 Verify = [new RecipeVerifyStep { Use = "file.verify",
@@ -101,7 +101,7 @@ public class FirstRecipeTests
             };
 
             var facts = new PlanFacts("linux", "steam", "2023.7.12", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext(
                 "i", "p", game, profile, staging, packages, definition, facts));
             Assert.False(plan.RequiresDownload);
@@ -206,7 +206,7 @@ public class FirstRecipeTests
                 SchemaVersion = "omrl/v0alpha1", Id = "test.wrapper", Version = "1.0.0",
                 Target = new RecipeTarget { Game = "among-us", Systems = ["windows", "linux"] },
                 Requires = new RecipeRequires { Capabilities = ["loader.ensure"] },
-                Artifacts = [new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip" }],
+                Artifacts = [new RecipeArtifact { Id = "loader-pack", Source = "package://loader-pack.zip", Arch = "x86" }],
                 Steps = [new RecipeStep { Id = "install", Use = "loader.ensure",
                     With = ExecutorFixture.Params(("id", "bepinex"), ("artifact", "loader-pack")) }],
             };
@@ -216,7 +216,7 @@ public class FirstRecipeTests
             var before = Snapshot();
 
             var facts = new PlanFacts("linux", "steam", "2023.7.12", OperationCatalog.Capabilities, _ => false,
-                new Dictionary<string, string> { ["bepinex"] = "6.0.700" });
+                new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition, facts));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state));
             var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan));
