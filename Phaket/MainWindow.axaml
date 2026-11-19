@@ -27,6 +27,7 @@
     <DataTemplate DataType="{x:Type vm:DiscoverViewModel}"><views:DiscoverView /></DataTemplate>
     <DataTemplate DataType="{x:Type vm:CommunitiesViewModel}"><views:CommunitiesView /></DataTemplate>
     <DataTemplate DataType="{x:Type vm:DownloadsViewModel}"><views:DownloadsView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:SelectGameViewModel}"><views:EmptyStateView /></DataTemplate>
   </Window.DataTemplates>
   <Grid RowDefinitions="62,*,33" ColumnDefinitions="231,*" Background="{DynamicResource AppBackgroundBrush}" x:Name="ShellRoot">
     <Grid.Styles>
@@ -62,18 +63,25 @@
                    AutomationProperties.Name="Phaket" VerticalAlignment="Center" />
           </StackPanel>
         </Border>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" Margin="24,0"
-                    x:Name="BreadcrumbBar">
-          <Button Classes="icon breadcrumb" Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="library"
-                  Content="{Binding BreadcrumbLibrary}" AutomationProperties.Name="{Binding BreadcrumbLibrary}" />
-          <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource QuietBrush}" VerticalAlignment="Center" />
-          <Button Classes="icon breadcrumb" Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="catalog"
-                  Content="{Binding GameName}" IsEnabled="{Binding HasGame}" AutomationProperties.Name="{Binding GameName}" />
-          <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource QuietBrush}" VerticalAlignment="Center" />
-          <Button Classes="icon breadcrumb currentBreadcrumb" Content="{Binding BreadcrumbView}"
-                  Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="{Binding ActiveNav}"
-                  AutomationProperties.Name="{Binding BreadcrumbView}" />
-        </StackPanel>
+        <ItemsControl Grid.Column="1" x:Name="BreadcrumbBar" ItemsSource="{Binding Breadcrumb}"
+                      VerticalAlignment="Center" Margin="24,0"
+                      AutomationProperties.Name="{Binding [Shell.Breadcrumb], Source={x:Static services:LocalizationService.Instance}}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="12" /></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BreadcrumbItem">
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button Classes="icon breadcrumb" Classes.currentBreadcrumb="{Binding IsCurrent}"
+                        Content="{Binding Label}" CommandParameter="{Binding Target}"
+                        Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).NavigateBreadcrumbCommand}"
+                        AutomationProperties.Name="{Binding Label}" />
+                <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource QuietBrush}"
+                                 VerticalAlignment="Center" IsVisible="{Binding !IsCurrent}" AutomationProperties.AccessibilityView="Raw" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,12,0">
           <Button Classes="icon topbarAction" Command="{Binding OpenTopbarPanelCommand}" CommandParameter="chat"
                   AutomationProperties.Name="{Binding [Shell.ChatTitle], Source={x:Static services:LocalizationService.Instance}}">
@@ -94,7 +102,7 @@
           <Button Classes="icon avatar" Command="{Binding NavigateCommand}" CommandParameter="account"
                   AutomationProperties.Name="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}">
             <Border Width="36" Height="36" CornerRadius="18" Background="{DynamicResource SoftBrush}">
-              <TextBlock Text="B" Foreground="{DynamicResource GoldTextBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="{Binding AvatarInitials}" Foreground="{DynamicResource GoldTextBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
             </Border>
           </Button>
           <StackPanel Orientation="Horizontal" Spacing="0" Margin="6,0,0,0" x:Name="WindowControls" IsVisible="False">
@@ -119,12 +127,14 @@
         </Canvas>
         <ScrollViewer x:Name="SidebarScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="8,12,8,12" Spacing="0">
+            <!-- The picker is always present: hiding it when no game is selected left no way to pick one. -->
             <Border Classes="gamePicker" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Background="{DynamicResource AppBackgroundBrush}"
-                    CornerRadius="9" Padding="8,8,8,6" IsVisible="{Binding HasGame}">
+                    CornerRadius="9" Padding="8,8,8,6">
               <StackPanel Spacing="6">
                 <TextBlock Text="{Binding [Shell.SelectedGame], Source={x:Static services:LocalizationService.Instance}}"
                            FontSize="10" FontWeight="Bold" LetterSpacing="1.1" Foreground="{DynamicResource QuietBrush}" Margin="2,0,0,0" />
                 <ComboBox x:Name="GamePicker" ItemsSource="{Binding Library.Games}" SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
+                          IsVisible="{Binding HasGames}" PlaceholderText="{Binding [Shell.GamePicker], Source={x:Static services:LocalizationService.Instance}}"
                           MinHeight="42" AutomationProperties.Name="{Binding [Shell.GamePicker], Source={x:Static services:LocalizationService.Instance}}">
                   <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:GameCatalogItem">
@@ -137,6 +147,13 @@
                     </DataTemplate>
                   </ComboBox.ItemTemplate>
                 </ComboBox>
+                <StackPanel IsVisible="{Binding !HasGames}" Spacing="7" Margin="2,0,2,4">
+                  <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                             Text="{Binding [Shell.NoGamesInLibrary], Source={x:Static services:LocalizationService.Instance}}" />
+                  <Button Classes="secondary" Command="{Binding Library.AddFolderCommand}"
+                          Content="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}"
+                          AutomationProperties.Name="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
                 <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=catalog}"
                         Command="{Binding NavigateCommand}" CommandParameter="catalog" AutomationProperties.Name="{Binding [Catalog.Title], Source={x:Static services:LocalizationService.Instance}}">
                   <StackPanel Orientation="Horizontal" Spacing="10">

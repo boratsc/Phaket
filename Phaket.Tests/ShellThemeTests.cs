@@ -24,6 +24,11 @@ public class ShellThemeTests
         {
             Dispatcher.UIThread.RunJobs();
             Assert.IsType<ModpackCatalogViewModel>(vm.CurrentPage);
+            // PAK-86: the picker stays reachable with a game selected and the breadcrumb
+            // reads "Biblioteka › <Gra> › <Widok>" with no placeholder or duplicate crumb.
+            Assert.True(window.FindControl<ComboBox>("GamePicker")!.IsEffectivelyVisible);
+            Assert.Equal(["Biblioteka", vm.GameName, "Katalog pakietów"],
+                vm.Breadcrumb.Select(crumb => crumb.Label).ToArray());
             using var initial = window.CaptureRenderedFrame();
             Assert.NotNull(initial);
             Directory.CreateDirectory("/tmp/opencode/phaket-render");

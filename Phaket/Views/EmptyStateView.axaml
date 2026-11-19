@@ -6,16 +6,19 @@
              x:DataType="vm:EmptyStateViewModel">
   <Grid RowDefinitions="Auto,*">
     <StackPanel Spacing="7" Margin="0,0,0,22">
-      <TextBlock Classes="pageTitle" Text="{Binding Title}" />
-      <TextBlock Classes="muted" Text="{Binding Subtitle}" />
+      <TextBlock Classes="pageTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="1" />
+      <TextBlock Classes="muted" Text="{Binding Subtitle}" IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </StackPanel>
     <Border Grid.Row="1" Classes="card" MinHeight="250" VerticalAlignment="Top">
       <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="24">
         <Border Width="52" Height="52" CornerRadius="14" Background="{DynamicResource SoftBrush}" HorizontalAlignment="Center">
-          <mi:MaterialIcon Kind="PackageVariant" Width="25" Height="25" Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+          <mi:MaterialIcon Kind="{Binding Icon}" Width="25" Height="25" Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw" />
         </Border>
-        <TextBlock Text="{Binding EmptyTitle}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding EmptyTitle}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" AutomationProperties.HeadingLevel="2" />
         <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380" />
+        <Button Classes="cta" HorizontalAlignment="Center" Content="{Binding ActionLabel}" Command="{Binding ActionCommand}"
+                IsVisible="{Binding HasAction}" AutomationProperties.Name="{Binding ActionLabel}" />
       </StackPanel>
     </Border>
   </Grid>

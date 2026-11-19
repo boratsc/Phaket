@@ -34,8 +34,13 @@
                                        IsVisible="{Binding !DeviceIdentity.HasFingerprint}" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap"
-                               Text="{Binding [Identity.KeyWarning], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <mi:MaterialIcon Kind="InformationOutline" Width="16" Height="16" Margin="0,3,0,0"
+                                         Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Top"
+                                         AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Grid.Column="1" Classes="muted" TextWrapping="Wrap"
+                                   Text="{Binding [Identity.KeyWarning], Source={x:Static services:LocalizationService.Instance}}" />
+                    </Grid>
                     <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding DeviceIdentity.StatusMessage}"
                                IsVisible="{Binding DeviceIdentity.HasStatusMessage}" AutomationProperties.LiveSetting="Polite" />
                     <WrapPanel>

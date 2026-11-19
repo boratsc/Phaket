@@ -5,6 +5,9 @@ using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
+// One breadcrumb segment: a clickable ancestor keeps its navigation target, the last one does not.
+public sealed record BreadcrumbItem(string Label, string? Target, bool IsCurrent);
+
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     [ObservableProperty] private ViewModelBase currentPage;
@@ -33,6 +36,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public GraphViewModel? Graph { get; private set; }
     public ReportViewModel? Report { get; private set; }
     public ModpackCatalogViewModel? ModpackCatalog { get; private set; }
+    public SelectGameViewModel? SelectGame { get; private set; }
     public DiscoverViewModel Discover { get; }
     public CommunitiesViewModel Communities { get; }
     public DownloadsViewModel Downloads { get; }
@@ -41,6 +45,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IModpackApiClient modpackApi;
     private readonly ICommunitiesApiClient communitiesApi;
     private readonly PropertyChangedEventHandler localizationChanged;
+    private readonly PropertyChangedEventHandler nickChanged;
     private GameCatalogItem? currentGame;
     private string currentContextTab = "catalog";
     private ViewModelBase previousPage;
@@ -64,16 +69,32 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Library.ScanCommand.Execute(null);
         currentGame = Library.Games.FirstOrDefault();
         selectedGame = currentGame;
+        // The library rebuilds its list on every scan (Clear + re-add); through the picker's
+        // two-way binding that would leave the shell with no game at all until the user picks
+        // one again, so the first game is restored as soon as the list has one.
+        Library.Games.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasGames));
+            if (currentGame is null && Library.Games.Count > 0) SelectedGame = Library.Games[0];
+        };
         // One catalog view model for the life of the window: it owns the install queue, so the
         // tab, the downloads page and the update badge must all look at the same instance.
-        currentPage = EnsureModpackCatalog();
+        EnsureModpackCatalog();
+        // With no game in the library the context tabs have nothing to show, so the shell
+        // starts on the prompt page instead of an empty catalog.
+        currentPage = HasGame ? ModpackCatalog! : EnsureSelectGame();
         Discover = new DiscoverViewModel(currentGame, this.modpackApi, this.communitiesApi);
         Communities = new CommunitiesViewModel(currentGame, this.appDataRoot, this.communitiesApi, this.modpackApi);
         Downloads = new DownloadsViewModel(this.appDataRoot, currentGame, ModpackCatalog!);
         previousPage = currentPage;
+        Accounts.DeviceIdentity.PropertyChanged += nickChanged = (_, e) =>
+        {
+            if (e.PropertyName == nameof(DeviceIdentityViewModel.Nick)) OnPropertyChanged(nameof(AvatarInitials));
+        };
         LocalizationService.Instance.PropertyChanged += localizationChanged = (_, _) =>
         {
             OnPropertyChanged(nameof(GameName));
+            OnPropertyChanged(nameof(Breadcrumb));
             OnPropertyChanged(nameof(BreadcrumbLibrary));
             OnPropertyChanged(nameof(BreadcrumbView));
             OnPropertyChanged(nameof(PlatformName));
@@ -84,6 +105,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         LocalizationService.Instance.PropertyChanged -= localizationChanged;
+        Accounts.DeviceIdentity.PropertyChanged -= nickChanged;
         ModpackCatalog?.Dispose();
     }
 
@@ -95,6 +117,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         "profiles" => "Nav.Profiles",
         "compatibility" => "Compat.Title",
         "help" => "Nav.Guides",
+        "mods" => "Game.Mods",
         "library" => "Nav.Library",
         "discover" => "Discover.Title",
         "communities" => "Communities.Title",
@@ -105,13 +128,52 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _ => "Nav.Library"
     }];
     public bool IsGameContext => ActiveNav is "catalog" or "profiles" or "compatibility" or "help";
+
+    // Breadcrumb: "Biblioteka › <Gra> › <Widok>", trimmed to what is actually open. The library
+    // page and the app-level pages are a single crumb, and with no game selected the placeholder
+    // crumb is skipped instead of showing "Brak wybranej gry" or repeating "Biblioteka".
+    public IReadOnlyList<BreadcrumbItem> Breadcrumb
+    {
+        get
+        {
+            if (ActiveNav == "library" && CurrentPage is LibraryViewModel) return [new(BreadcrumbLibrary, null, true)];
+            if (!IsGameContext && ActiveNav is not "mods" and not "library") return [new(BreadcrumbView, null, true)];
+            // Every page opened from the library is about the game, so the trail ends at its name.
+            bool endsAtGame = ActiveNav == "library";
+            var crumbs = new List<BreadcrumbItem> { new(BreadcrumbLibrary, "library", false) };
+            if (HasGame) crumbs.Add(new(GameName, endsAtGame ? null : "catalog", endsAtGame));
+            if (!endsAtGame) crumbs.Add(new(BreadcrumbView, null, true));
+            if (crumbs.Count > 1 && crumbs[^1].Label == crumbs[0].Label) crumbs.RemoveAt(crumbs.Count - 1);
+            crumbs[^1] = crumbs[^1] with { Target = null, IsCurrent = true };
+            return crumbs;
+        }
+    }
+
+    // The topbar avatar mirrors the device nickname shown on the identity card.
+    public string AvatarInitials => InitialsOf(Accounts.DeviceIdentity.Nick);
+
+    internal static string InitialsOf(string? nick)
+    {
+        var parts = (nick ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..1].ToUpperInvariant(),
+            _ => (parts[0][..1] + parts[1][..1]).ToUpperInvariant()
+        };
+    }
+
     public string PlatformName => OperatingSystem.IsWindows()
         ? LocalizationService.Instance["Shell.Platform.Windows"]
         : LocalizationService.Instance["Shell.Platform.Linux"];
     public bool HasGame => currentGame is not null;
 
+    // The picker needs games to pick from; an empty library shows the add-game path instead.
+    public bool HasGames => Library.Games.Count > 0;
+
     partial void OnActiveNavChanged(string value)
     {
+        OnPropertyChanged(nameof(Breadcrumb));
         OnPropertyChanged(nameof(BreadcrumbView));
         OnPropertyChanged(nameof(IsGameContext));
     }
@@ -128,6 +190,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         currentGame = value;
         OnPropertyChanged(nameof(GameName));
         OnPropertyChanged(nameof(HasGame));
+        OnPropertyChanged(nameof(Breadcrumb));
         Discover.SetGame(value);
         Communities.SetGame(value);
         Downloads.SetGame(value);
@@ -160,11 +223,32 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (ReferenceEquals(previousPage, Communities) && !ReferenceEquals(value, Communities))
             Communities.CloseChatCommand.Execute(null);
         previousPage = value;
+        OnPropertyChanged(nameof(Breadcrumb));
     }
+
+    private SelectGameViewModel EnsureSelectGame() =>
+        SelectGame ??= new SelectGameViewModel(() => Navigate("library"));
 
     private void ShowContextTab(string tab)
     {
         currentContextTab = tab;
+        // Without a game none of the context tabs can render, so they share one prompt page.
+        // The clicked tab stays highlighted and is restored as soon as a game is selected.
+        if (currentGame is null && tab is "catalog" or "profiles" or "compatibility" or "help")
+        {
+            EnsureSelectGame().ShowTab(tab switch
+            {
+                "profiles" => "Nav.Profiles",
+                "compatibility" => "Compat.Title",
+                "help" => "Nav.Guides",
+                _ => "Catalog.Title"
+            });
+            CurrentPage = SelectGame!;
+            ActiveNav = tab;
+            OnPropertyChanged(nameof(IsGameContext));
+            OnPropertyChanged(nameof(BreadcrumbView));
+            return;
+        }
         switch (tab)
         {
             case "profiles" when currentGame is not null:

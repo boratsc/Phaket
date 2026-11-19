@@ -19,6 +19,11 @@ public partial class LibraryViewModel
     // Test seam for the Steam folder choice: same delegate shape as InstallFolderPicker.
     internal Func<Task<string?>>? SteamFolderPicker { get; set; }
 
+    // DepotDownloader keeps a session only for Steam installs, so its cleanup UI belongs to that
+    // flow: it must not show up as a general library note or next to an Epic/Legendary game.
+    public bool ShowSteamSessionTools => SteamInstall is not null;
+    partial void OnSteamInstallChanged(SteamInstallFlowViewModel? value) => OnPropertyChanged(nameof(ShowSteamSessionTools));
+
     [RelayCommand]
     private async Task OpenSteamInstallAsync(GameCatalogItem? item)
     {

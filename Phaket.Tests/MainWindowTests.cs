@@ -187,16 +187,19 @@ public class MainWindowTests
         window.Show();
         try
         {
+            var vm = (MainWindowViewModel)window.DataContext!;
             var loc = LocalizationService.Instance;
             loc.CurrentLanguage = "pl-PL";
+            // The sidebar entry, not the breadcrumb crumb with the same label: the breadcrumb
+            // is rebuilt when the trail changes, so its containers cannot be reused here.
             var navButton = window.GetVisualDescendants().OfType<Button>()
-                .First(b => AutomationProperties.GetName(b) == "Biblioteka");
+                .First(b => Equals(b.Command, vm.NavigateCommand) && b.CommandParameter as string == "library");
             Assert.Equal("Biblioteka", AutomationProperties.GetName(navButton));
 
             loc.CurrentLanguage = "en";
             Assert.Equal("Library", AutomationProperties.GetName(navButton));
             Assert.Equal("Settings", AutomationProperties.GetName(
-                window.GetVisualDescendants().OfType<Button>().First(b => AutomationProperties.GetName(b) == "Settings")));
+                window.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Command, vm.NavigateCommand) && b.CommandParameter as string == "settings")));
         }
         finally
         {

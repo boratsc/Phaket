@@ -188,7 +188,8 @@
               <TextBlock Classes="muted" Text="{Binding [Ui.Library.SelectPrompt], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" TextAlignment="Center" />
             </StackPanel>
 
-            <StackPanel Spacing="7">
+            <StackPanel Spacing="7" IsVisible="{Binding ShowSteamSessionTools}"
+                        AutomationProperties.Name="{Binding [SteamInstall.SessionCleanup], Source={x:Static services:LocalizationService.Instance}}">
               <TextBlock Text="{Binding SessionCleanupStatus}" TextWrapping="Wrap" Classes="muted" AutomationProperties.LiveSetting="Polite" />
               <Expander Classes="disclosure">
                 <Expander.Header>

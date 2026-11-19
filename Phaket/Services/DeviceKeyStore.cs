@@ -11,6 +11,7 @@ public sealed record DevicePublicIdentity(byte[] PublicKey, string Fingerprint, 
 public sealed class DeviceKeyStore
 {
     public const string SecretKey = "device-ed25519";
+    // The old shared default collided across users; it is kept only to migrate stored settings.
     public const string DefaultNick = "Phaket device";
     private const int PrivateKeyLength = 32;
     private readonly ISecretStore secrets;
@@ -38,14 +39,15 @@ public sealed class DeviceKeyStore
         {
             var privateKey = new Ed25519PrivateKeyParameters(seed, 0);
             byte[] publicKey = privateKey.GeneratePublicKey().GetEncoded();
-            var (nick, shouldPersistNick) = await GetNickAsync(cancellationToken);
+            var fingerprint = FingerprintOf(publicKey);
+            var (nick, shouldPersistNick) = await GetNickAsync(fingerprint, cancellationToken);
             if (shouldPersistNick)
             {
                 try { await SaveNickAsync(nick, cancellationToken); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
                 { System.Diagnostics.Trace.TraceWarning("The default device nickname could not be saved: {0}", ex); }
             }
-            var identity = new DevicePublicIdentity(publicKey, FingerprintOf(publicKey), nick);
+            var identity = new DevicePublicIdentity(publicKey, fingerprint, nick);
             Volatile.Write(ref cachedIdentity, identity);
             return identity;
         }
@@ -91,21 +93,29 @@ public sealed class DeviceKeyStore
 
     public static string FingerprintOf(byte[] publicKey) => Convert.ToHexStringLower(SHA256.HashData(publicKey))[..8];
 
-    private async Task<(string Nick, bool ShouldPersist)> GetNickAsync(CancellationToken cancellationToken)
+    // Unique per device: the same fingerprint tail the identity card shows.
+    public static string GeneratedNick(string fingerprint) =>
+        LocalizationService.Instance["Identity.NickPrefix"] + "-" + fingerprint[..4];
+
+    private async Task<(string Nick, bool ShouldPersist)> GetNickAsync(string fingerprint, CancellationToken cancellationToken)
     {
         try
         {
-            if (!File.Exists(settingsPath)) return (DefaultNick, true);
+            if (!File.Exists(settingsPath)) return (GeneratedNick(fingerprint), true);
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(settingsPath, cancellationToken));
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return (DefaultNick, false);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return (GeneratedNick(fingerprint), false);
             if (document.RootElement.TryGetProperty("deviceNick", out var nick))
-                return nick.ValueKind == JsonValueKind.String && IsValidNick(nick.GetString())
-                    ? (nick.GetString()!.Trim(), false) : (DefaultNick, false);
-            return (DefaultNick, true);
+            {
+                var value = nick.ValueKind == JsonValueKind.String ? nick.GetString()!.Trim() : "";
+                // A nickname the user chose is never replaced; only the old shared default is.
+                if (IsValidNick(value)) return value == DefaultNick ? (GeneratedNick(fingerprint), true) : (value, false);
+                return (GeneratedNick(fingerprint), false);
+            }
+            return (GeneratedNick(fingerprint), true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            return (DefaultNick, false);
+            return (GeneratedNick(fingerprint), false);
         }
     }
 
