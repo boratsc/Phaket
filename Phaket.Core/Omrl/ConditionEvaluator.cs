@@ -18,24 +18,36 @@ public sealed record PlanFacts(
 public static class ConditionEvaluator
 {
     public static bool Evaluate(RecipeCondition? condition, PlanFacts facts)
+        => EvaluateOrNull(condition, facts) == true;
+
+    public static bool? EvaluateOrNull(RecipeCondition? condition, PlanFacts facts)
     {
         if (condition is null) return true;
-        if (condition.All is { } all) return all.All(c => Evaluate(c, facts));
-        if (condition.Any is { } any) return any.Any(c => Evaluate(c, facts));
-        if (condition.Not is { } not) return !Evaluate(not, facts);
+        if (condition.All is { } all)
+        {
+            var results = all.Select(c => EvaluateOrNull(c, facts)).ToArray();
+            return results.Contains(false) ? false : results.Contains(null) ? null : true;
+        }
+        if (condition.Any is { } any)
+        {
+            var results = any.Select(c => EvaluateOrNull(c, facts)).ToArray();
+            return results.Contains(true) ? true : results.Contains(null) ? null : false;
+        }
+        if (condition.Not is { } not) return EvaluateOrNull(not, facts) is { } result ? !result : null;
         if (condition.Os is { } os) return os.Contains(facts.Os, StringComparer.Ordinal);
         if (condition.Store is { } store) return store == facts.Store;
-        if (condition.Arch is { } arch) return arch == facts.Arch;
+        if (condition.Arch is { } arch) return facts.Arch is null ? null : arch == facts.Arch;
         if (condition.BuildId is { } buildRange)
         {
-            if (facts.BuildId is not { } build || !TryParseBuildRange(buildRange, out var op, out var value)) return false;
+            if (facts.BuildId is not { } build) return null;
+            if (!TryParseBuildRange(buildRange, out var op, out var value)) return false;
             return op switch { ">=" => build >= value, "<=" => build <= value, "==" or "=" => build == value, _ => false };
         }
         if (condition.Capability is { } capability) return facts.Capabilities.Contains(capability);
         if (condition.FileExists is { } uri) return facts.FileExists(uri);
         if (condition.GameVersion is { } range)
         {
-            if (facts.GameVersion is null) return false;
+            if (facts.GameVersion is null) return null;
             if (!NumericVersion.TryParse(facts.GameVersion, out var version)) return false;
             return VersionRange.TryParse([range], out var parsed) && parsed!.Contains(version!);
         }

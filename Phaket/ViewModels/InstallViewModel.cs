@@ -173,9 +173,6 @@ public partial class InstallViewModel : ViewModelBase
             var recipe = SelectedRecipe.Recipe;
             var store = installation?.Store ?? "steam";
             var versionChoice = SelectedVersion.Value;
-            // A catalog build knows its own architecture; that is a fact, the definition default is
-            // the fallback for "latest" and for a sandbox with nothing to probe.
-            var chosenArch = SelectedVersion?.Arch;
             var usedVersionFallback = false;
             await Task.Run(async () =>
             {
@@ -190,7 +187,19 @@ public partial class InstallViewModel : ViewModelBase
                         ? catalog.GetLatestBuild(game.Definition.Slug, store)
                         : catalog.GetBuilds(game.Definition.Slug, store).FirstOrDefault(b => b.VersionLabel == versionChoice);
                 }
-                var resolved = selectedBuild?.VersionLabel;
+                // PAK-66: the facts a recipe conditions on must all come from the SAME build.
+                // A catalog build is provably the installed game only when both know a build id
+                // and it matches, so an explicit choice that cannot be matched to the detected
+                // installation is refused instead of lending it a version and a manifest. With
+                // "latest" nothing is claimed about the installed game at all: the installation
+                // then supplies every fact and an unknown version is refused by the planner.
+                var installedBuild = ParseBuildId(installation?.BuildId);
+                var sameAsInstalled = selectedBuild is not null && installedBuild is not null
+                    && ParseBuildId(selectedBuild.BuildId) == installedBuild;
+                if (detectedRoot is not null && versionChoice != "latest" && selectedBuild is not null && !sameAsInstalled)
+                    throw new PhaketException(ErrorCodes.InstallFactsMissing, ("fact", "buildId"));
+                var evidence = detectedRoot is null ? selectedBuild : sameAsInstalled ? selectedBuild : null;
+                var resolved = evidence?.VersionLabel;
                 if (resolved is null && OperationPlanner.RequiresGameVersion(recipe))
                     throw new PhaketException(ErrorCodes.GameBuildUnavailable);
                 // Mod-only recipes do not inspect the version; this is a neutral planning fact.
@@ -214,19 +223,22 @@ public partial class InstallViewModel : ViewModelBase
                 }
                 Directory.CreateDirectory(profileRoot); Directory.CreateDirectory(staging); Directory.CreateDirectory(packages); Directory.CreateDirectory(state);
 
-                // PAK-65: conditions need facts. An existing installation is read from its PE
-                // header — never guessed from the catalog; a sandbox uses the selected catalog
-                // build's architecture or, failing that, the game's current retail one. A recipe
-                // conditioning on a fact nobody supplied is refused, never silently planned empty.
+                // PAK-65/66: conditions need facts, and every fact comes from ONE build.
+                // A detected installation is read from its PE header — never guessed from the
+                // catalog. A sandbox takes the architecture of the build the user actually
+                // selected; the definition default is only the last resort when no build is known.
+                // A recipe conditioning on a fact nobody supplied is refused, never silently
+                // planned empty.
                 var arch = detectedRoot is not null
                     ? InstallationArchProbe.Probe(detectedRoot, definition)
-                    : chosenArch ?? definition.DefaultArch;
+                    : evidence?.Arch ?? definition.DefaultArch;
                 var facts = new PlanFacts(HostOs(), store, gameVersion,
                     OperationCatalog.Capabilities,
                     uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                         && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
                     new Dictionary<string, string> { ["bepinex"] = "6.0.700" },
-                    selectedBuild?.ManifestIds.FirstOrDefault(), arch, ParseBuildId(installation?.BuildId ?? selectedBuild?.BuildId));
+                    evidence?.ManifestIds.FirstOrDefault(), arch,
+                    installedBuild ?? ParseBuildId(evidence?.BuildId));
                 var context = new PlannerContext("install", "install-profile", gameRoot, profileRoot, staging, packages,
                     definition, facts,
                     LatestGameVersion: s =>

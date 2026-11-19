@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Phaket.Core.Accounts;
 using Phaket.Core.Omrl;
+using Phaket.Core.Tools;
 
 namespace Phaket.Core.Platforms;
 
@@ -26,13 +27,16 @@ public sealed class LegendaryInstallAdapter
     private readonly IProcessRunner runner;
     private readonly Func<CancellationToken, Task<LegendaryTokens>> tokens;
     private readonly string configRoot;
+    private readonly ToolProvider toolProvider;
+    private readonly string? settingsPath;
 
-    public LegendaryInstallAdapter(Func<CancellationToken, Task<LegendaryTokens>> tokens, IProcessRunner? runner = null, string? configRoot = null, string? binaryPath = null)
+    public LegendaryInstallAdapter(Func<CancellationToken, Task<LegendaryTokens>> tokens, IProcessRunner? runner = null, string? configRoot = null, string? binaryPath = null, ToolProvider? toolProvider = null, string? settingsPath = null)
     {
         this.tokens = tokens;
         this.runner = runner ?? new ProcessRunner();
         this.configRoot = configRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "legendary-config");
-        binary = binaryPath ?? FindLegendary();
+        binary = binaryPath ?? FindLegendary(); this.toolProvider = toolProvider ?? new ToolProvider();
+        this.settingsPath = settingsPath;
         // A crashed run would otherwise leave its token-bearing config folder behind forever.
         SessionSweep.SweepOrphans(this.configRoot, TimeSpan.FromHours(24));
     }
@@ -51,7 +55,6 @@ public sealed class LegendaryInstallAdapter
 
     public LegendaryInstallPlan BuildInstallPlan(OwnedEpicGame game, string targetDir, GameDefinition definition, long? sizeBytes = null)
     {
-        if (binary is null) throw new PhaketException("LEGENDARY_NOT_FOUND", ("loc", "install_legendary_manually"));
         if (!game.Installable || string.IsNullOrWhiteSpace(game.AppName)) throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "Epic game is not installable"));
         string basePath = Path.GetFullPath(targetDir);
         string targetPath = Path.Combine(basePath, game.AppName);
@@ -77,7 +80,8 @@ public sealed class LegendaryInstallAdapter
         if (!overwriteConsent && (plan.Conflicts.Count != 0 ||
             Directory.Exists(plan.TargetPath) && Directory.EnumerateFileSystemEntries(plan.TargetPath).Any()))
             throw new PhaketException("OVERWRITE_CONSENT_REQUIRED");
-        if (binary is null) throw new PhaketException("LEGENDARY_NOT_FOUND", ("loc", "install_legendary_manually"));
+        var pin = ToolSettings.GetPinnedVersion("legendary", settingsPath);
+        string exePath = pin is null && binary is not null && File.Exists(binary) ? binary : await toolProvider.EnsureAsync("legendary", pin, ct: ct);
         Directory.CreateDirectory(plan.BasePath);
         string config = Path.Combine(configRoot, Guid.NewGuid().ToString("N"));
         SessionSecurity.EnsurePrivateRoot(configRoot);
@@ -105,7 +109,7 @@ public sealed class LegendaryInstallAdapter
                 while (tail.Count > 100) tail.Dequeue();
                 progress?.Report(safe);
             }
-            int exit = await runner.RunAsync(binary, ["install", plan.AppName, "--base-path", plan.BasePath, "--yes"],
+            int exit = await runner.RunAsync(exePath, ["install", plan.AppName, "--base-path", plan.BasePath, "--yes"],
                 new Dictionary<string, string?> { ["LEGENDARY_CONFIG_PATH"] = config }, Log, ct);
             if (exit != 0) throw new PhaketException("LEGENDARY_INSTALL_FAILED", ("tail", string.Join(Environment.NewLine, tail)));
             string exe = Path.GetFullPath(Path.Combine(plan.TargetPath, plan.Executable));

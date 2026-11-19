@@ -6,6 +6,35 @@ using Phaket.ViewModels;
 
 namespace Phaket.Tests;
 
+// Live tests talk to a locally running PhaketServer. That port can be taken by an unrelated
+// process (nginx answers with a 302 to an HTML page), so a bare "port is open" check is not
+// enough: the guard requires PhaketServer's own JSON health answer and skips the test otherwise.
+internal static class LiveServer
+{
+    public const string Url = "http://127.0.0.1:18081";
+
+    internal static async Task<bool> IsUpAsync()
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var response = await http.GetAsync(Url + "/health");
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentType?.MediaType != "application/json") return false;
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return json.RootElement.GetProperty("status").GetString() == "ok";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or FormatException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    internal static async Task RequireAsync()
+    {
+        if (!await IsUpAsync()) Assert.Skip($"PhaketServer is not running at {Url}");
+    }
+}
+
 public class ModCatalogViewModelTests
 {
     [AvaloniaFact]
@@ -83,11 +112,10 @@ public class ModCatalogViewModelTests
     [AvaloniaFact]
     public async Task LiveAmongUsCatalogWhenAvailable()
     {
-        using var http = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:18081"), Timeout = TimeSpan.FromSeconds(2) };
-        try { using var response = await http.GetAsync("/mods/index?game=among-us&limit=1"); if (!response.IsSuccessStatusCode) Assert.Skip("Live server unavailable"); }
-        catch (HttpRequestException) { Assert.Skip("Live server unavailable"); } catch (TaskCanceledException) { Assert.Skip("Live server unavailable"); }
+        await LiveServer.RequireAsync();
         var root = Directory.CreateTempSubdirectory("phaket-catalog-live-").FullName;
         try {
+            using var http = new HttpClient { BaseAddress = new Uri(LiveServer.Url), Timeout = TimeSpan.FromSeconds(30) };
             var vm = new ModCatalogViewModel("among-us", root, new HttpCatalogTransport(http), false);
             await vm.RefreshCommand.ExecuteAsync(null);
             Assert.False(vm.IsOffline); Assert.True(vm.Mods.Count > 0, vm.StatusMessage);
@@ -97,6 +125,7 @@ public class ModCatalogViewModelTests
     [AvaloniaFact]
     public async Task RenderCatalog()
     {
+        await LiveServer.RequireAsync();
         var root = Directory.CreateTempSubdirectory("phaket-catalog-render-").FullName;
         try {
             var game = new Phaket.ViewModels.GameCatalogItem(Phaket.Services.GameDefinitions.LoadAll().First(g => g.Slug == "among-us"), "", "");

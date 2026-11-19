@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Phaket.Core;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
+using Phaket.Core.Tools;
 
 namespace Phaket.Core.Tests;
 
@@ -92,7 +93,34 @@ public sealed class DepotDownloaderInstallAdapterTests : IDisposable
         runner.Action = (_, _, _, _) => Task.FromResult(0);
         Assert.Equal("DEPOTDOWNLOADER_INSTALL_UNVERIFIED", (await Assert.ThrowsAsync<PhaketException>(() => Execute(Plan()))).Error.Code);
         File.Delete(binary);
-        Assert.Equal("DEPOTDOWNLOADER_NOT_FOUND", Assert.Throws<PhaketException>(() => Plan()).Error.Code);
+        var plan = Plan();
+        var offlineRoot = Path.Combine(root, "tools");
+        using var client = new HttpClient(new OfflineHandler());
+        var provider = new Phaket.Core.Tools.ToolProvider(offlineRoot, client);
+        var offlineAdapter = new DepotDownloaderInstallAdapter(runner, Path.Combine(root, "config2"), toolProvider: provider);
+        plan = offlineAdapter.BuildInstallPlan(game, Path.Combine(root, "games"), definition, "windows", "64");
+        Assert.Equal("TOOL_OFFLINE", (await Assert.ThrowsAsync<PhaketException>(() => offlineAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true))).Error.Code);
+    }
+
+    [Fact]
+    public async Task PinnedToolVersionTakesPrecedenceOverExistingLocalBinary()
+    {
+        const string pin = "1.2.3";
+        var settings = Path.Combine(root, "settings.json");
+        File.WriteAllText(settings, "{\"tools\":{\"depotdownloader\":{\"version\":\"1.2.3\"}}}");
+        var installed = Path.Combine(root, "tools", "depotdownloader", pin, "DepotDownloader.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!); File.WriteAllText(installed, "pinned");
+        using var client = new HttpClient(new OfflineHandler());
+        var provider = new ToolProvider(Path.Combine(root, "tools"), client);
+        var pinnedAdapter = new DepotDownloaderInstallAdapter(runner, Path.Combine(root, "pinned-config"), binary, toolProvider: provider, settingsPath: settings);
+        var plan = pinnedAdapter.BuildInstallPlan(game, Path.Combine(root, "games"), definition, "windows", "64");
+        runner.Action = (args, _, _, _) =>
+        {
+            Assert.Contains("-app", args);
+            Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game");
+            return Task.FromResult(0);
+        };
+        await pinnedAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true, ct: TestContext.Current.CancellationToken);
     }
     [Fact]
     public async Task RejectsExecutableLinkEscapingTarget()
@@ -209,6 +237,10 @@ public sealed class DepotDownloaderInstallAdapterTests : IDisposable
         public Func<IReadOnlyList<string>, IDictionary<string, string?>, Func<bool, string, Func<string, Task>, Task>, CancellationToken, Task<int>> Action { get; set; } = (_, _, _, _) => Task.FromResult(0);
         public Task Send(string s) { Inputs.Add(s); return Task.CompletedTask; }
         public Task<int> RunAsync(string executable, IReadOnlyList<string> arguments, IDictionary<string, string?> environment, Func<bool, string, Func<string, Task>, Task> output, CancellationToken ct) => Action(arguments, environment, output, ct);
+    }
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => throw new HttpRequestException();
     }
 
     [Fact]

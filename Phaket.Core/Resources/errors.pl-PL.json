@@ -20,5 +20,10 @@
   "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}",
   "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody.",
   "INSTALL_FACTS_MISSING": "Przepis wymaga informacji o {fact} tej instalacji, a Phaket jej nie zna. Wybierz build gry lub ustaw architekturę i zaplanuj ponownie.",
-  "PLAN_EMPTY": "Przepis nie pasuje do tej instalacji — nie ma żadnej operacji do wykonania. Nic nie zmieniono i nie zapisano jako zainstalowane."
+  "PLAN_EMPTY": "Przepis nie pasuje do tej instalacji — nie ma żadnej operacji do wykonania. Nic nie zmieniono i nie zapisano jako zainstalowane.",
+  "SESSION_PRIVACY_FAILED": "Nie udało się zabezpieczyć dostępu do katalogu sesji ({path}): {detail}. Token nie został zapisany — Phaket nie przechowuje sekretów w miejscu dostępnym dla innych. Zamknij tę aplikację i spróbuj ponownie na normalnym dysku.",
+  "TOOL_OFFLINE": "Brak połączenia sieciowego podczas pobierania narzędzia.",
+  "TOOL_DOWNLOAD_FAILED": "Pobieranie narzędzia nie powiodło się.",
+  "TOOL_VERIFICATION_FAILED": "Weryfikacja narzędzia lub archiwum nie powiodła się.",
+  "TOOL_UNVERIFIED_VERSION": "Wersja nie ma zaufanego skrótu SHA-256."
 }

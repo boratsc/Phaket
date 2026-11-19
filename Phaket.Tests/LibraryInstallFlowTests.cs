@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Reflection;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -6,6 +7,7 @@ using Avalonia.VisualTree;
 using Phaket.Core.Accounts;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
+using Phaket.Core.Tools;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
@@ -14,6 +16,13 @@ namespace Phaket.Tests;
 
 public class LibraryInstallFlowTests
 {
+    // Every request fails as if there were no network, so ToolProvider reports TOOL_OFFLINE.
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("no network"));
+    }
+
     private sealed class Account : IAccountService
     {
         public string Provider => "epic";
@@ -47,6 +56,15 @@ public class LibraryInstallFlowTests
     private static void SetBinary(LegendaryInstallAdapter adapter, string? value) =>
         typeof(LegendaryInstallAdapter).GetField("binary", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(adapter, value);
     private static LegendaryTokens Tokens() => new("access", "refresh", DateTimeOffset.UtcNow.AddHours(1), "id", "name");
+    // Core checks the binary exists before running it, and a missing one starts a real download:
+    // the fixture is a file on disk that the fake runner never opens.
+    private static string FakeBinary(string root)
+    {
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "legendary-fake");
+        File.WriteAllText(path, "fixture");
+        return path;
+    }
     private static LegendaryInstallPlan Plan(string root, IReadOnlyList<string>? conflicts = null) =>
         new(Game.AppName, root, Path.Combine(root, Game.AppName), null, "game.exe", conflicts ?? []);
 
@@ -56,7 +74,7 @@ public class LibraryInstallFlowTests
         var root = Path.Combine(Path.GetTempPath(), "phaket-flow-" + Guid.NewGuid());
         var runner = new Runner();
         var adapter = new LegendaryInstallAdapter(_ => Task.FromResult(Tokens()), runner, Path.Combine(root, "config"));
-        SetBinary(adapter, "fake");
+        SetBinary(adapter, FakeBinary(root + "-bin"));
         var vm = new LibraryViewModel(_ => { }, new Account(), null, _ => Task.FromResult<IReadOnlyList<OwnedEpicGame>>([Game]), () => []);
         Inject(vm, adapter);
         vm.InstallPlan = Plan(root, ["conflict"]);
@@ -87,6 +105,7 @@ public class LibraryInstallFlowTests
         Assert.True(vm.ExecuteGameInstallCommand.CanExecute(null));
         Assert.Equal("", vm.InstallError);
         Assert.False(Directory.Exists(root));
+        Directory.Delete(root + "-bin", true);
     }
 
     [AvaloniaFact]
@@ -97,7 +116,7 @@ public class LibraryInstallFlowTests
         {
             var runner = new Runner();
             var adapter = new LegendaryInstallAdapter(_ => Task.FromResult(Tokens()), runner, Path.Combine(root, "config"));
-            SetBinary(adapter, "fake");
+            SetBinary(adapter, FakeBinary(root));
             int ownedCalls = 0, recordCalls = 0;
             var vm = new LibraryViewModel(_ => { }, new Account(), null,
                 _ => { ownedCalls++; return Task.FromResult<IReadOnlyList<OwnedEpicGame>>([Game]); },
@@ -119,8 +138,10 @@ public class LibraryInstallFlowTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    // A missing binary is no longer an error: the plan builds and the run asks ToolProvider to
+    // fetch the tool, so the failure the user sees comes from the download (TOOL_OFFLINE).
     [AvaloniaTheory]
-    [InlineData("LEGENDARY_NOT_FOUND", "LegendaryNotFound")]
+    [InlineData("TOOL_OFFLINE", "Failed")]
     [InlineData("LEGENDARY_INSTALL_FAILED", "Failed")]
     [InlineData("EPIC_TOKEN_INVALID", "TokenInvalid")]
     [InlineData("PATH_OUT_OF_BOUNDS", "PathOutOfBounds")]
@@ -134,9 +155,12 @@ public class LibraryInstallFlowTests
             {
                 LocalizationService.Instance.CurrentLanguage = locale;
                 var runner = new Runner { ExitCode = code == "LEGENDARY_INSTALL_FAILED" ? 1 : 0 };
+                // The offline ToolProvider is injected in every case: no test of this flow may reach
+                // the network, and a binary that does not exist on disk would make Core download one.
                 var adapter = new LegendaryInstallAdapter(_ => code == "EPIC_TOKEN_INVALID"
-                    ? Task.FromException<LegendaryTokens>(new PhaketException(code)) : Task.FromResult(Tokens()), runner, Path.Combine(root, "config"));
-                SetBinary(adapter, code == "LEGENDARY_NOT_FOUND" ? null : "fake");
+                    ? Task.FromException<LegendaryTokens>(new PhaketException(code)) : Task.FromResult(Tokens()), runner, Path.Combine(root, "config"),
+                    toolProvider: new ToolProvider(Path.Combine(root, "tools"), new HttpClient(new OfflineHandler())));
+                SetBinary(adapter, code == "TOOL_OFFLINE" ? null : FakeBinary(root));
                 int ownedCalls = 0, recordCalls = 0;
                 var vm = new LibraryViewModel(_ => { }, new Account(), null,
                     _ => { ownedCalls++; return Task.FromResult<IReadOnlyList<OwnedEpicGame>>([Game]); },

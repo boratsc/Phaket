@@ -34,7 +34,7 @@
                 </Button>
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <mi:MaterialIcon Kind="CloudOff" Width="16" Height="16" IsVisible="{Binding IsOffline}" />
+                <mi:MaterialIcon Kind="CloudOff" Width="16" Height="16" VerticalAlignment="Center" IsVisible="{Binding IsOffline}" />
                 <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="6">

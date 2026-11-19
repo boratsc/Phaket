@@ -15,6 +15,28 @@
     <TextBlock Classes="sectionTitle" Text="{Binding [Help.SafetyTitle], Source={x:Static services:LocalizationService.Instance}}" />
     <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Safety], Source={x:Static services:LocalizationService.Instance}}" />
    </StackPanel></Border>
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SecretsTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Secrets], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsMigration], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsFallback], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsDelete], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SteamKeyTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SteamKey], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.ToolsTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Tools], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.ToolsLegendary], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.ToolsDepotDownloader], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
+   <Border Classes="card"><StackPanel Spacing="12">
+    <TextBlock Classes="sectionTitle" Text="{Binding [Help.CatalogTitle], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Catalog], Source={x:Static services:LocalizationService.Instance}}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.CatalogEndpoint], Source={x:Static services:LocalizationService.Instance}}" />
+   </StackPanel></Border>
   </StackPanel>
  </ScrollViewer>
 </UserControl>

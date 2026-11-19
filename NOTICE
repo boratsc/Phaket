@@ -18,6 +18,8 @@ Backend PhaketServer jest odrębnym produktem o licencji zamkniętej
 (all rights reserved) — LGPL nie obejmuje backendu.
 
 Zależności stron trzecich:
+- Legendary (legendary-gl/legendary) — GPL-3.0; pobierane w runtime z GitHub Releases, SHA-256 weryfikowane przed uruchomieniem
+- DepotDownloader (SteamRE/DepotDownloader) — GPL-2.0; pobierane w runtime z GitHub Releases, SHA-256 weryfikowane przed uruchomieniem
 - Avalonia 12.1.6 — MIT
 - CommunityToolkit.Mvvm 8.4.2 — MIT
 - Material.Icons.Avalonia 3.0.2 — MIT
@@ -49,6 +51,8 @@ The PhaketServer backend is a separate, proprietary product (all rights
 reserved) — the LGPL does not cover the backend.
 
 Third-party dependencies:
+- Legendary (legendary-gl/legendary) — GPL-3.0; downloaded at runtime from GitHub Releases, SHA-256 verified before execution
+- DepotDownloader (SteamRE/DepotDownloader) — GPL-2.0; downloaded at runtime from GitHub Releases, SHA-256 verified before execution
 - Avalonia 12.1.6 — MIT
 - CommunityToolkit.Mvvm 8.4.2 — MIT
 - Material.Icons.Avalonia 3.0.2 — MIT

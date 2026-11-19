@@ -128,7 +128,10 @@
               <TextBox Text="{Binding Endpoint}" AutomationProperties.Name="{Binding [Builds.Endpoint], Source={x:Static services:LocalizationService.Instance}}" />
               <Button Grid.Column="1" Command="{Binding RefreshCommand}" Content="{Binding [Builds.Refresh], Source={x:Static services:LocalizationService.Instance}}" />
             </Grid>
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <mi:MaterialIcon Kind="CloudOff" Width="16" Height="16" VerticalAlignment="Center" IsVisible="{Binding IsOffline}" />
+              <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding [Builds.LastSync], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding LastSyncText}"/></StackPanel>
             <TextBox Text="{Binding SearchText}" PlaceholderText="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.Name="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}" />
             <TextBlock IsVisible="{Binding IsEmpty}" Text="{Binding [ModCatalog.Empty], Source={x:Static services:LocalizationService.Instance}}" />

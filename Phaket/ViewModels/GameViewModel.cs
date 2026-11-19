@@ -156,7 +156,6 @@ public partial class GameViewModel : ViewModelBase
     public string Hero => Game.Hero;
     public string Title => Game.Title;
 
-    [ObservableProperty] private bool showDetails;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private LaunchOptionsPlan? pendingPlan;
     [ObservableProperty] private bool canRollback;
@@ -167,7 +166,6 @@ public partial class GameViewModel : ViewModelBase
         : $"{PendingPlan.Current ?? "(brak)"}  →  {PendingPlan.Proposed}";
 
     [RelayCommand] private void Back() => back();
-    [RelayCommand] private void ToggleDetails() => ShowDetails = !ShowDetails;
     [RelayCommand] private void OpenMods() => openMods();
     [RelayCommand] private void OpenProfiles() => openProfiles();
     [RelayCommand] private void OpenBackup() => openBackup();
@@ -220,14 +218,12 @@ public partial class GameViewModel : ViewModelBase
             if (proposed is null)
             {
                 StatusMessage = loc["Game.LaunchOptionsNotNeeded"];
-                ShowDetails = true;
                 return;
             }
             var service = new SteamLaunchOptionsService(root);
             PendingPlan = service.BuildPlan(Game.SteamAppId, proposed);
             OnPropertyChanged(nameof(PlanSummary));
             StatusMessage = PendingPlan is null ? loc["Game.NoSteam"] : loc["Game.PlanReady"];
-            ShowDetails = true;
         }
         catch (Exception ex)
         {

@@ -61,7 +61,9 @@ public sealed class DefinitionGameAdapter : IGameAdapter
             facts.Capabilities.ToHashSet(StringComparer.Ordinal),
             uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                 && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
-            Arch: facts.Arch ?? InstallationArchProbe.Probe(gameRoot, definition));
+            Arch: facts.Arch ?? InstallationArchProbe.Probe(gameRoot, definition),
+            BuildId: long.TryParse(facts.Versions.SingleOrDefault(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var buildId) ? buildId : null);
         var context = new PlannerContext(facts.Installation.InstallationId, profile.ProfileId,
             gameRoot, profileRoot, stagingRoot, packageRoot, definition, planFacts);
         return OperationPlanner.Plan(recipe, context);

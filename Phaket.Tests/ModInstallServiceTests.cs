@@ -428,25 +428,25 @@ public sealed class ModInstallServiceTests
     [Fact]
     public async Task LiveAmongUsInstallUsesBackendCatalogAndReportsReceipt()
     {
-        using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        using (var health = await probe.GetAsync("http://127.0.0.1:18081/health")) health.EnsureSuccessStatusCode();
+        await LiveServer.RequireAsync();
+        using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
         var root = Directory.CreateTempSubdirectory("mod-install-live-");
         try
         {
             using var db = new ModCatalogStore(Path.Combine(root.FullName, "catalog.db"));
-            using var http = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:18081"), Timeout = TimeSpan.FromMinutes(10) };
+            using var http = new HttpClient { BaseAddress = new Uri(LiveServer.Url), Timeout = TimeSpan.FromMinutes(10) };
             using var packageHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
             var client = new ModCatalogClient(new HttpCatalogTransport(http), db);
             var service = new ModInstallService(root.FullName, client, new HttpPackageTransport(packageHttp),
                 profiles: new ProfileStore(Path.Combine(root.FullName, "profiles")));
-            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", "http://127.0.0.1:18081", new("", "steam", true, "x86"));
+            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", LiveServer.Url, new("", "steam", true, "x86"));
             var outcome = await service.ExecuteAsync(prep, true);
             Assert.True(outcome.Success, outcome.ErrorCode);
             var game = Path.Combine(prep.SandboxRoot, "game");
             Assert.True(Directory.Exists(Path.Combine(game, "BepInEx", "plugins", "Cosmella-Outfit_Presets")));
             Assert.True(File.Exists(Path.Combine(game, "winhttp.dll")));
-            using var response = await probe.GetAsync("http://127.0.0.1:18081/receipts/summary?game=among-us&mod=Cosmella-Outfit_Presets");
+            using var response = await probe.GetAsync($"{LiveServer.Url}/receipts/summary?game=among-us&mod=Cosmella-Outfit_Presets");
             response.EnsureSuccessStatusCode();
             var body = await response.Content.ReadAsStringAsync();
             Assert.True(JsonDocument.Parse(body).RootElement.GetProperty("installed").GetInt32() >= 1, body);

@@ -1,12 +1,80 @@
 using System.Text.Json;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
+using Phaket.Core.Tools;
 
 namespace Phaket.Core.Tests;
 
 public sealed class LegendaryInstallAdapterTests
 {
     public static bool IsWindows => OperatingSystem.IsWindows();
+
+    [Fact]
+    public async Task MissingBinaryDownloadsVerifiedToolAndRunsIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        byte[] binary = "verified legendary"u8.ToArray();
+        string digest = Convert.ToHexString(SHA256.HashData(binary)).ToLowerInvariant();
+        using var http = new HttpClient(new DownloadHandler(binary, digest));
+        try
+        {
+            var runner = new FakeRunner();
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(Path.Combine(root, "games", "app")); File.WriteAllText(Path.Combine(root, "games", "app", "game.exe"), "game"); return 0; };
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(Path.Combine(root, "games", "app")); File.WriteAllText(Path.Combine(root, "games", "app", "game.exe"), "game"); return 0; };
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(Path.Combine(root, "games", "app")); File.WriteAllText(Path.Combine(root, "games", "app", "game.exe"), "game"); return 0; };
+            var provider = new ToolProvider(Path.Combine(root, "tools"), http);
+            var adapter = new LegendaryInstallAdapter(_ => Task.FromResult(new LegendaryTokens("a", "r", DateTimeOffset.UtcNow, "id", "name")), runner, Path.Combine(root, "config"), toolProvider: provider);
+            var plan = adapter.BuildInstallPlan(new("app", "ns", "cat", "title", true, "assets"), Path.Combine(root, "games"), new GameDefinition("g", [], MainExecutable: "game.exe"));
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game"); return 0; };
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game"); return 0; };
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game"); return 0; };
+            await adapter.ExecuteInstallAsync(plan, true, true, ct: TestContext.Current.CancellationToken);
+            Assert.Equal(Path.Combine(root, "tools", "legendary", "0.21.1", OperatingSystem.IsWindows() ? "legendary_windows_x64.exe" : "legendary_linux_x64"), runner.Executable);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task PinnedToolVersionTakesPrecedenceOverExistingLocalBinary()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            const string pin = "1.2.3";
+            var local = Path.Combine(root, OperatingSystem.IsWindows() ? "legendary.exe" : "legendary"); File.WriteAllText(local, "local");
+            var settings = Path.Combine(root, "settings.json");
+            File.WriteAllText(settings, "{\"tools\":{\"legendary\":{\"version\":\"1.2.3\"}}}");
+            var installed = Path.Combine(root, "tools", "legendary", pin, OperatingSystem.IsWindows() ? "legendary_windows_x64.exe" : "legendary_linux_x64");
+            Directory.CreateDirectory(Path.GetDirectoryName(installed)!); File.WriteAllText(installed, "pinned");
+            using var http = new HttpClient(new OfflineHandler());
+            var runner = new FakeRunner();
+            var adapter = new LegendaryInstallAdapter(_ => Task.FromResult(new LegendaryTokens("a", "r", DateTimeOffset.UtcNow, "id", "name")), runner, Path.Combine(root, "config"), binaryPath: local,
+                toolProvider: new ToolProvider(Path.Combine(root, "tools"), http), settingsPath: settings);
+            var plan = adapter.BuildInstallPlan(new("app", "ns", "cat", "title", true, "assets"), Path.Combine(root, "games"), new GameDefinition("g", [], MainExecutable: "game.exe"));
+            runner.OnRun = (_, _) => { Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game"); return 0; };
+            await adapter.ExecuteInstallAsync(plan, true, true, ct: TestContext.Current.CancellationToken);
+            Assert.Equal(installed, runner.Executable);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => throw new HttpRequestException();
+    }
+
+    private sealed class DownloadHandler(byte[] binary, string digest) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.Host == "api.github.com")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($"[{{\"tag_name\":\"0.21.1\",\"assets\":[{{\"name\":\"{(OperatingSystem.IsWindows() ? "legendary_windows_x64.exe" : "legendary_linux_x64")}\",\"browser_download_url\":\"https://asset.test/tool\",\"digest\":\"sha256:{digest}\"}}]}}]", Encoding.UTF8, "application/json") });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(binary) });
+        }
+    }
 
     // Windows symlink creation may require developer mode or elevated privileges.
     [Theory(SkipWhen = nameof(IsWindows), Skip = "Windows symlinks may require elevated privileges or developer mode")]
@@ -203,10 +271,11 @@ public sealed class LegendaryInstallAdapterTests
     {
         public Func<IReadOnlyList<string>, IDictionary<string, string?>, int>? OnRun { get; set; }
         public IReadOnlyList<string> Arguments { get; private set; } = [];
+        public string? Executable { get; private set; }
         public Action<string>? Output { get; private set; }
         public Task<int> RunAsync(string executable, IReadOnlyList<string> arguments, IDictionary<string, string?> environment, Action<string> output, CancellationToken cancellationToken)
         {
-            Arguments = arguments; Output = output;
+            Executable = executable; Arguments = arguments; Output = output;
             output("fake output with secret-access and secret-refresh");
             return Task.FromResult(OnRun?.Invoke(arguments, environment) ?? 0);
         }

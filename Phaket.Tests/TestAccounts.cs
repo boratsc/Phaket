@@ -11,9 +11,8 @@ internal static class TestAccounts
     internal static string TempPath() => Path.Combine(Path.GetTempPath(), "phaket-test-" + Guid.NewGuid().ToString("N"));
     internal static MainWindowViewModel ViewModel()
     {
-        var store = new InMemorySecretStore();
         string directory = TempPath();
-        return new MainWindowViewModel(new AccountServices(store, directory),
-            new SettingsViewModel(new SteamApiKeyStore(Path.Combine(directory, "steam-apikey.bin"), store), Path.Combine(directory, "settings.json")));
+        return new MainWindowViewModel(new AccountServices(new InMemorySecretStore(), directory),
+            new SettingsViewModel(Path.Combine(directory, "settings.json")));
     }
 }

@@ -29,7 +29,6 @@ public class SettingsSecretStoreTests
         var fake = store ?? new FakeStore();
         LocalizationService.Instance.CurrentLanguage = language;
         var vm = new SettingsViewModel(
-            new SteamApiKeyStore(Path.Combine(dir, "steam-apikey.bin"), new InMemorySecretStore()),
             Path.Combine(dir, "settings.json"),
             new SettingsViewModel.SecretStoreSeam(fake, dir, keys ?? ["epic"], provider, migrate));
         return new Harness(dir, vm, fake);

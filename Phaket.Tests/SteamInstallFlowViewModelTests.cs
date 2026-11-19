@@ -2,6 +2,7 @@ using Phaket.Core.Accounts;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 using Phaket.Core.Tests;
+using Phaket.Core.Tools;
 using Phaket.Services;
 using Phaket.ViewModels;
 
@@ -155,8 +156,29 @@ public sealed class SteamInstallFlowViewModelTests : IDisposable
         await vm.ExecuteCommand.ExecuteAsync(null);
         Assert.StartsWith(loc["SteamInstall.Error.Failed"], vm.Status);
         Assert.Contains("failure detail", vm.Status);
-        File.Delete(binary); vm.PrepareCommand.Execute(null);
-        Assert.Equal(loc["SteamInstall.Error.NotFound"], vm.Status);
+        // Bez binarium adapter sam pobiera narzędzie przez ToolProvider; offline kończy się
+        // to zlokalizowana porażka, nigdy surowy wyjątek ani kod błędu.
+        var offlineRunner = new Runner();
+        var offline = new DepotDownloaderInstallAdapter(offlineRunner, Path.Combine(root, "offline-config"),
+            Path.Combine(root, "missing-depot"), new ToolProvider(Path.Combine(root, "offline-tools"), new HttpClient(new OfflineHandler())));
+        var offlineVm = new SteamInstallFlowViewModel(new OwnedSteamGame("945360", "Among Us", null, null, "test", false),
+            new GameDefinition("among-us", [], MainExecutable: "game.exe"), offline, () => Task.FromResult<string?>(Path.Combine(root, "picked")), loc: loc);
+        offlineVm.TargetDir = Path.Combine(root, "offline-games");
+        offlineVm.OsArch = "64";
+        offlineVm.Username = "user";
+        offlineVm.PrepareCommand.Execute(null);
+        offlineVm.ConsentSession = offlineVm.AcceptPlan = true;
+        await offlineVm.ExecuteCommand.ExecuteAsync(null);
+        Assert.Equal(loc["SteamInstall.Error.Failed"], offlineVm.Status);
+        Assert.DoesNotContain("TOOL_OFFLINE", offlineVm.Status, StringComparison.Ordinal);
+        Assert.Equal(0, offlineRunner.Calls);
+    }
+
+    // Every request fails as if there were no network, so ToolProvider reports TOOL_OFFLINE.
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("no network"));
     }
 
     [Fact]

@@ -58,6 +58,8 @@ public partial class SteamInstallFlowViewModel : ObservableObject
     public bool HasPreview => Preview is not null;
     public bool HasConflicts => Preview?.Plan.Conflicts.Count > 0;
     public string PreviewSize => Preview?.SizeBytes is long size ? $"{size:N0} B" : loc["SteamInstall.UnknownSize"];
+    // Bound instead of Preview.Plan.TargetPath: a null plan must not log binding errors.
+    public string PreviewTargetPath => Preview?.Plan.TargetPath ?? "";
     // With a stored sign-in the account name comes from the secret store, so it is not editable here.
     public bool StoredCredentialKnown => signin?.Stored is not null;
     public bool CanEditUsername => !Installing && signin?.Stored is null;
@@ -228,7 +230,7 @@ public partial class SteamInstallFlowViewModel : ObservableObject
     {
         var key = ex.Error.Code switch
         {
-            "DEPOTDOWNLOADER_NOT_FOUND" => "NotFound", "DEPOTDOWNLOADER_INSTALL_FAILED" => "Failed",
+            "DEPOTDOWNLOADER_INSTALL_FAILED" => "Failed",
             "DEPOTDOWNLOADER_INSTALL_UNVERIFIED" => "Unverified", ErrorCodes.PathOutOfBounds => "PathOutOfBounds",
             "CONSENT_REQUIRED" => "ConsentRequired", "PLAN_NOT_ACCEPTED" => "PlanNotAccepted",
             "OVERWRITE_CONSENT_REQUIRED" => "OverwriteRequired", "DEPOTDOWNLOADER_SESSION_CONSENT_REQUIRED" => "ConsentRequired",

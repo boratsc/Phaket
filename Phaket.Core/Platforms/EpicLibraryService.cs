@@ -92,11 +92,9 @@ public sealed class EpicLibraryService
     {
         string Read(string key) => item.TryGetProperty(key, out var value) ? value.GetString() ?? "" : "";
         string app = Read("appName"), ns = Read("namespace"), catalog = Read("catalogItemId");
-        if (string.IsNullOrWhiteSpace(app))
-        {
-            System.Diagnostics.Trace.TraceWarning("Ignoring Epic library item with empty appName from {0}", source);
-            return null;
-        }
+        // DLC, editions and unpacked entitlements carry no appName: they are filtered
+        // silently, one warning per item was spam on every library refresh.
+        if (string.IsNullOrWhiteSpace(app)) return null;
         if (catalog.Length == 0 && item.TryGetProperty("entitlementName", out var entitlement)) catalog = entitlement.GetString() ?? "";
         if (app.Length == 0 && catalog.Length == 0) return null;
         string title = Read("title");

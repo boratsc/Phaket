@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Phaket.Core.Omrl;
+using Phaket.Core.Tools;
 
 namespace Phaket.Core.Platforms;
 
@@ -25,10 +26,14 @@ public sealed class DepotDownloaderInstallAdapter
     private readonly IDepotProcessRunner runner;
     private readonly string sessionRoot;
     private readonly string recordsPath;
+    private readonly ToolProvider toolProvider;
+    private readonly string? settingsPath;
 
-    public DepotDownloaderInstallAdapter(IDepotProcessRunner? runner = null, string? configRoot = null, string? binaryPath = null)
+    public DepotDownloaderInstallAdapter(IDepotProcessRunner? runner = null, string? configRoot = null, string? binaryPath = null, ToolProvider? toolProvider = null, string? settingsPath = null)
     {
         this.runner = runner ?? new DepotProcessRunner();
+        this.toolProvider = toolProvider ?? new ToolProvider();
+        this.settingsPath = settingsPath;
         var root = configRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
         sessionRoot = Path.Combine(root, "depot-session");
         recordsPath = Path.Combine(root, "steam-installs.json");
@@ -52,7 +57,6 @@ public sealed class DepotDownloaderInstallAdapter
     // never for the host (PAK-65).
     public DepotInstallPlan BuildInstallPlan(OwnedSteamGame game, string targetDir, GameDefinition definition, string os, string osArch, string? depotId = null, string? manifestId = null)
     {
-        RequireBinary();
         var basePath = Path.GetFullPath(targetDir);
         var targetPath = Path.Combine(basePath, game.AppId);
         var plan = new DepotInstallPlan(game.AppId, basePath, targetPath, definition.MainExecutable ?? "", definition.ArtifactOs(os), osArch, depotId, manifestId, []);
@@ -74,7 +78,10 @@ public sealed class DepotDownloaderInstallAdapter
         // make a link that escapes the approved area acceptable (PAK-65).
         RejectNestedLinks(plan.TargetPath);
         if (!overwriteConsent && (plan.Conflicts.Count > 0 || Conflicts(plan.TargetPath))) throw new PhaketException("OVERWRITE_CONSENT_REQUIRED");
-        RequireBinary();
+        var pin = ToolSettings.GetPinnedVersion("depotdownloader", settingsPath);
+        string toolPath = pin is null && binary is not null && File.Exists(binary) ? binary : await toolProvider.EnsureAsync("depotdownloader", pin, ct: ct);
+        string? processHost = toolPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? host ?? FindOnPath(OperatingSystem.IsWindows() ? ["dotnet.exe"] : ["dotnet"]) : null;
+        if (toolPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && processHost is null) throw new PhaketException("DEPOTDOWNLOADER_DOTNET_NOT_FOUND");
         if (string.IsNullOrWhiteSpace(username) || username.Any(char.IsControl)) throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "invalid username"));
         string session = Path.Combine(sessionRoot, Guid.NewGuid().ToString("N"));
         SessionSecurity.EnsurePrivateRoot(sessionRoot);
@@ -90,7 +97,7 @@ public sealed class DepotDownloaderInstallAdapter
             };
             foreach (var path in env.Values) Directory.CreateDirectory(path!);
             var args = new List<string>();
-            if (host is not null) args.Add(binary!);
+            if (processHost is not null) args.Add(toolPath);
             args.AddRange(["-app", plan.AppId, "-username", username, "-os", plan.Os, "-osarch", plan.OsArch, "-dir", plan.TargetPath]);
             if (plan.DepotId is not null) args.AddRange(["-depot", plan.DepotId]);
             if (plan.ManifestId is not null) args.AddRange(["-manifest", plan.ManifestId]);
@@ -128,7 +135,7 @@ public sealed class DepotDownloaderInstallAdapter
                 }
             }
             Directory.CreateDirectory(plan.BasePath);
-            int exit = await runner.RunAsync(host ?? binary!, args, env, Output, ct);
+            int exit = await runner.RunAsync(processHost ?? toolPath, args, env, Output, ct);
             foreach (var buffer in buffers) if (buffer.Length > 0) lines.Enqueue(buffer.ToString());
             string Redact(string s) { foreach (var secret in secrets.OrderByDescending(s => s.Length)) s = s.Replace(secret, "[REDACTED]", StringComparison.Ordinal); return s; }
             var safe = Redact(string.Concat(lines.TakeLast(100)));
@@ -165,7 +172,6 @@ public sealed class DepotDownloaderInstallAdapter
         return paths.Select(path => new DepotSessionCleanupResult(path, "attribution unavailable")).ToArray();
     }
 
-    private void RequireBinary() { if (binary is null || !File.Exists(binary)) throw new PhaketException("DEPOTDOWNLOADER_NOT_FOUND", ("loc", "install_depotdownloader_manually")); }
     private static bool Conflicts(string path) => Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any();
     private static StringComparison Comparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private static bool Id(string? id) => !string.IsNullOrEmpty(id) && id.All(c => c is >= '0' and <= '9') && ulong.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0;

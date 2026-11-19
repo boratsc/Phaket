@@ -74,7 +74,6 @@ public class RenderTests
         {
             var memory = new Phaket.Core.Tests.InMemorySecretStore();
             var settings = new SettingsViewModel(
-                new Phaket.Core.Accounts.SteamApiKeyStore(Path.Combine(dir, "steam-apikey.bin"), memory),
                 Path.Combine(dir, "settings.json"),
                 new SettingsViewModel.SecretStoreSeam(
                     locked ? new Phaket.Core.Accounts.LinuxLibsecretStore(new LockedNative()) : memory,
@@ -124,7 +123,7 @@ public class RenderTests
         string directory = TestAccounts.TempPath();
         var accounts = new AccountServices(store, directory);
         if (stored) await accounts.SteamCredentials.SaveAsync("phaket.tester", "haslo-testowe");
-        var settings = new SettingsViewModel(new Phaket.Core.Accounts.SteamApiKeyStore(Path.Combine(directory, "steam-apikey.bin"), store), Path.Combine(directory, "settings.json"));
+        var settings = new SettingsViewModel(Path.Combine(directory, "settings.json"));
         var window = new MainWindow(new MainWindowViewModel(accounts, settings)) { Width = 1280, Height = 800 };
         window.Show();
         try

@@ -16,16 +16,31 @@ public partial class LibraryViewModel
     [ObservableProperty] private string sessionCleanupStatus = "";
     private IReadOnlyList<string> sessionPaths = [];
 
+    // Test seam for the Steam folder choice: same delegate shape as InstallFolderPicker.
+    internal Func<Task<string?>>? SteamFolderPicker { get; set; }
+
     [RelayCommand]
     private async Task OpenSteamInstallAsync(GameCatalogItem? item)
     {
         if (SteamInstall?.Installing == true || item?.CanInstallSteam != true || !steamGames.TryGetValue(item, out var game)) return;
+        InstallError = "";
+        // Same picker as the Epic flow, so the same rules apply: the caller may replace it
+        // (tests) and a picker that cannot open must end as a message, not as an unobserved exception.
         async Task<string?> Pick()
         {
-            var window = (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-            if (window?.StorageProvider is not { } storage) return null;
-            var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = LocalizationService.Instance["Library.InstallChooseFolder"], AllowMultiple = false });
-            return folders.FirstOrDefault()?.TryGetLocalPath();
+            try
+            {
+                var chosen = await (SteamFolderPicker ?? (() => PickInstallFolderAsync(item.Definition.Slug)))();
+                // A later successful choice replaces the message from a failed one.
+                if (chosen is not null) InstallError = "";
+                return chosen;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                || ex is NotSupportedException or InvalidOperationException or UriFormatException)
+            {
+                InstallError = LocalizationService.Instance["ModInstall.FolderFailed"];
+                return null;
+            }
         }
         Task<IReadOnlyList<BuildOption>> Builds() => Task.Run<IReadOnlyList<BuildOption>>(() =>
         {

@@ -1,53 +1,30 @@
-using System.Globalization;
-using System.Net;
-using System.Text.Json;
-using System.Xml;
-using System.Xml.Linq;
 using Phaket.Core.Omrl;
+using System.Text.Json;
 
 namespace Phaket.Core.Platforms;
 
 public sealed record OwnedSteamGame(string AppId, string Name, int? PlaytimeMinutes, GameDefinition? Definition, string Source, bool LowerConfidence);
 
-public sealed class SteamLibraryService(Func<Task<string?>> apiKeyProvider, string steamId, HttpClient http, IReadOnlyList<GameDefinition> definitions, bool allowCommunityXml = false)
+public sealed class SteamLibraryService(Func<Task<string?>> apiKeyProvider, string steamId, HttpClient http, IReadOnlyList<GameDefinition> definitions, bool allowCommunityXml = false, string? dataRoot = null, string? userProfile = null)
 {
+    // shortcut: WebAPI parameters are unused after removing WebAPI; remove them with their UI call-sites.
     public async Task<IReadOnlyList<OwnedSteamGame>> GetOwnedGamesAsync(CancellationToken ct = default)
     {
         if (steamId.Length != 17 || steamId.Any(c => c is < '0' or > '9')) throw new ArgumentException("Invalid Steam ID", nameof(steamId));
-        string? key = await apiKeyProvider();
-        if (string.IsNullOrWhiteSpace(key) && !allowCommunityXml)
-            throw new PhaketException("STEAM_API_KEY_MISSING", ("loc", "https://steamcommunity.com/dev/apikey"));
+        ct.ThrowIfCancellationRequested();
+        var adapter = new SteamAdapter(definitions);
+        var local = adapter.DetectInstallations(OperatingSystem.IsWindows() ? "windows" : "linux", userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        var games = local.Select(i => new OwnedSteamGame(i.Manifest.AppId, i.Manifest.Name, null,
+            definitions.FirstOrDefault(d => d.StoreIds?.GetValueOrDefault("steam") == i.Manifest.AppId), "local", false)).ToArray();
+        var registered = Path.Combine(dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket"), "steam-installs.json");
+        if (!File.Exists(registered)) return games;
         try
         {
-            if (string.IsNullOrWhiteSpace(key)) return await CommunityAsync(ct);
-            string url = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=" + Uri.EscapeDataString(key) + "&steamid=" + steamId + "&include_appinfo=1&include_played_free_games=1&format=json";
-            using var response = await http.GetAsync(url, ct);
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) throw new PhaketException("STEAM_API_KEY_INVALID");
-            response.EnsureSuccessStatusCode();
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            var result = doc.RootElement.GetProperty("response");
-            if (!result.TryGetProperty("games", out var games)) throw new PhaketException("STEAM_LIBRARY_PRIVATE");
-            return games.EnumerateArray().Select(g => Make(g.GetProperty("appid").GetInt32().ToString(CultureInfo.InvariantCulture), g.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "", g.TryGetProperty("playtime_forever", out var p) ? p.GetInt32() : null, false)).ToArray();
+            var records = JsonSerializer.Deserialize<List<DepotRecordedInstallation>>(await File.ReadAllTextAsync(registered, ct)) ?? [];
+            return games.Concat(records.Where(r => !games.Any(g => g.AppId == r.AppId)).Select(r => new OwnedSteamGame(r.AppId, Path.GetFileName(r.TargetPath), null,
+                definitions.FirstOrDefault(d => d.StoreIds?.GetValueOrDefault("steam") == r.AppId), "local", false)))
+                .DistinctBy(g => g.AppId).ToArray();
         }
-        catch (PhaketException) { throw; }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or XmlException or InvalidOperationException or KeyNotFoundException or FormatException)
-        { throw new PhaketException("STEAM_LIBRARY_UNAVAILABLE"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return games; }
     }
-
-    private async Task<IReadOnlyList<OwnedSteamGame>> CommunityAsync(CancellationToken ct)
-    {
-        using var response = await http.GetAsync($"https://steamcommunity.com/profiles/{steamId}/games?tab=all&xml=1", ct);
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden || response.RequestMessage?.RequestUri?.AbsolutePath.Contains("/login", StringComparison.OrdinalIgnoreCase) == true)
-            throw new PhaketException("STEAM_LIBRARY_PRIVATE");
-        response.EnsureSuccessStatusCode();
-        using var reader = XmlReader.Create(await response.Content.ReadAsStreamAsync(ct), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, Async = true });
-        var doc = await XDocument.LoadAsync(reader, LoadOptions.None, ct);
-        var root = doc.Root;
-        if (root?.Name.LocalName != "gamesList" || root.Element("games") is not { } games) throw new PhaketException("STEAM_LIBRARY_PRIVATE");
-        return games.Elements("game").Select(g => Make(g.Element("appID")?.Value ?? "", g.Element("name")?.Value ?? "", null, true)).Where(g => g.AppId.Length > 0).ToArray();
-    }
-
-    private OwnedSteamGame Make(string id, string name, int? playtime, bool xml) => new(id, name, playtime,
-        definitions.FirstOrDefault(d => d.StoreIds?.GetValueOrDefault("steam") == id), xml ? "community-xml" : "web-api", xml);
 }

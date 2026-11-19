@@ -28,6 +28,9 @@ public static class ErrorCodes
     public const string InstallFactsMissing = "INSTALL_FACTS_MISSING";
     // The recipe matched no steps for these facts: nothing to write, so nothing is installed.
     public const string PlanEmpty = "PLAN_EMPTY";
+    // A session folder or token file could not be made private: the secret is never written
+    // where other accounts could read it (PAK-66, fail closed instead of fail open).
+    public const string SessionPrivacyFailed = "SESSION_PRIVACY_FAILED";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)

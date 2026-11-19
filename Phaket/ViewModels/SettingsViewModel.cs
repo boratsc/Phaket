@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Phaket.Services;
 using Phaket.Core.Accounts;
+using Phaket.Core.Tools;
 
 namespace Phaket.ViewModels;
 
@@ -18,6 +19,8 @@ public partial class SettingsViewModel : ViewModelBase
 
     // Secret keys are the base names of the protected account blobs (see TokenProtector),
     // plus the Steam install sign-in, which is stored under its own key (PAK-60).
+    // "steam-apikey" is no longer written anywhere (the local Steam library needs no key);
+    // it stays in the list so deleting secrets also clears it from existing installs.
     private static readonly IReadOnlyList<string> DefaultSecretKeys = ["epic", "steam", "itch", "account", "steam-apikey", SteamCredentialStore.SecretKey];
 
     // Test seam: active store, its directory, key list, provider label and migration entry point.
@@ -28,15 +31,17 @@ public partial class SettingsViewModel : ViewModelBase
         string? Provider = null,
         Func<IReadOnlyList<string>, CancellationToken, Task>? Migrate = null);
 
-    private readonly SteamApiKeyStore steamKeyStore;
     private readonly string settingsPath;
     private readonly string secretDirectory;
     private readonly IReadOnlyList<string> secretKeys;
     private readonly Func<IReadOnlyList<string>, CancellationToken, Task> migrateSecrets;
     private ISecretStore activeStore;
 
-    [ObservableProperty] private string steamApiKey = "";
-    [ObservableProperty] private string steamKeyStatus = "";
+    // Last address written to settings.json; typing an invalid one must not corrupt the file.
+    private string persistedEndpoint;
+
+    [ObservableProperty] private string catalogEndpoint = CatalogSettings.DefaultEndpoint;
+    [ObservableProperty] private string catalogEndpointStatus = "";
     [ObservableProperty] private string secretProvider = "";
     [ObservableProperty] private string secretStateText = "";
     [ObservableProperty] private string secretHintText = "";
@@ -59,19 +64,30 @@ public partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> Languages { get; } = [];
 
+    // Narzędzia: the version pins Core/Tools reads from settings.json, plus the
+    // release list and a forced update check for each tool.
+    public ToolSettingsSection Legendary { get; }
+    public ToolSettingsSection Depot { get; }
+
+    internal string SettingsFile => settingsPath;
+
     [ObservableProperty]
     private string selectedLanguage = LocalizationService.Instance.CurrentLanguage;
 
-    public SettingsViewModel() : this(new SteamApiKeyStore()) { }
+    public SettingsViewModel(string? settingsPath = null)
+        : this(settingsPath, null, null) { }
 
-    public SettingsViewModel(SteamApiKeyStore steamKeyStore, string? settingsPath = null)
-        : this(steamKeyStore, settingsPath, null) { }
+    // Test seam for the tools section: provider (fake HTTP), its download root and the settings path.
+    internal sealed record ToolSeam(ToolProvider Provider, string ToolsRoot);
 
-    internal SettingsViewModel(SteamApiKeyStore steamKeyStore, string? settingsPath, SecretStoreSeam? secrets)
+    internal SettingsViewModel(string? settingsPath, SecretStoreSeam? secrets, ToolSeam? toolSeam = null)
     {
-        this.steamKeyStore = steamKeyStore;
         this.settingsPath = settingsPath ?? DefaultSettingsPath;
-        SteamApiKey = steamKeyStore.Load() ?? "";
+        var toolProvider = toolSeam?.Provider ?? new ToolProvider();
+        string toolsRoot = toolSeam?.ToolsRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "tools");
+        persistedEndpoint = CatalogSettings.Load(this.settingsPath);
+        CatalogEndpoint = persistedEndpoint;
         var seam = secrets ?? new SecretStoreSeam(SecretStoreFactory.Create(), DefaultSecretDirectory);
         activeStore = seam.Store;
         secretDirectory = seam.SecretDirectory;
@@ -80,6 +96,8 @@ public partial class SettingsViewModel : ViewModelBase
         migrateSecrets = seam.Migrate ?? ((keys, ct) => SecretMigration.MigrateAllAsync(secretDirectory, keys, activeStore, ct));
         foreach (var language in LocalizationService.Instance.AvailableLanguages)
             Languages.Add(language);
+        Legendary = new ToolSettingsSection(this, toolProvider, toolsRoot, "legendary");
+        Depot = new ToolSettingsSection(this, toolProvider, toolsRoot, "depotdownloader");
         Load();
         _ = RefreshStatusAsync();
     }
@@ -93,18 +111,36 @@ public partial class SettingsViewModel : ViewModelBase
     };
 
     [RelayCommand]
-    private async Task SaveSteamApiKeyAsync()
+    private void SaveCatalogEndpoint()
     {
-        try
+        string endpoint = CatalogEndpoint.Trim();
+        if (!CatalogSettings.IsValid(endpoint))
         {
-            await steamKeyStore.SaveAsync(SteamApiKey);
-            SteamKeyStatus = LocalizationService.Instance["Settings.SteamKeySaved"];
+            CatalogEndpointStatus = Loc("Settings.Catalog.Invalid");
+            return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
-        {
-            SteamKeyStatus = LocalizationService.Instance["Settings.SteamKeySaveFailed"];
-        }
+        CatalogEndpoint = endpoint;
+        persistedEndpoint = endpoint;
+        CatalogEndpointStatus = Save() ? Loc("Settings.Catalog.Saved") : Loc("Settings.Catalog.SaveFailed");
     }
+
+    public bool HasCatalogEndpointStatus => !string.IsNullOrEmpty(CatalogEndpointStatus);
+    partial void OnCatalogEndpointStatusChanged(string value) => OnPropertyChanged(nameof(HasCatalogEndpointStatus));
+
+    // Tool pins live in the same settings.json, so choosing a version writes through the
+    // merging Save(): only tools.<tool>.version is touched, every other node survives.
+    private readonly Dictionary<string, string?> toolPins = new(StringComparer.Ordinal);
+
+    // Only a version the user picked is written; the pins read at startup are seeded here so a
+    // later save writes the full tools section in the shape Core/Tools expects.
+    internal bool SetToolPin(string tool, string? version)
+    {
+        if (toolPins.TryGetValue(tool, out string? known) && string.Equals(known, version, StringComparison.Ordinal)) return true;
+        toolPins[tool] = version;
+        return Save();
+    }
+
+    internal void NoteToolPin(string tool, string? version) => toolPins[tool] = version;
 
     public bool HasSecretHint => !string.IsNullOrEmpty(SecretHintText);
     partial void OnSecretHintTextChanged(string value) => OnPropertyChanged(nameof(HasSecretHint));
@@ -269,13 +305,40 @@ public partial class SettingsViewModel : ViewModelBase
         catch { /* corrupt settings never block startup */ }
     }
 
-    private void Save()
+    // settings.json is shared (language, catalog endpoint, tool pins from Core/Tools),
+    // so every write merges into the existing document instead of replacing it.
+    private bool Save()
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-            File.WriteAllText(settingsPath, System.Text.Json.JsonSerializer.Serialize(new { language = SelectedLanguage }));
+            System.Text.Json.Nodes.JsonObject node;
+            try
+            {
+                node = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(settingsPath))?.AsObject() ?? [];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+            {
+                node = [];
+            }
+            node["language"] = SelectedLanguage;
+            node["catalogEndpoint"] = persistedEndpoint;
+            if (toolPins.Count > 0)
+            {
+                if (node["tools"] is not System.Text.Json.Nodes.JsonObject toolsNode) node["tools"] = toolsNode = [];
+                foreach ((string tool, string? version) in toolPins)
+                {
+                    if (toolsNode[tool] is not System.Text.Json.Nodes.JsonObject toolNode) toolsNode[tool] = toolNode = [];
+                    toolNode["version"] = version;
+                }
+            }
+
+            File.WriteAllText(settingsPath, node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            return true;
         }
-        catch { /* settings persistence is best-effort */ }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
+using System.Net.Sockets;
 using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -33,6 +34,7 @@ public partial class ModCatalogViewModel : ViewModelBase
     {
         this.gameId = gameId; this.transport = transport; this.appDataRoot = appDataRoot; this.installedChanged = installedChanged;
         cachePath = Path.Combine(appDataRoot, "modcatalog.db");
+        Endpoint = CatalogSettings.Load(CatalogSettings.SettingsFile(appDataRoot));
         Targets.Add(new InstallTargetChoice(LocalizationService.Instance["ModInstall.Sandbox"], new("", "steam", true)));
         if (game is not null)
         {
@@ -44,7 +46,7 @@ public partial class ModCatalogViewModel : ViewModelBase
         if (autoSync) _ = RefreshCommand.ExecuteAsync(null);
     }
     public ObservableCollection<ThunderstoreMod> Mods { get; } = [];
-    [ObservableProperty] private string endpoint = "http://127.0.0.1:18080";
+    [ObservableProperty] private string endpoint = CatalogSettings.DefaultEndpoint;
     [ObservableProperty] private string searchText = "";
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string detailsStatus = "";
@@ -91,7 +93,7 @@ public partial class ModCatalogViewModel : ViewModelBase
                     try {
                         using var http = transport is null ? CreateHttp() : null;
                         await new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), store).SyncAsync(gameId);
-                    } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { offline = true; error = "Builds.Offline"; }
+                    } catch (Exception e) when (e is HttpRequestException or SocketException or TaskCanceledException) { offline = true; error = "Catalog.Offline"; }
                     catch (UriFormatException) { error = "Builds.InvalidEndpoint"; }
                     catch (Exception) { error = "Builds.SyncError"; }
                     mods = store.GetMods(gameId); last = store.LastSync;

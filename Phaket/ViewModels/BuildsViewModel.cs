@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Net.Sockets;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -27,7 +28,7 @@ public partial class BuildsViewModel : ViewModelBase
     public GameCatalogItem Game { get; }
     public string GameTitle => Game.Title;
     public ObservableCollection<CatalogBuild> Builds { get; } = [];
-    [ObservableProperty] private string endpoint = "http://127.0.0.1:18080";
+    [ObservableProperty] private string endpoint = CatalogSettings.Load(CatalogSettings.DefaultSettingsPath);
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private bool isOffline;
     [ObservableProperty] private string lastSyncText = "—";
@@ -56,10 +57,10 @@ public partial class BuildsViewModel : ViewModelBase
                     using var http = new HttpClient { BaseAddress = uri, Timeout = TimeSpan.FromSeconds(15) };
                     await new CatalogClient(new HttpCatalogTransport(http), store).FullSyncAsync();
                 }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                catch (Exception ex) when (ex is HttpRequestException or SocketException or TaskCanceledException)
                 {
                     offline = true;
-                    error = "Builds.Offline";
+                    error = "Catalog.Offline";
                 }
                 catch (UriFormatException) { error = "Builds.InvalidEndpoint"; }
                 catch (Exception) { error = "Builds.SyncError"; }

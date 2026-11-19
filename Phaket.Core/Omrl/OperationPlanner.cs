@@ -245,9 +245,24 @@ public static class OperationPlanner
         if (condition.BuildId is not null && facts.BuildId is null)
             throw new PhaketException(ErrorCodes.InstallFactsMissing, ("fact", "buildId"));
         if (condition.All is { } all) foreach (var c in all) RequireFacts(c, facts);
-        // Each branch of any/of must state its own facts: a fact missing in one branch only means
-        // that branch cannot match (PAK-65: no silent empty plan without saying why).
+        // Alternatives (PAK-66): a branch that already matches makes the others irrelevant, and a
+        // branch ruled out by the facts we do have states nothing we lack. Only a branch that
+        // could still match once an unknown fact is filled in makes that fact required.
+        if (condition.Any is { } any && !any.Any(c => ConditionEvaluator.EvaluateOrNull(c, facts) == true))
+            foreach (var c in any.Where(branch => CouldMatch(branch, facts))) RequireFacts(c, facts);
         if (condition.Not is { } not) RequireFacts(not, facts);
+    }
+
+    // Not disprovable from the known facts: unknown arch/buildId/version leaves a branch open,
+    // so the fact behind it has to be supplied before the plan can be called a plain mismatch.
+    private static bool CouldMatch(RecipeCondition? condition, PlanFacts facts)
+    {
+        if (condition is null) return true;
+        if (condition.Arch is not null || condition.BuildId is not null || condition.GameVersion is not null)
+            return ConditionEvaluator.EvaluateOrNull(condition, facts) != false;
+        if (condition.All is { } all) return all.All(c => CouldMatch(c, facts));
+        if (condition.Any is { } any) return any.Any(c => CouldMatch(c, facts));
+        return ConditionEvaluator.EvaluateOrNull(condition, facts) != false;
     }
 
     private static bool IsWrite(string use) => use is "directory.ensure" or "file.copy" or "file.remove"
