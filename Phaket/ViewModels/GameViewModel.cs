@@ -34,12 +34,14 @@ public partial class GameCatalogItem : ViewModelBase
     public bool SteamInstalled => Detected is not null && Directory.Exists(Detected.Installation.RootPath);
     public bool CanOpenGame => IsSupported;
     public bool OwnedNotInstalled => (EpicOwned || SteamOwned) && !IsInstalled;
+    public bool SupportedOwnedNotInstalled => OwnedNotInstalled && !UnsupportedOwned;
     public bool SteamOwnedNotInstalled => SteamOwned && !SteamInstalled;
     public bool CanInstallSteam => SteamOwnedNotInstalled && IsSupported && !string.IsNullOrWhiteSpace(Definition.MainExecutable);
     public bool ShowSteam => SteamOwned || SteamInstalled;
     public bool EpicOwnedNotInstalled => EpicOwned && !EpicInstalled;
     public bool CanInstallEpic => EpicOwnedNotInstalled && IsSupported && !string.IsNullOrWhiteSpace(Definition.MainExecutable);
     public bool EpicUnsupported => EpicOwned && (!IsSupported || string.IsNullOrWhiteSpace(Definition.MainExecutable));
+    public bool UnsupportedOwned => (EpicOwned || SteamOwned) && (!IsSupported || string.IsNullOrWhiteSpace(Definition.MainExecutable));
     public bool NotDetected => !EpicOwned && !SteamOwned && !IsInstalled;
 
     [ObservableProperty] private SteamInstallation? detected;
@@ -60,9 +62,27 @@ public partial class GameCatalogItem : ViewModelBase
     public InstallationChoice? SelectedInstallation
     {
         get => AvailableInstallations.FirstOrDefault(i => i == selectedInstallation) ?? AvailableInstallations.FirstOrDefault();
-        set { selectedInstallation = value; OnPropertyChanged(); OnPropertyChanged(nameof(RootPath)); OnPropertyChanged(nameof(IsSelectedSteam)); OnPropertyChanged(nameof(InstallationArchitecture)); }
+        set
+        {
+            selectedInstallation = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(RootPath));
+            OnPropertyChanged(nameof(IsSelectedSteam));
+            OnPropertyChanged(nameof(InstallationArchitecture));
+            OnPropertyChanged(nameof(LauncherLabel));
+            OnPropertyChanged(nameof(SelectedBuild));
+        }
     }
     public bool IsSelectedSteam => SelectedInstallation?.Store == "steam";
+    public string LauncherLabel => SelectedInstallation?.Store switch
+    {
+        "steam" => "Steam",
+        "epic" => "Epic Games",
+        _ when SteamOwned => "Steam",
+        _ when EpicOwned => "Epic Games",
+        _ => LocalizationService.Instance["Library.State.NotDetected"]
+    };
+    public string SelectedBuild => SelectedInstallation?.BuildId ?? "—";
     [ObservableProperty] private string profileName = "Profil domyślny";
     [ObservableProperty] private int modCount;
 
@@ -96,15 +116,19 @@ public partial class GameCatalogItem : ViewModelBase
         OnPropertyChanged(nameof(RootPath));
         OnPropertyChanged(nameof(InstallationArchitecture));
         OnPropertyChanged(nameof(IsSelectedSteam));
+        OnPropertyChanged(nameof(LauncherLabel));
+        OnPropertyChanged(nameof(SelectedBuild));
         OnPropertyChanged(nameof(CanOpenGame));
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(OwnedNotInstalled));
+        OnPropertyChanged(nameof(SupportedOwnedNotInstalled));
         OnPropertyChanged(nameof(SteamOwnedNotInstalled));
         OnPropertyChanged(nameof(CanInstallSteam));
         OnPropertyChanged(nameof(ShowSteam));
         OnPropertyChanged(nameof(EpicOwnedNotInstalled));
         OnPropertyChanged(nameof(CanInstallEpic));
         OnPropertyChanged(nameof(EpicUnsupported));
+        OnPropertyChanged(nameof(UnsupportedOwned));
         OnPropertyChanged(nameof(NotDetected));
         OnPropertyChanged(nameof(StatusKey));
     }
@@ -155,6 +179,7 @@ public partial class GameViewModel : ViewModelBase
     public GameCatalogItem Game { get; }
     public string Hero => Game.Hero;
     public string Title => Game.Title;
+    public string GameSource => Game.LauncherLabel;
 
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private LaunchOptionsPlan? pendingPlan;

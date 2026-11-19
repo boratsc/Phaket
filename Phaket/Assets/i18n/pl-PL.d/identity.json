@@ -1,0 +1,19 @@
+{
+  "Identity.Title": "Tożsamość urządzenia",
+  "Identity.Subtitle": "Ta tożsamość podpisuje publikację pakietów i inne uwierzytelnione zmiany.",
+  "Identity.Status.Online": "Online",
+  "Identity.Status.Offline": "Offline",
+  "Identity.Nick": "Nick urządzenia",
+  "Identity.Fingerprint": "Odcisk klucza",
+  "Identity.Loading": "Przygotowywanie klucza urządzenia…",
+  "Identity.KeyWarning": "Utrata klucza prywatnego oznacza utratę tożsamości tego urządzenia i własności opublikowanych pakietów — nie można ich odzyskać. Klucz jest przechowywany w systemowym magazynie sekretów; nie usuwaj go ani nie resetuj magazynu bez planu kopii zapasowej.",
+  "Identity.SaveNick": "Zapisz nick",
+  "Identity.Register": "Zarejestruj / sprawdź online",
+  "Identity.Saved": "Nick zapisano.",
+  "Identity.SavedOffline": "Nick zapisano lokalnie; serwer otrzyma go po ponownym połączeniu.",
+  "Identity.Registered": "Tożsamość urządzenia jest zarejestrowana online.",
+  "Identity.Error.Nick": "Nick musi mieć 1–40 znaków i nie może zawierać znaków sterujących.",
+  "Identity.Error.KeyStore": "Nie można bezpiecznie odczytać ani utworzyć klucza urządzenia. Sprawdź dostępność magazynu sekretów.",
+  "Identity.Error.Save": "Nie można bezpiecznie zapisać nicku w ustawieniach; istniejący plik ustawień pozostawiono bez zmian.",
+  "Identity.Error.Offline": "Nie udało się połączyć z usługą ani zarejestrować urządzenia. Ponów próbę później."
+}

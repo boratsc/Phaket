@@ -85,6 +85,9 @@ public partial class LibraryViewModel : ViewModelBase
     private void OpenAccounts() => openAccounts?.Invoke();
 
     public ObservableCollection<GameCatalogItem> Games { get; } = [];
+    [ObservableProperty] private GameCatalogItem? selectedGame;
+    public bool HasSelectedGame => SelectedGame is not null;
+    partial void OnSelectedGameChanged(GameCatalogItem? value) => OnPropertyChanged(nameof(HasSelectedGame));
 
     [ObservableProperty] private string searchText = "";
     [ObservableProperty] private string status = "";
@@ -107,6 +110,7 @@ public partial class LibraryViewModel : ViewModelBase
             catalog.Add(game);
             Games.Add(game);
         }
+        SelectedGame = Games.FirstOrDefault();
     }
 
     partial void OnSearchTextChanged(string value)
@@ -114,6 +118,7 @@ public partial class LibraryViewModel : ViewModelBase
         Games.Clear();
         foreach (var game in catalog.Where(game => game.Title.Contains(value ?? "", StringComparison.CurrentCultureIgnoreCase)))
             Games.Add(game);
+        if (SelectedGame is null || !Games.Contains(SelectedGame)) SelectedGame = Games.FirstOrDefault();
     }
 
     [RelayCommand]

@@ -1,0 +1,74 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="AppBackgroundBrush" Color="#101113" />
+      <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#151618" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#1A1C1F" />
+      <SolidColorBrush x:Key="RaisedBrush" Color="#202226" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#27292E" />
+      <SolidColorBrush x:Key="LineBrush" Color="#313338" />
+      <SolidColorBrush x:Key="InkBrush" Color="#F4F4F4" />
+      <SolidColorBrush x:Key="MutedBrush" Color="#A3A6AC" />
+      <SolidColorBrush x:Key="QuietBrush" Color="#878B93" />
+      <SolidColorBrush x:Key="GoldBrush" Color="#F7AE27" />
+      <SolidColorBrush x:Key="GoldTextBrush" Color="#FFBC4D" />
+      <SolidColorBrush x:Key="SoftBrush" Color="#302619" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#67D099" />
+      <SolidColorBrush x:Key="SuccessBackgroundBrush" Color="#1D3028" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#FFCA72" />
+      <SolidColorBrush x:Key="WarningBackgroundBrush" Color="#34291C" />
+      <SolidColorBrush x:Key="ShadowBrush" Color="#AA08090C" />
+
+      <!-- Compatibility resources retained for the PoC views that D1 will replace. -->
+      <SolidColorBrush x:Key="BgBrush" Color="#101113" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#151618" />
+      <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#202226" />
+      <SolidColorBrush x:Key="BorderBrush" Color="#313338" />
+      <SolidColorBrush x:Key="TextBrush" Color="#F4F4F4" />
+      <SolidColorBrush x:Key="AmberBrush" Color="#F7AE27" />
+      <SolidColorBrush x:Key="AmberHoverBrush" Color="#FFBC4D" />
+      <SolidColorBrush x:Key="ErrorBrush" Color="#F07878" />
+      <LinearGradientBrush x:Key="AmberGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="#FFBC4D" Offset="0" /><GradientStop Color="#F7AE27" Offset="1" />
+      </LinearGradientBrush>
+      <LinearGradientBrush x:Key="NavActiveGradient" StartPoint="0%,0%" EndPoint="100%,0%">
+        <GradientStop Color="#302619" Offset="0" /><GradientStop Color="#302619" Offset="1" />
+      </LinearGradientBrush>
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F4F0" />
+      <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#EEECE6" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="RaisedBrush" Color="#F3F1ED" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#EAE7DE" />
+      <SolidColorBrush x:Key="LineBrush" Color="#D9D5CA" />
+      <SolidColorBrush x:Key="InkBrush" Color="#222221" />
+      <SolidColorBrush x:Key="MutedBrush" Color="#57575A" />
+      <SolidColorBrush x:Key="QuietBrush" Color="#636366" />
+      <SolidColorBrush x:Key="GoldBrush" Color="#F7AE27" />
+      <SolidColorBrush x:Key="GoldTextBrush" Color="#8B5307" />
+      <SolidColorBrush x:Key="SoftBrush" Color="#F8E9CD" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#17623F" />
+      <SolidColorBrush x:Key="SuccessBackgroundBrush" Color="#E4F4EB" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#784600" />
+      <SolidColorBrush x:Key="WarningBackgroundBrush" Color="#F8EAD5" />
+      <SolidColorBrush x:Key="ShadowBrush" Color="#4008090C" />
+
+      <SolidColorBrush x:Key="BgBrush" Color="#F5F4F0" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#EEECE6" />
+      <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#F3F1ED" />
+      <SolidColorBrush x:Key="BorderBrush" Color="#D9D5CA" />
+      <SolidColorBrush x:Key="TextBrush" Color="#222221" />
+      <SolidColorBrush x:Key="AmberBrush" Color="#F7AE27" />
+      <SolidColorBrush x:Key="AmberHoverBrush" Color="#8B5307" />
+      <SolidColorBrush x:Key="ErrorBrush" Color="#A53535" />
+      <LinearGradientBrush x:Key="AmberGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="#F7AE27" Offset="0" /><GradientStop Color="#E89A15" Offset="1" />
+      </LinearGradientBrush>
+      <LinearGradientBrush x:Key="NavActiveGradient" StartPoint="0%,0%" EndPoint="100%,0%">
+        <GradientStop Color="#F8E9CD" Offset="0" /><GradientStop Color="#F8E9CD" Offset="1" />
+      </LinearGradientBrush>
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

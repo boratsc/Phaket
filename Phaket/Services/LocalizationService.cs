@@ -19,13 +19,26 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public LocalizationService()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        foreach (var name in assembly.GetManifestResourceNames())
+        const string prefix = "Phaket.Assets.i18n.";
+        foreach (var name in assembly.GetManifestResourceNames()
+                     .Where(name => name.StartsWith(prefix, StringComparison.Ordinal) && name.EndsWith(".json", StringComparison.Ordinal))
+                     .OrderBy(name => name.Contains(".d.", StringComparison.Ordinal) ? 1 : 0)
+                     .ThenBy(name => name, StringComparer.Ordinal))
         {
-            if (!name.StartsWith("Phaket.Assets.i18n.", StringComparison.Ordinal) || !name.EndsWith(".json", StringComparison.Ordinal))
-                continue;
-            var locale = name["Phaket.Assets.i18n.".Length..^".json".Length];
+            var resourcePath = name[prefix.Length..^".json".Length];
+            var satelliteIndex = resourcePath.IndexOf(".d.", StringComparison.Ordinal);
+            var locale = satelliteIndex < 0 ? resourcePath : resourcePath[..satelliteIndex];
+            if (!locales.TryGetValue(locale, out var map))
+                locales[locale] = map = new Dictionary<string, string>(StringComparer.Ordinal);
+
             using var stream = assembly.GetManifestResourceStream(name)!;
-            locales[locale] = JsonSerializer.Deserialize<Dictionary<string, string>>(stream)!;
+            var resource = JsonSerializer.Deserialize<Dictionary<string, string>>(stream)!;
+            foreach (var (key, value) in resource)
+            {
+                if (map.ContainsKey(key))
+                    System.Diagnostics.Trace.TraceWarning("Duplicate localization key '{0}' in {1}; later resource wins.", key, name);
+                map[key] = value;
+            }
         }
     }
 

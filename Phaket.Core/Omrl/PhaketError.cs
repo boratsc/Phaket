@@ -17,6 +17,13 @@ public static class ErrorCodes
     public const string ArtifactMissing = "ARTIFACT_MISSING";
     public const string ArtifactHashMismatch = "ARTIFACT_HASH_MISMATCH";
     public const string ArtifactDownloadUnavailable = "ARTIFACT_DOWNLOAD_UNAVAILABLE";
+    public const string ArtifactDownloadTimeout = "ARTIFACT_DOWNLOAD_TIMEOUT";
+    public const string ArtifactSizeMismatch = "ARTIFACT_SIZE_MISMATCH";
+    public const string ModSourceInvalid = "MOD_SOURCE_INVALID";
+    public const string ModSourceHostNotAllowed = "MOD_SOURCE_HOST_NOT_ALLOWED";
+    public const string ArchiveInvalid = "ARCHIVE_INVALID";
+    public const string ArchiveFormatUnsupported = "ARCHIVE_FORMAT_UNSUPPORTED";
+    public const string PlanNotAccepted = "PLAN_NOT_ACCEPTED";
     public const string BaseGameMismatch = "BASE_GAME_MISMATCH";
     public const string ArchiveUnsafe = "ARCHIVE_UNSAFE";
     public const string OwnershipViolation = "OWNERSHIP_VIOLATION";

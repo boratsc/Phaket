@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:models="using:Phaket.Services"
+             x:Class="Phaket.Views.GitHubReleasePickerView"
+             x:DataType="vm:GitHubReleasePickerViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.sourceCard">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="18" />
+    </Style>
+    <Style Selector="TextBlock.fieldLabel">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+  </UserControl.Styles>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="16" MaxWidth="980" HorizontalAlignment="Left">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="pageTitle" Text="{Binding [Sources.GitHub.Title], Source={x:Static services:LocalizationService.Instance}}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Sources.GitHub.Description], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+
+      <Border Classes="sourceCard">
+        <StackPanel Spacing="12">
+          <TextBlock Classes="fieldLabel" Text="{Binding [Sources.GitHub.Repository], Source={x:Static services:LocalizationService.Instance}}" />
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0" Text="{Binding RepositoryInput}" PlaceholderText="owner/repository or https://github.com/owner/repository"
+                     AutomationProperties.Name="{Binding [Sources.GitHub.Repository], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.AutomationId="github.repository" />
+            <Button Grid.Column="1" Classes="primary" Command="{Binding SearchCommand}"
+                    AutomationProperties.Name="{Binding [Sources.GitHub.Search], Source={x:Static services:LocalizationService.Instance}}">
+              <TextBlock Text="{Binding [Sources.GitHub.Search], Source={x:Static services:LocalizationService.Instance}}" />
+            </Button>
+            <Button Grid.Column="2" Command="{Binding ShowDemoCommand}"
+                    AutomationProperties.Name="{Binding [Sources.GitHub.Demo], Source={x:Static services:LocalizationService.Instance}}">
+              <TextBlock Text="{Binding [Sources.GitHub.Demo], Source={x:Static services:LocalizationService.Instance}}" />
+            </Button>
+          </Grid>
+          <TextBlock IsVisible="{Binding IsBusy}" Classes="muted" Text="{Binding [Sources.GitHub.Loading], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.LiveSetting="Polite" />
+          <Border IsVisible="{Binding HasStatus}" Padding="10" CornerRadius="7" Background="{DynamicResource RaisedBrush}"
+                  AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding StatusText}">
+            <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
+          </Border>
+          <Border IsVisible="{Binding IsDemoMode}" Padding="10" CornerRadius="7" Background="{DynamicResource SoftBrush}"
+                  AutomationProperties.LiveSetting="Polite">
+            <TextBlock TextWrapping="Wrap" Text="{Binding [Sources.GitHub.DemoMode], Source={x:Static services:LocalizationService.Instance}}" />
+          </Border>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="sourceCard" IsVisible="{Binding ShowReleaseList}">
+        <StackPanel Spacing="12">
+          <TextBlock Classes="sectionTitle" Text="{Binding [Sources.GitHub.Releases], Source={x:Static services:LocalizationService.Instance}}" />
+          <CheckBox Content="{Binding [Sources.GitHub.ShowPrereleases], Source={x:Static services:LocalizationService.Instance}}"
+                    IsChecked="{Binding ShowPrereleases}" AutomationProperties.Name="{Binding [Sources.GitHub.ShowPrereleases], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Classes="fieldLabel" Text="{Binding [Sources.GitHub.Release], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock IsVisible="{Binding HasHiddenPrereleases}" Classes="muted" Text="{Binding [Sources.GitHub.HiddenPrereleases], Source={x:Static services:LocalizationService.Instance}}" />
+          <ListBox ItemsSource="{Binding VisibleReleases}" SelectedItem="{Binding SelectedRelease}" MaxHeight="250"
+                   IsVisible="{Binding HasVisibleReleases}"
+                   AutomationProperties.Name="{Binding [Sources.GitHub.Release], Source={x:Static services:LocalizationService.Instance}}"
+                   AutomationProperties.AutomationId="github.release-list">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="models:GitHubRelease">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="2,4">
+                  <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="{Binding Tag}" />
+                    <Border Classes="pill" IsVisible="{Binding Prerelease}" AutomationProperties.Name="{Binding [Sources.GitHub.Prerelease], Source={x:Static services:LocalizationService.Instance}}">
+                      <TextBlock FontSize="11" Text="{Binding [Sources.GitHub.Prerelease], Source={x:Static services:LocalizationService.Instance}}" />
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Grid.Row="0" Classes="muted" Text="{Binding PublishedAt, StringFormat='{}{0:d}'}" />
+                  <TextBlock Grid.Column="0" Grid.Row="1" Classes="muted" FontSize="12" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock IsVisible="{Binding NoAssetsForRelease}" Classes="muted" Text="{Binding [Sources.GitHub.NoAssets], Source={x:Static services:LocalizationService.Instance}}" />
+          <StackPanel IsVisible="{Binding HasAssets}" Spacing="6">
+            <TextBlock Classes="fieldLabel" Text="{Binding [Sources.GitHub.Asset], Source={x:Static services:LocalizationService.Instance}}" />
+            <ComboBox ItemsSource="{Binding Assets}" SelectedItem="{Binding SelectedAsset}"
+                      AutomationProperties.Name="{Binding [Sources.GitHub.Asset], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.AutomationId="github.asset">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="models:GitHubReleaseAsset"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <Button IsVisible="{Binding HasMore}" IsEnabled="{Binding !IsBusy}" Command="{Binding LoadOlderCommand}"
+                  HorizontalAlignment="Left" AutomationProperties.Name="{Binding [Sources.GitHub.LoadOlder], Source={x:Static services:LocalizationService.Instance}}">
+            <TextBlock Text="{Binding [Sources.GitHub.LoadOlder], Source={x:Static services:LocalizationService.Instance}}" />
+          </Button>
+          <Border IsVisible="{Binding Result, Converter={x:Static services:NullToBoolConverter.Instance}}" Classes="pill" HorizontalAlignment="Left"
+                  AutomationProperties.Name="{Binding [Sources.GitHub.Selection], Source={x:Static services:LocalizationService.Instance}}">
+            <StackPanel Spacing="3">
+              <TextBlock FontWeight="SemiBold" Text="{Binding [Sources.GitHub.Selection], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Text="{Binding Result.Repo}" />
+              <TextBlock Text="{Binding Result.Tag}" />
+              <TextBlock Text="{Binding Result.AssetName}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Button IsVisible="{Binding Result, Converter={x:Static services:NullToBoolConverter.Instance}}" Classes="primary"
+                  Command="{Binding PinSelectedCommand}" HorizontalAlignment="Left"
+                  AutomationProperties.Name="{Binding [Sources.GitHub.Pin], Source={x:Static services:LocalizationService.Instance}}">
+            <TextBlock Text="{Binding [Sources.GitHub.Pin], Source={x:Static services:LocalizationService.Instance}}" />
+          </Button>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="sourceCard" IsVisible="{Binding HasPinnedSelection}">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="sectionTitle" Text="{Binding PinnedStatus}" />
+          <TextBlock Text="{Binding PinnedRepo}" />
+          <TextBlock Text="{Binding PinnedTag}" FontWeight="SemiBold" />
+          <TextBlock IsVisible="{Binding HasNewerRelease}" Text="{Binding [Sources.GitHub.PinnedNewer], Source={x:Static services:LocalizationService.Instance}}"
+                     Classes="muted" AutomationProperties.LiveSetting="Polite" />
+          <Button Command="{Binding ClearPinCommand}" HorizontalAlignment="Left"
+                  AutomationProperties.Name="{Binding [Sources.GitHub.ClearPin], Source={x:Static services:LocalizationService.Instance}}">
+            <TextBlock Text="{Binding [Sources.GitHub.ClearPin], Source={x:Static services:LocalizationService.Instance}}" />
+          </Button>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

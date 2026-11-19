@@ -174,6 +174,8 @@ public static class OperationPlanner
 
         var conflicts = DetectConflicts(writes, context.ExistingOwners ?? [], context.GameRoot).ToList();
         var warnings = ExecutableWarnings(operations).ToList();
+        if (recipe.Artifacts.Any(a => a.Sha256 is null && SourcePolicy.IsGitHubAssetUrl(a.Source)))
+            warnings.Add("GITHUB_HASH_UNVERIFIED");
         foreach (var operation in operations.Where(o => o.Kind == "loader.ensure"))
         {
             if (operation.SourceRef is null || !operation.SourceRef.StartsWith("package://", StringComparison.Ordinal))

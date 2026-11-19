@@ -1,0 +1,19 @@
+{
+  "Identity.Title": "Device identity",
+  "Identity.Subtitle": "This identity signs package publishing and other authenticated changes.",
+  "Identity.Status.Online": "Online",
+  "Identity.Status.Offline": "Offline",
+  "Identity.Nick": "Device nickname",
+  "Identity.Fingerprint": "Key fingerprint",
+  "Identity.Loading": "Preparing the device key…",
+  "Identity.KeyWarning": "Losing the private key means losing this device identity and ownership of published packages; they cannot be recovered. The key is stored in the operating system's secret store; do not delete it or reset that store without a backup plan.",
+  "Identity.SaveNick": "Save nickname",
+  "Identity.Register": "Register / check online",
+  "Identity.Saved": "Nickname saved.",
+  "Identity.SavedOffline": "Nickname saved locally; the server will receive it after reconnecting.",
+  "Identity.Registered": "The device identity is registered online.",
+  "Identity.Error.Nick": "The nickname must be 1–40 characters and contain no control characters.",
+  "Identity.Error.KeyStore": "The device key could not be safely read or created. Check that the secret store is available.",
+  "Identity.Error.Save": "The nickname could not be safely saved to settings; the existing settings file was left unchanged.",
+  "Identity.Error.Offline": "The service could not be reached or the device could not be registered. Try again later."
+}

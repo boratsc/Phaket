@@ -51,6 +51,9 @@ public class MainWindowTests
         window.Show();
         var vm = (MainWindowViewModel)window.DataContext!;
 
+        Assert.IsType<ModpackCatalogViewModel>(vm.CurrentPage);
+        Assert.Equal("catalog", vm.ActiveNav);
+        vm.NavigateCommand.Execute("library");
         Assert.IsType<LibraryViewModel>(vm.CurrentPage);
         vm.Library.OpenGameCommand.Execute(vm.Library.Games.First());
         Assert.IsType<GameViewModel>(vm.CurrentPage);
@@ -67,16 +70,59 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
-    public void Sidebar_without_games_shows_library_empty_state()
+    public void Settings_theme_button_uses_parameterless_toggle_command()
+    {
+        string root = TestAccounts.TempPath();
+        try
+        {
+            var settings = new SettingsViewModel(Path.Combine(root, "settings.json"));
+            var window = new MainWindow(new MainWindowViewModel(TestAccounts.Create(), settings));
+            window.Show();
+            var vm = (MainWindowViewModel)window.DataContext!;
+            vm.NavigateCommand.Execute("settings");
+            Dispatcher.UIThread.RunJobs();
+
+            var button = window.GetVisualDescendants().OfType<Button>()
+                .Single(control => Equals(control.Command, vm.ToggleThemeCommand));
+            Assert.Equal("dark", vm.Theme.CurrentTheme);
+            button.Command!.Execute(button.CommandParameter);
+            Assert.Equal("light", vm.Theme.CurrentTheme);
+
+            window.Close();
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Game_picker_preserves_context_tab_when_game_changes()
     {
         var vm = TestAccounts.ViewModel();
-        vm.Library.SearchText = "no matching game";
-        vm.NavigateCommand.Execute("mods");
-        Assert.Same(vm.Library, vm.CurrentPage);
-        Assert.Empty(vm.Library.Games);
-        Assert.Equal("library", vm.ActiveNav);
+        Assert.True(vm.Library.Games.Count >= 2);
         vm.NavigateCommand.Execute("profiles");
-        Assert.Same(vm.Library, vm.CurrentPage);
+        var tab = vm.CurrentPage;
+        var selected = vm.Library.Games.First(game => !ReferenceEquals(game, vm.SelectedGame));
+        vm.SelectedGame = selected;
+        Assert.Equal("profiles", vm.ActiveNav);
+        Assert.IsType<ProfilesViewModel>(vm.CurrentPage);
+        Assert.Equal(selected.Title, vm.Profiles!.GameTitle);
+        Assert.NotSame(tab, vm.CurrentPage);
+    }
+
+    [AvaloniaFact]
+    public void Selected_game_keeps_context_when_library_search_has_no_match()
+    {
+        var vm = TestAccounts.ViewModel();
+        var selected = vm.SelectedGame;
+        Assert.NotNull(selected);
+        vm.Library.SearchText = "no matching game";
+        Assert.Empty(vm.Library.Games);
+        vm.NavigateCommand.Execute("profiles");
+        Assert.IsType<ProfilesViewModel>(vm.CurrentPage);
+        Assert.Equal(selected.Title, vm.Profiles!.GameTitle);
+        Assert.Equal("profiles", vm.ActiveNav);
     }
 
     [AvaloniaFact]
@@ -123,7 +169,7 @@ public class MainWindowTests
         {
             var buttons = window.GetVisualDescendants().OfType<Button>().ToList();
             var named = buttons.Select(b => AutomationProperties.GetName(b)).Where(n => !string.IsNullOrEmpty(n)).ToList();
-            Assert.Contains("Gry", named);
+            Assert.Contains("Biblioteka", named);
             Assert.Contains("Recipe Studio", named);
             Assert.Contains("Ustawienia", named);
         }
@@ -144,11 +190,11 @@ public class MainWindowTests
             var loc = LocalizationService.Instance;
             loc.CurrentLanguage = "pl-PL";
             var navButton = window.GetVisualDescendants().OfType<Button>()
-                .First(b => AutomationProperties.GetName(b) == "Gry");
-            Assert.Equal("Gry", AutomationProperties.GetName(navButton));
+                .First(b => AutomationProperties.GetName(b) == "Biblioteka");
+            Assert.Equal("Biblioteka", AutomationProperties.GetName(navButton));
 
             loc.CurrentLanguage = "en";
-            Assert.Equal("Games", AutomationProperties.GetName(navButton));
+            Assert.Equal("Library", AutomationProperties.GetName(navButton));
             Assert.Equal("Settings", AutomationProperties.GetName(
                 window.GetVisualDescendants().OfType<Button>().First(b => AutomationProperties.GetName(b) == "Settings")));
         }
@@ -160,8 +206,94 @@ public class MainWindowTests
     }
 }
 
+public class ThemeServiceTests
+{
+    [AvaloniaFact]
+    public void Theme_toggle_changes_variant_and_preserves_other_settings()
+    {
+        string directory = TestAccounts.TempPath();
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "settings.json");
+        File.WriteAllText(path, "{\"language\":\"en\",\"catalogEndpoint\":\"https://example.test\",\"tools\":{\"depot\":{\"version\":\"1.2\"}}}");
+        try
+        {
+            var service = new ThemeService(path);
+            Assert.Equal("dark", service.CurrentTheme);
+            Assert.Equal("Dark", Application.Current!.RequestedThemeVariant?.Key);
+            service.Toggle();
+            Assert.Equal("light", service.CurrentTheme);
+            Assert.Equal("Light", Application.Current.RequestedThemeVariant?.Key);
+            using var settings = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            Assert.Equal("light", settings.RootElement.GetProperty("theme").GetString());
+            Assert.Equal("en", settings.RootElement.GetProperty("language").GetString());
+            Assert.Equal("1.2", settings.RootElement.GetProperty("tools").GetProperty("depot").GetProperty("version").GetString());
+            Assert.Equal("light", new ThemeService(path).CurrentTheme);
+            Assert.Equal("Light", Application.Current.RequestedThemeVariant?.Key);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [AvaloniaFact]
+    public void Invalid_settings_json_is_not_overwritten_by_theme_toggle()
+    {
+        string directory = TestAccounts.TempPath();
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "settings.json");
+        const string corrupt = "not json";
+        File.WriteAllText(path, corrupt);
+        try
+        {
+            var service = new ThemeService(path);
+            Assert.False(service.SetTheme("light"));
+            Assert.Equal(corrupt, File.ReadAllText(path));
+            Assert.Equal("Light", Application.Current!.RequestedThemeVariant?.Key);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+}
+
 public class LocalizationTests
 {
+    [AvaloniaFact]
+    public void Satellite_resources_are_merged_into_the_shared_localization_service()
+    {
+        var loc = LocalizationService.Instance;
+        var previous = loc.CurrentLanguage;
+        try
+        {
+            Assert.Contains("Catalog.MyModpacks", loc.Keys("pl-PL"));
+            Assert.Contains("Catalog.MyModpacks", loc.Keys("en"));
+            loc.CurrentLanguage = "pl-PL";
+            Assert.Equal("Moje pakiety", loc["Catalog.MyModpacks"]);
+            loc.CurrentLanguage = "en";
+            Assert.Equal("My modpacks", loc["Catalog.MyModpacks"]);
+        }
+        finally { loc.CurrentLanguage = previous; }
+    }
+
+    [AvaloniaFact]
+    public void Navigation_labels_match_the_approved_names_in_both_languages()
+    {
+        var loc = LocalizationService.Instance;
+        var previous = loc.CurrentLanguage;
+        try
+        {
+            loc.CurrentLanguage = "pl-PL";
+            Assert.Equal("Katalog pakietów", loc["Catalog.Title"]);
+            Assert.Equal("Profile", loc["Nav.Profiles"]);
+            Assert.Equal("Zgodność", loc["Compat.Title"]);
+            Assert.Equal("Poradniki", loc["Nav.Guides"]);
+            Assert.Equal("Biblioteka", loc["Nav.Library"]);
+            loc.CurrentLanguage = "en";
+            Assert.Equal("Modpack catalog", loc["Catalog.Title"]);
+            Assert.Equal("Profiles", loc["Nav.Profiles"]);
+            Assert.Equal("Compatibility", loc["Compat.Title"]);
+            Assert.Equal("Guides", loc["Nav.Guides"]);
+            Assert.Equal("Library", loc["Nav.Library"]);
+        }
+        finally { loc.CurrentLanguage = previous; }
+    }
+
     [Fact]
     public void PlAndEnHaveIdenticalKeySets()
     {

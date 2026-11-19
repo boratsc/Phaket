@@ -34,12 +34,8 @@ public class RenderTests
         var window = new MainWindow(TestAccounts.ViewModel()) { Width = 1280, Height = 800 };
         window.Show();
         var vm = (MainWindowViewModel)window.DataContext!;
-        var button = window.GetVisualDescendants().OfType<Button>()
-            .Single(b => Equals(b.CommandParameter, target));
         Dispatcher.UIThread.RunJobs();
-        var point = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
-        window.MouseDown(point, MouseButton.Left);
-        window.MouseUp(point, MouseButton.Left);
+        vm.NavigateCommand.Execute(target);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(target, vm.ActiveNav);
         if (target == "mods") Assert.IsType<ModsViewModel>(vm.CurrentPage);
@@ -188,6 +184,33 @@ public class RenderTests
     }
 
     [AvaloniaFact]
+    public void Render_new_shell_screens()
+    {
+        var language = LocalizationService.Instance.CurrentLanguage;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        var window = new MainWindow(TestAccounts.ViewModel()) { Width = 1280, Height = 800 };
+        window.Show();
+        var vm = (MainWindowViewModel)window.DataContext!;
+        Dispatcher.UIThread.RunJobs();
+        Save(window, "00-shell-catalog.png");
+        Save(window, "10-shell-final-assets.png");
+        Save(window, "25-after-fix.png");
+        foreach (var (target, filename) in new[]
+        {
+            ("discover", "16-discover.png"),
+            ("communities", "17-communities.png"),
+            ("downloads", "18-downloads.png")
+        })
+        {
+            vm.NavigateCommand.Execute(target);
+            Dispatcher.UIThread.RunJobs();
+            Save(window, filename);
+        }
+        window.Close();
+        LocalizationService.Instance.CurrentLanguage = language;
+    }
+
+    [AvaloniaFact]
     public void Render_all_screens()
     {
         var window = new MainWindow(TestAccounts.ViewModel()) { Width = 1280, Height = 800 };
@@ -195,6 +218,19 @@ public class RenderTests
         var vm = (MainWindowViewModel)window.DataContext!;
         Dispatcher.UIThread.RunJobs();
         Save(window, "01-library.png");
+        var unsupported = new GameCatalogItem(
+            new Phaket.Core.Omrl.GameDefinition("epic-owned-render-test", [], Title: new Dictionary<string, string> { ["pl-PL"] = "Nieobsługiwana gra", ["en"] = "Unsupported game" }), "", "")
+        { EpicOwned = true };
+        vm.Library.Games.Add(unsupported);
+        vm.Library.SelectedGame = unsupported;
+        var libraryWindow = new Window { Width = 1280, Height = 800, Content = new Phaket.Views.LibraryView { DataContext = vm.Library } };
+        libraryWindow.Show();
+        Dispatcher.UIThread.RunJobs();
+        Save(libraryWindow, "36-library.png");
+        libraryWindow.Close();
+        vm.Library.Games.Remove(unsupported);
+        vm.Library.SelectedGame = vm.Library.Games.FirstOrDefault();
+        Dispatcher.UIThread.RunJobs();
 
         vm.Library.OpenGameCommand.Execute(vm.Library.Games.First());
         Dispatcher.UIThread.RunJobs();
@@ -253,6 +289,7 @@ public class RenderTests
         vm.NavigateCommand.Execute("settings");
         Dispatcher.UIThread.RunJobs();
         Save(window, "04-settings.png");
+        Save(window, "37-settings.png");
 
         window.Close();
     }

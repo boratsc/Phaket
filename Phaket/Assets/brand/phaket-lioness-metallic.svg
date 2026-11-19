@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 56 683 623" role="img" aria-labelledby="title">
+  <title id="title">Phaket – metaliczna lwica</title>
+  <defs>
+    <linearGradient id="body" x2=".9" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#51402c"/><stop offset=".4" stop-color="#0d0b0b"/><stop offset=".72" stop-color="#221b16"/><stop offset="1" stop-color="#6b3715"/>
+    </linearGradient>
+    <linearGradient id="gold" x1=".06" y1=".05" x2=".86" y2=".91">
+      <stop stop-color="#fff0c4"/><stop offset=".25" stop-color="#d2934e"/><stop offset=".49" stop-color="#55301b"/><stop offset=".76" stop-color="#f6a62c"/><stop offset="1" stop-color="#a3561d"/>
+    </linearGradient>
+    <linearGradient id="ear" x1=".12" y1="0" x2=".69" y2="1">
+      <stop stop-color="#090807"/><stop offset=".58" stop-color="#22150a"/><stop offset=".86" stop-color="#e8881f"/><stop offset="1" stop-color="#634020"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#26170f"/><stop offset=".36" stop-color="#9d5730"/><stop offset=".63" stop-color="#ffe1a5"/><stop offset="1" stop-color="#3b2619"/>
+    </linearGradient>
+    <linearGradient id="jaw" x1=".18" y1=".8" x2="1" y2=".05">
+      <stop stop-color="#7c411c"/><stop offset=".42" stop-color="#f8a52d"/><stop offset=".7" stop-color="#ffd186"/><stop offset="1" stop-color="#352316"/>
+    </linearGradient>
+    <radialGradient id="eye">
+      <stop stop-color="#fffde5"/><stop offset=".55" stop-color="#ffcf6b"/><stop offset="1" stop-color="#ec841d"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#body)" stroke="#6f4b26" stroke-width="2" d="M511 650C430 685 320 669 237 622 151 575 106 508 116 421c7-69 62-133 146-197-17-50-24-107 9-136 37-34 99-19 154 21 24 17 49 39 78 48 88 8 162 28 208 97 17 25 34 45 59 72l-18 57-20 13 6 28c-4 39-23 74-46 84-22 10-59-6-102-18-38-11-73-16-95 14-25 36-31 99 16 146Z"/>
+  <path fill="url(#blade)" d="M272 218c-89 44-149 117-155 203-5 25 0 50 9 76 8-94 63-157 144-207l66-58Z"/>
+  <path fill="#181412" d="M341 225c-113 31-186 120-198 219-8 61 28 113 82 154-40-73-21-156 14-222 41-78 97-117 159-142Z"/>
+  <path fill="url(#ear)" stroke="url(#gold)" stroke-width="3" d="M396 239c-51 16-110-4-133-36-18-25-16-87 8-113 26-27 75-24 125 3 47 25 77 54 107 64-48-2-85 8-106 31-14 15-14 34-1 51Z"/>
+  <path fill="url(#gold)" d="M344 249c100-97 219-113 308-48 29 21 52 47 72 75l-68-42-71-37c-67-21-135-16-241 52Z"/>
+  <path fill="url(#blade)" d="M247 540c-9-97 37-199 111-264 76-66 160-79 230-55-73-6-142 16-191 58-59 51-113 126-150 261Z"/>
+  <path fill="#11100f" d="M394 283c72-64 158-76 224-48 51 22 77 59 132 79l20 12-63 7-47-16-60-40-79-22Z"/>
+  <path fill="url(#eye)" d="M540 229c24 2 50 10 73 27l15 13c-34-2-60-19-88-40Z"/>
+  <path fill="url(#gold)" d="M509 223c61-12 116 19 158 60l38 42c-53-39-106-69-167-94Z"/>
+  <path fill="url(#blade)" d="M249 539c14-60 62-121 149-153 77-28 170-30 228-40-40 19-91 29-144 42-112 28-177 81-233 151Z"/>
+  <path fill="url(#jaw)" d="M510 650c-46-47-43-111-16-149 27-38 64-30 101-18 42 15 76 24 97 13 20-11 35-38 46-72-3 42-21 74-45 85-24 12-61-3-106-16-38-11-66-12-86 16-26 38-27 94 9 141Z"/>
+  <path fill="#0a0807" d="m706 335 64-9-18 57-20 13-48 7 41-25 16-24Z"/>
+  <path fill="#b97a3d" d="m733 394 19-11-11 15-64 10Z"/>
+</svg>

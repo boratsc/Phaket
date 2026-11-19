@@ -25,11 +25,50 @@ public static class RecipeGenerator
             throw new ArgumentException("Invalid SHA-256.", nameof(sha256));
         if (sha256 is null) throw new ArgumentException("Remote package requires SHA-256.", nameof(sha256));
 
-        var loader = fullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase);
-        var entries = archiveEntries.Select(NormalizeEntry).Where(x => x is not null).Select(x => x!).Distinct(StringComparer.Ordinal).ToArray();
         var recipeId = "thunderstore." + Regex.Replace(fullName.ToLowerInvariant().Replace('-', '.'), "[^a-z0-9.\\-]", "-");
-        var artifactId = "package";
-        var artifact = new RecipeArtifact { Id = artifactId, Source = downloadUrl, Sha256 = sha256 };
+        return GenerateArchive(fullName, version, downloadUrl, sha256, null, archiveEntries, game, arch, recipeId,
+            fullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Generates the same safe OMRL install plan for a pinned GitHub or local Nexus ZIP.
+    public static GeneratedRecipe GenerateModpackPackage(string source, string name, string version,
+        string artifactSource, string? sha256, long? sizeBytes, IEnumerable<string> archiveEntries,
+        GameDefinition game, string recipeId, string? repository = null, string? tag = null, string? assetName = null)
+    {
+        if (source is not ("github" or "nexus") || string.IsNullOrWhiteSpace(name) || name.Length > 160
+            || string.IsNullOrWhiteSpace(version) || version.Length > 100 || string.IsNullOrWhiteSpace(recipeId)
+            || game.Slug is not ("among-us" or "valheim") || sizeBytes is <= 0
+            || sha256 is not null && !Regex.IsMatch(sha256, "^[a-fA-F0-9]{64}$"))
+            throw new PhaketException(ErrorCodes.ModSourceInvalid, ("source", source), ("detail", "invalid package metadata"));
+        if (source == "github" && (!SourcePolicy.IsAllowedHttpsSource(artifactSource, sha256)
+            || !SourcePolicy.IsAllowedGitHubReleaseAsset(artifactSource, repository ?? "", tag ?? "", assetName ?? "")))
+            throw new PhaketException(ErrorCodes.ModSourceHostNotAllowed,
+                ("host", Uri.TryCreate(artifactSource, UriKind.Absolute, out var uri) ? uri.Host : "invalid"));
+        if (source == "nexus" && artifactSource != "package://package.zip")
+            throw new PhaketException(ErrorCodes.ModSourceInvalid, ("source", source), ("detail", "Nexus archive must be staged locally"));
+
+        var safeName = Regex.Replace(name.Trim(), @"[^A-Za-z0-9._-]", "_").Trim('.', '_');
+        if (safeName.Length == 0)
+            throw new PhaketException(ErrorCodes.ModSourceInvalid, ("source", source), ("detail", "mod name has no safe path characters"));
+        return GenerateArchive(safeName, ToRecipeVersion(version), artifactSource, sha256, sizeBytes, archiveEntries, game, null, recipeId, false);
+    }
+
+    internal static string ToRecipeVersion(string pinnedVersion)
+    {
+        var candidate = pinnedVersion.StartsWith('v') || pinnedVersion.StartsWith('V') ? pinnedVersion[1..] : pinnedVersion;
+        if (Regex.IsMatch(candidate, @"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.\-]*)?$")) return candidate;
+        var suffix = Regex.Replace(pinnedVersion.ToLowerInvariant(), @"[^0-9a-z-]+", "-").Trim('-', '.');
+        if (suffix.Length > 80) suffix = suffix[..80];
+        return "0.0.0-" + (suffix.Length == 0 ? "pinned" : suffix);
+    }
+
+    private static GeneratedRecipe GenerateArchive(string fullName, string version, string artifactSource,
+        string? sha256, long? sizeBytes, IEnumerable<string> archiveEntries, GameDefinition game,
+        string? arch, string recipeId, bool loader)
+    {
+        var entries = archiveEntries.Select(NormalizeEntry).Where(x => x is not null).Select(x => x!).Distinct(StringComparer.Ordinal).ToArray();
+        const string artifactId = "package";
+        var artifact = new RecipeArtifact { Id = artifactId, Source = artifactSource, Sha256 = sha256, SizeBytes = sizeBytes };
         if (loader)
         {
             if (game.Slug == "valheim" && arch == "x86")
@@ -40,12 +79,13 @@ public static class RecipeGenerator
                     ? artifact with { Arch = "x64", Source = "https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip", Sha256 = "5b63d7d0e92a2448ccd13b738ff95ff1cc1026c6d718555d4df8e6c824953ac4" }
                     : artifact with { Arch = "x86", Source = "https://thunderstore.io/package/download/BepInEx/BepInExPack_AmongUs/6.0.700/", Sha256 = "88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564" };
         }
+
         var steps = new List<RecipeStep>();
         var ownership = new List<GeneratedRecipeStepOwnership>();
-        var index = 0;
         if (!loader)
         {
             steps.Add(Step("extract", "archive.extract", new { from = "package://package", to = "staging://package" }));
+            var index = 0;
             foreach (var entry in entries)
             {
                 var target = Route(entry, fullName);
@@ -57,14 +97,13 @@ public static class RecipeGenerator
         else
         {
             var layout = game.Loader("bepinex") ?? throw new ArgumentException("Game has no BepInEx layout.", nameof(game));
-            Add("loader.ensure", new Dictionary<string, object?> { ["id"] = layout.Id, ["artifact"] = artifactId,
-                ["version"] = game.Slug == "valheim" ? "5.4.2360" : arch == "x64" ? "6.0.0-be.793" : "6.0.700", ["stripComponents"] = game.Slug == "among-us" && arch == "x64" ? 0 : 1 });
+            steps.Add(Step("extract", "loader.ensure", new Dictionary<string, object?> { ["id"] = layout.Id, ["artifact"] = artifactId,
+                ["version"] = game.Slug == "valheim" ? "5.4.2360" : arch == "x64" ? "6.0.0-be.793" : "6.0.700", ["stripComponents"] = game.Slug == "among-us" && arch == "x64" ? 0 : 1 }));
         }
         if (!loader)
         {
             var extract = steps[0];
-            var copySteps = steps.Skip(1).OrderBy(Target, StringComparer.Ordinal);
-            steps = [extract, .. copySteps];
+            steps = [extract, .. steps.Skip(1).OrderBy(Target, StringComparer.Ordinal)];
         }
 
         var recipe = new Recipe
@@ -78,7 +117,6 @@ public static class RecipeGenerator
         };
         return new(recipe, ownership);
 
-        void Add(string use, Dictionary<string, object?> values) => steps.Add(Step("extract", use, values));
         static string Target(RecipeStep step) => step.With.TryGetValue("to", out var to) ? to.GetString()! : "game://.";
     }
 

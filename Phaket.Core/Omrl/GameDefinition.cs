@@ -135,39 +135,67 @@ public static class GameDefinitionLoader
 
 public static class SourcePolicy
 {
-    // PoC allowlist (spec §9): concrete GitHub repositories (owner/repo) and the
-    // Thunderstore download host. Redirects beyond the allowlist are forbidden.
-    // Defaults cover the repositories of the recipes shipped with Phaket; hosts
-    // may extend the set at runtime (SourcePolicy.AllowGitHubRepository).
+    private static readonly object GitHubGate = new();
     private static readonly HashSet<string> GitHubRepos = new(StringComparer.OrdinalIgnoreCase)
     {
-        "AU-Avengers/TOU-Mira",   // Town of Us Mira release packs
-        "BepInEx/BepInEx",        // BepInEx 6 IL2CPP builds (Epic/x64 variant)
+        "AU-Avengers/TOU-Mira",
+        "BepInEx/BepInEx",
     };
 
-    // Thunderstore: the canonical download entry point is
-    //   https://thunderstore.io/package/download/<owner>/<name>/<version>/
-    // which 302-redirects to a CDN object. Both the download URL and the resolved
-    // ccdn.thunderstore.io object are allowed; anything else is rejected.
+    public static void AllowGitHubRepository(string ownerAndRepo)
+    {
+        if (!IsValidGitHubRepository(ownerAndRepo))
+            throw new ArgumentException("Expected a GitHub owner/repository pair.", nameof(ownerAndRepo));
+        lock (GitHubGate) GitHubRepos.Add(ownerAndRepo);
+    }
 
-    public static void AllowGitHubRepository(string ownerAndRepo) => GitHubRepos.Add(ownerAndRepo);
+    public static bool IsValidGitHubRepository(string? ownerAndRepo) => ownerAndRepo is not null
+        && System.Text.RegularExpressions.Regex.IsMatch(ownerAndRepo,
+            @"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
+    public static bool IsGitHubAssetUrl(string source) => Uri.TryCreate(source, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && uri.UserInfo.Length == 0
+        && uri.Fragment.Length == 0 && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsAllowedGitHubReleaseAsset(string source, string ownerAndRepo, string tag, string assetName)
+    {
+        if (!IsValidGitHubRepository(ownerAndRepo) || string.IsNullOrWhiteSpace(tag) || string.IsNullOrWhiteSpace(assetName)
+            || !Uri.TryCreate(source, UriKind.Absolute, out var uri) || !IsGitHubAssetUrl(source)) return false;
+        lock (GitHubGate)
+            if (!GitHubRepos.Contains(ownerAndRepo)) return false;
+        var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 6
+            && string.Equals(parts[0] + "/" + parts[1], ownerAndRepo, StringComparison.OrdinalIgnoreCase)
+            && parts[2] == "releases" && parts[3] == "download"
+            && Uri.UnescapeDataString(parts[4]) == tag
+            && string.Equals(Uri.UnescapeDataString(parts[5]), assetName, StringComparison.Ordinal);
+    }
+
+    // Thunderstore's download URL redirects to ccdn.thunderstore.io. GitHub release
+    // links may redirect to their asset CDN; every hop is checked by HttpPackageTransport.
     public static bool IsAllowedHttpsSource(string source, string? sha256 = null)
     {
-        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
-        if (uri.Scheme != "https") return false;
-        if (uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase))
-            return sha256 is not null;
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps
+            || !uri.IsDefaultPort || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0) return false;
+        if (uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase)) return sha256 is not null;
         if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
         {
             var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, "^/([^/]+/[^/]+)/releases/download/");
-            return match.Success && GitHubRepos.Contains(match.Groups[1].Value);
+            if (!match.Success) return false;
+            lock (GitHubGate) return GitHubRepos.Contains(match.Groups[1].Value);
         }
+        if (uri.Host.Equals("objects.githubusercontent.com", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.Equals("release-assets.githubusercontent.com", StringComparison.OrdinalIgnoreCase)) return true;
         if (uri.Host.Equals("thunderstore.io", StringComparison.OrdinalIgnoreCase))
-            return System.Text.RegularExpressions.Regex.IsMatch(
-                uri.AbsolutePath, "^/package/download/[^/]+/[^/]+/[^/]+/$");
+            return System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath, "^/package/download/[^/]+/[^/]+/[^/]+/$");
         if (uri.Host.Equals("ccdn.thunderstore.io", StringComparison.OrdinalIgnoreCase))
             return uri.AbsolutePath.StartsWith("/live/repository/packages/", StringComparison.Ordinal);
         return uri.Host.Equals("api.thunderstore.io", StringComparison.OrdinalIgnoreCase);
     }
+
+    public static bool IsAllowedTransportSource(string source) => IsAllowedHttpsSource(source)
+        || Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+            && uri.IsDefaultPort && uri.UserInfo.Length == 0 && uri.Fragment.Length == 0
+            && uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase);
 }

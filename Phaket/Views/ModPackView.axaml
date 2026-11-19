@@ -1,0 +1,214 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:views="using:Phaket.Views"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             xmlns:controls="using:Phaket.Controls"
+             xmlns:catalog="using:Phaket.Core.Catalog"
+             x:Class="Phaket.Views.ModPackView"
+             x:DataType="vm:ModPackViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.modpackTable">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="Border.columnHeader">
+      <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+      <Setter Property="Padding" Value="9,8" />
+    </Style>
+    <Style Selector="Border.modRow">
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="9,7" />
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid.Styles>
+      <Style Selector="Border.modalShade"><Setter Property="Background" Value="#99000000" /></Style>
+      <Style Selector="Border.modalCard">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="18" />
+      </Style>
+    </Grid.Styles>
+    <Button Grid.Row="0" Classes="breadcrumb" Command="{Binding BackCommand}" HorizontalAlignment="Left"
+            AutomationProperties.Name="{Binding [Catalog.BackToCatalog], Source={x:Static services:LocalizationService.Instance}}">
+      <StackPanel Orientation="Horizontal" Spacing="6"><mi:MaterialIcon Kind="ArrowLeft" Width="16" Height="16" /><TextBlock Text="{Binding [Catalog.BackToCatalog], Source={x:Static services:LocalizationService.Instance}}" /></StackPanel>
+    </Button>
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+      <StackPanel Spacing="3">
+        <TextBlock Classes="pageTitle" Text="{Binding Name}" AutomationProperties.HeadingLevel="1" />
+        <TextBlock Classes="pageSubtitle">
+          <Run Text="{Binding GameId}" /><Run Text=" · " /><Run Text="{Binding Mods.Count}" /><Run Text=" " />
+          <Run Text="{Binding [Catalog.ModsInPack], Source={x:Static services:LocalizationService.Instance}}" /><Run Text=" · " />
+          <Run Text="{Binding EnabledCount}" /><Run Text=" " />
+          <Run Text="{Binding [Catalog.Enabled], Source={x:Static services:LocalizationService.Instance}}" />
+        </TextBlock>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Classes="secondary" Command="{Binding OpenAddModsCommand}"
+                Content="{Binding [Catalog.AddMods], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Classes="primary" Command="{Binding SavePackCommand}"
+                Content="{Binding [Catalog.SavePack], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" RowSpacing="9">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Grid.Column="0" Classes="search" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 PlaceholderText="{Binding [Catalog.SearchMod], Source={x:Static services:LocalizationService.Instance}}"
+                 AutomationProperties.Name="{Binding [Catalog.SearchMod], Source={x:Static services:LocalizationService.Instance}}" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding SourceFilters}" SelectedItem="{Binding SelectedSourceFilter, Mode=TwoWay}"
+                  MinWidth="180" AutomationProperties.Name="{Binding [Catalog.FilterSource], Source={x:Static services:LocalizationService.Instance}}">
+          <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:ModpackSourceFilter"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+      </Grid>
+      <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasSelection}">
+        <TextBlock Classes="muted" VerticalAlignment="Center">
+          <Run Text="{Binding [Catalog.Selected], Source={x:Static services:LocalizationService.Instance}}" /><Run Text=": " /><Run Text="{Binding SelectedCount}" />
+        </TextBlock>
+        <Button Classes="secondary" Command="{Binding ToggleSelectedCommand}" IsEnabled="{Binding CanBulkToggle}" Content="{Binding BulkToggleLabel}" />
+        <Button Classes="secondary" Command="{Binding DeleteSelectedCommand}" IsEnabled="{Binding CanBulkDelete}"
+                Content="{Binding [Catalog.DeleteSelected], Source={x:Static services:LocalizationService.Instance}}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding [Catalog.RequiredDependencyProtected], Source={x:Static services:LocalizationService.Instance}}"
+                   IsVisible="{Binding HasVisibleProtected}" TextWrapping="Wrap" />
+      </StackPanel>
+      <Border Grid.Row="2" Classes="modpackTable">
+        <Grid RowDefinitions="Auto,*">
+          <Border Classes="columnHeader">
+            <Grid ColumnDefinitions="40,*,110,110,130" ColumnSpacing="8">
+              <CheckBox Grid.Column="0" IsChecked="{Binding AllVisibleSelectable, Mode=TwoWay}"
+                        AutomationProperties.Name="{Binding [Catalog.SelectVisible], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Grid.Column="1" Text="{Binding [Catalog.Mod], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+              <TextBlock Grid.Column="2" Text="{Binding [Catalog.Version], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+              <TextBlock Grid.Column="3" Text="{Binding [Catalog.Source], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+              <TextBlock Grid.Column="4" Text="{Binding [Catalog.State], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+            </Grid>
+          </Border>
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <StackPanel>
+              <ItemsControl ItemsSource="{Binding VisibleMods}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ModpackModItemViewModel">
+                    <Border Classes="modRow">
+                      <Grid ColumnDefinitions="40,*,110,110,130" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding IsSelectable}"
+                                  AutomationProperties.Name="{Binding SelectionAutomationName}" ToolTip.Tip="{Binding ProtectedReason}" />
+                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding ProtectedReason}" Classes="muted" FontSize="11" IsVisible="{Binding Required}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding Version}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="{Binding SourceLabel}" VerticalAlignment="Center" />
+                        <CheckBox Grid.Column="4" IsChecked="{Binding Enabled}" IsEnabled="{Binding IsNotRequired}"
+                                  Content="{Binding EnabledLabel}" VerticalAlignment="Center" AutomationProperties.Name="{Binding StateAutomationName}"
+                                  ToolTip.Tip="{Binding ProtectedReason}" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{Binding [Catalog.NoModsMatch], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" Margin="14" IsVisible="{Binding IsEmpty}" />
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+    <TextBlock Grid.Row="3" Text="{Binding Status}" Classes="muted" VerticalAlignment="Center" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite" />
+
+    <Border Grid.RowSpan="4" Classes="modalShade" IsVisible="{Binding IsAddPanelOpen}" ZIndex="20" Padding="16">
+      <Border Classes="modalCard" MaxWidth="760" MaxHeight="680" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="3">
+              <TextBlock Classes="sectionTitle" Text="{Binding [Catalog.SourcePanelTitle], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Classes="muted" Text="{Binding [Catalog.NewPack], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="icon" Command="{Binding CloseAddModsCommand}" AutomationProperties.Name="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="Close" Width="18" Height="18" />
+            </Button>
+          </Grid>
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Button Classes="segment" Classes.active="{Binding IsThunderstoreSource}" Command="{Binding SelectAddSourceCommand}" CommandParameter="thunderstore"
+                        Content="{Binding [Catalog.Source.thunderstore], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Classes="segment" Classes.active="{Binding IsGitHubSource}" Command="{Binding SelectAddSourceCommand}" CommandParameter="github"
+                        Content="{Binding [Catalog.Source.github], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Classes="segment" Classes.active="{Binding IsNexusSource}" Command="{Binding SelectAddSourceCommand}" CommandParameter="nexus"
+                        Content="{Binding [Catalog.Source.nexus], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsThunderstoreSource}" Spacing="8">
+                <TextBox Classes="search" Text="{Binding ThunderstoreCatalog.SearchText}" PlaceholderText="{Binding [Catalog.SearchThunderstore], Source={x:Static services:LocalizationService.Instance}}"
+                         AutomationProperties.Name="{Binding [Catalog.SearchThunderstore], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Classes="muted" Text="{Binding ThunderstoreCatalog.StatusMessage}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10" MinHeight="180">
+                  <ListBox ItemsSource="{Binding ThunderstoreCatalog.Mods}" SelectedItem="{Binding ThunderstoreCatalog.SelectedMod}"
+                           AutomationProperties.Name="{Binding [Catalog.Source.thunderstore], Source={x:Static services:LocalizationService.Instance}}">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="catalog:ThunderstoreMod">
+                        <StackPanel Spacing="2" Margin="4">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Owner}" Classes="muted" FontSize="12" />
+                          <TextBlock Text="{Binding Latest.VersionNumber}" Classes="muted" FontSize="12" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                  <Border Grid.Column="1" Classes="selectableRow" Padding="10">
+                    <StackPanel Spacing="7">
+                      <TextBlock Text="{Binding ThunderstoreCatalog.SelectedMod.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding ThunderstoreCatalog.SelectedMod.Description}" Classes="muted" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding ThunderstoreCatalog.SelectedMod.Latest.VersionNumber}" />
+                      <Button Classes="primary" HorizontalAlignment="Left" Command="{Binding AddThunderstoreModCommand}"
+                              CommandParameter="{Binding ThunderstoreCatalog.SelectedMod}"
+                              IsEnabled="{Binding ThunderstoreCatalog.SelectedMod, Converter={x:Static services:NullToBoolConverter.Instance}}"
+                              Content="{Binding [Catalog.AddMod], Source={x:Static services:LocalizationService.Instance}}" />
+                    </StackPanel>
+                  </Border>
+                </Grid>
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsGitHubSource}" Spacing="8">
+                <controls:HelpTip Label="{Binding [HelpTip.GitHubRelease.Label], Source={x:Static services:LocalizationService.Instance}}"
+                                  Message="{Binding [HelpTip.GitHubRelease.Content], Source={x:Static services:LocalizationService.Instance}}" HorizontalAlignment="Left" />
+                <TextBlock Classes="muted" Text="{Binding [Catalog.AddPinnedSource], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding SourceModName}" PlaceholderText="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}"
+                         AutomationProperties.Name="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}" />
+                <views:GitHubReleasePickerView DataContext="{Binding GitHubPicker}" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsNexusSource}" Spacing="8">
+                <TextBox Text="{Binding SourceModName}" PlaceholderText="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}"
+                         AutomationProperties.Name="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}" />
+                <views:NexusManualView DataContext="{Binding NexusPicker}" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsNewPack}" Spacing="6">
+                <TextBlock Text="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+                <TextBox Text="{Binding Name}" AutomationProperties.Name="{Binding [Catalog.PackName], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding [Catalog.PackAuthor], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+                <TextBox Text="{Binding Author}" AutomationProperties.Name="{Binding [Catalog.PackAuthor], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding [Catalog.PackVersion], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+                <TextBox Text="{Binding Version}" AutomationProperties.Name="{Binding [Catalog.PackVersion], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Command="{Binding CloseAddModsCommand}" Content="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="primary" Command="{Binding AddPinnedSourceCommand}" IsEnabled="{Binding CanAddPinnedSource}"
+                    IsVisible="{Binding !IsThunderstoreSource}" Content="{Binding [Catalog.AddMod], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="primary" Command="{Binding SavePackCommand}" IsVisible="{Binding IsNewPack}"
+                    Content="{Binding [Catalog.SavePack], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Border>
+  </Grid>
+</UserControl>

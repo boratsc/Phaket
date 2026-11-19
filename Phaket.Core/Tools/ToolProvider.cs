@@ -19,7 +19,7 @@ public sealed class ToolProvider
     {
         this.root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "tools");
         http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
-        if (!http.DefaultRequestHeaders.UserAgent.Any()) http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Phaket", "0.0.1"));
+        if (!http.DefaultRequestHeaders.UserAgent.Any()) http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Phaket", "0.1.0"));
     }
 
     public async Task<IReadOnlyList<string>> ListReleasesAsync(string tool, CancellationToken ct = default)

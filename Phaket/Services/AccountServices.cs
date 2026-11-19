@@ -11,6 +11,8 @@ public sealed class AccountServices
         Steam = new SteamAccountService();
         SteamApiKey = new SteamApiKeyStore();
         SteamCredentials = new SteamCredentialStore();
+        DeviceKeys = DeviceIdentityServices.Current?.KeyStore ?? new DeviceKeyStore(
+            SecretStoreFactory.Create(), CatalogSettings.DefaultSettingsPath);
     }
 
     internal AccountServices(ISecretStore store, string directory)
@@ -19,9 +21,11 @@ public sealed class AccountServices
         Steam = new SteamAccountService(Path.Combine(directory, "steam.bin"), null, null, _ => throw new InvalidOperationException("Browser unavailable"), store);
         SteamApiKey = new SteamApiKeyStore(Path.Combine(directory, "steam-apikey.bin"), store);
         SteamCredentials = new SteamCredentialStore(store);
+        DeviceKeys = new DeviceKeyStore(store, Path.Combine(directory, "settings.json"));
     }
 
     public SteamApiKeyStore SteamApiKey { get; }
+    public DeviceKeyStore DeviceKeys { get; }
     public SteamCredentialStore SteamCredentials { get; }
     public Task<string?> GetSteamApiKeyAsync() => Task.FromResult(SteamApiKey.Load());
 

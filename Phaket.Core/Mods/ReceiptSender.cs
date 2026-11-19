@@ -30,7 +30,7 @@ public sealed class ReceiptSender(IReceiptTransport transport)
             var receipt = new ModReceipt(gameId, modFullName, modVersion,
                 RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "windows" : "linux",
                 store is "steam" or "epic" ? store : null, result, result == "failed" ? errorCode : null,
-                "0.0.1", DateTimeOffset.UtcNow);
+                "0.1.0", DateTimeOffset.UtcNow);
             await transport.PostAsync("/receipts", receipt, cancellationToken);
         }
         catch (Exception) { }

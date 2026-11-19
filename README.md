@@ -1,7 +1,7 @@
 # Phaket Desktop
 
 Aplikacja desktopowa **Phaket** (.NET 10 + Avalonia 12.1.6) na Windows i Linux.
-**PoC 0.0.1 „Zagłębie Dąbrowskie”** — lokalny, bezpieczny silnik modowania z wizualnym
+**Wydanie 0.1.0 „Czeladzki Saturn”** — lokalny, bezpieczny silnik modowania z wizualnym
 edytorem przepisów (Recipe Studio) oraz elementami MVP: katalog buildów, graf
 zależności, współdzielenie profili, zgłaszanie kompatybilności, wiedza ProtonDB
 i logowanie Discord.
@@ -179,7 +179,7 @@ identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
 
 ## English summary
 
-Phaket desktop PoC 0.0.1 "Zagłębie Dąbrowskie": a local, safe modding engine (OMRL
+Phaket desktop 0.1.0 "Czeladzki Saturn": a local, safe modding engine (OMRL
 parser/validator, deterministic dry-run planner, transactional executor with journal +
 rollback + ownership) with a mockup-matching UI (library, game hub, mods, profiles,
 backups, compatibility, install stepper, Recipe Studio, settings, help) and MVP bridges

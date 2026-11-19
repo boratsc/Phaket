@@ -3,57 +3,316 @@
              xmlns:mi="using:Material.Icons.Avalonia"
              xmlns:vm="using:Phaket.ViewModels"
              xmlns:services="using:Phaket.Services"
+             xmlns:controls="using:Phaket.Controls"
              x:Class="Phaket.Views.ProfilesView"
              x:DataType="vm:ProfilesViewModel">
-    <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
-            <Button Classes="icon" Command="{Binding BackCommand}"
-                    AutomationProperties.Name="{Binding [Game.Back], Source={x:Static services:LocalizationService.Instance}}">
-                <mi:MaterialIcon Kind="ArrowLeft" Width="18" Height="18" />
-            </Button>
-            <TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" Classes="muted" />
-            <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding GameTitle}" VerticalAlignment="Center" FontWeight="SemiBold" />
+  <Grid RowDefinitions="Auto,*" MinHeight="0">
+    <Grid Grid.Row="0" RowDefinitions="Auto,Auto" RowSpacing="8" Margin="0,0,0,18">
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Classes="icon" Command="{Binding BackCommand}"
+                AutomationProperties.Name="{Binding [Game.Back], Source={x:Static services:LocalizationService.Instance}}">
+          <mi:MaterialIcon Kind="ArrowLeft" Width="18" Height="18" />
+        </Button>
+        <TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" VerticalAlignment="Center" />
+        <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding GameTitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </StackPanel>
+      <Button Grid.Row="0" Grid.Column="2" Classes="primary" Command="{Binding NewProfileCommand}" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="7">
+          <mi:MaterialIcon Kind="Plus" Width="16" Height="16" />
+          <TextBlock Text="{Binding [Profiles.New], Source={x:Static services:LocalizationService.Instance}}" />
         </StackPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
-            <StackPanel Grid.Column="0">
-                <TextBlock Classes="pageTitle" Text="{Binding [Profiles.Title], Source={x:Static services:LocalizationService.Instance}}" />
-                <TextBlock Classes="muted" Text="{Binding [Profiles.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
-            </StackPanel>
-            <Button Grid.Column="1" Classes="outline" Command="{Binding NewProfileCommand}" VerticalAlignment="Center"
-                    AutomationProperties.Name="{Binding [Profiles.New], Source={x:Static services:LocalizationService.Instance}}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <mi:MaterialIcon Kind="Plus" Width="16" Height="16" />
-                    <TextBlock Text="{Binding [Profiles.New], Source={x:Static services:LocalizationService.Instance}}" />
-                </StackPanel>
+      </Button>
+    </Grid>
+
+    <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="10">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        <StackPanel Spacing="3">
+          <TextBlock Classes="pageTitle" Text="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.HeadingLevel="1" />
+          <TextBlock Classes="pageSubtitle" Text="{Binding [Ui.Profiles.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+        <controls:HelpTip Grid.Column="1" VerticalAlignment="Center"
+                          Label="{Binding [HelpTip.Profile.Label], Source={x:Static services:LocalizationService.Instance}}"
+                          Message="{Binding [HelpTip.Profile.Content], Source={x:Static services:LocalizationService.Instance}}" />
+      </Grid>
+      <Grid Grid.Row="1" ColumnDefinitions="280,*" ColumnSpacing="18">
+      <Border Grid.Column="0" Classes="card" Padding="12">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <DockPanel LastChildFill="True">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="2,0,2,10">
+            <TextBlock Classes="sectionTitle" Text="{Binding [Profiles.Profiles], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="icon" Command="{Binding ImportProfileCommand}"
+                    AutomationProperties.Name="{Binding [Profiles.Import], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="LinkVariant" Width="18" Height="18" />
             </Button>
-        </Grid>
-        <ItemsControl ItemsSource="{Binding Profiles}">
+          </Grid>
+          <ItemsControl ItemsSource="{Binding Profiles}">
             <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:ProfileItem}">
-                    <Border Classes="gameCard" Margin="0,0,0,12">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                            <mi:MaterialIcon Grid.Column="0" Kind="Layers" Width="24" Height="24"
-                                             Foreground="{StaticResource AmberBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="16" />
-                                <TextBlock Classes="muted">
-                                    <Run Text="{Binding ModCount}" /> <Run Text="{Binding [Profiles.Mods], Source={x:Static services:LocalizationService.Instance}}" />
-                                </TextBlock>
-                            </StackPanel>
-                            <Border Grid.Column="2" Classes="pill" Margin="0,0,12,0" VerticalAlignment="Center"
-                                    IsVisible="{Binding IsActive}">
-                                <TextBlock Text="{Binding [Profiles.Active], Source={x:Static services:LocalizationService.Instance}}" Foreground="{StaticResource AmberBrush}" FontWeight="SemiBold" />
-                            </Border>
-                            <Button Grid.Column="3" Classes="secondary" VerticalAlignment="Center"
-                                    Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).SelectCommand}"
-                                    CommandParameter="{Binding}"
-                                    Content="{Binding [Profiles.SetActive], Source={x:Static services:LocalizationService.Instance}}"
-                                    AutomationProperties.Name="{Binding [Profiles.SetActive], Source={x:Static services:LocalizationService.Instance}}" />
-                        </Grid>
+              <DataTemplate DataType="{x:Type vm:ProfileItem}">
+                <Button Classes="profileRow selectableRow" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).SelectCommand}"
+                        CommandParameter="{Binding}" HorizontalContentAlignment="Stretch" Margin="0,2">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <mi:MaterialIcon Grid.Column="0" Kind="ShieldHalfFull" Width="20" Height="20"
+                                     Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="muted" FontSize="12" Text="{Binding Summary}" />
+                    </StackPanel>
+                    <Border Grid.Column="2" Classes="pill" IsVisible="{Binding IsActive}" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding [Profiles.Active], Source={x:Static services:LocalizationService.Instance}}"
+                                 Foreground="{DynamicResource GoldTextBrush}" FontSize="11" FontWeight="SemiBold" />
                     </Border>
-                </DataTemplate>
+                  </Grid>
+                </Button>
+              </DataTemplate>
             </ItemsControl.ItemTemplate>
-        </ItemsControl>
-    </DockPanel>
+          </ItemsControl>
+        </DockPanel>
+        </ScrollViewer>
+      </Border>
+
+      <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="14">
+          <Border Classes="card">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+              <Border Width="48" Height="48" CornerRadius="10" Background="{DynamicResource SoftBrush}" VerticalAlignment="Center">
+                <mi:MaterialIcon Kind="Layers" Width="25" Height="25" Foreground="{DynamicResource GoldTextBrush}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                <TextBlock Classes="pageTitle" FontSize="24" Text="{Binding ActiveProfileName}" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <mi:MaterialIcon Kind="CheckCircle" Width="14" Height="14" Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding SelectedProfile.IsActive}" />
+                  <TextBlock Classes="muted" Text="{Binding SelectedProfileSummary}" />
+                </StackPanel>
+                <TextBlock Text="{Binding StatusMessage}" Classes="muted" IsVisible="{Binding !IsStatusEmpty}" TextWrapping="Wrap" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Button Classes="icon" Command="{Binding ShowPathsCommand}"
+                        AutomationProperties.Name="{Binding [Profiles.Paths], Source={x:Static services:LocalizationService.Instance}}">
+                  <mi:MaterialIcon Kind="FolderMultipleOutline" Width="18" Height="18" />
+                </Button>
+                <Button Classes="icon" Command="{Binding EditProfileCommand}" IsEnabled="{Binding !IsCleanProfile}"
+                        AutomationProperties.Name="{Binding [Profiles.Rename], Source={x:Static services:LocalizationService.Instance}}">
+                  <mi:MaterialIcon Kind="PencilOutline" Width="18" Height="18" />
+                </Button>
+                <Button Classes="icon" Command="{Binding ShareProfileCommand}" IsEnabled="{Binding !IsCleanProfile}"
+                        AutomationProperties.Name="{Binding [Profiles.Share], Source={x:Static services:LocalizationService.Instance}}">
+                  <mi:MaterialIcon Kind="ShareVariantOutline" Width="18" Height="18" />
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Profiles.Assembly], Source={x:Static services:LocalizationService.Instance}}" />
+                <Border Grid.Column="1" Classes="pill">
+                  <TextBlock Classes="muted" Text="{Binding Composition.Count, StringFormat='{}{0}'}" />
+                </Border>
+              </Grid>
+              <TextBlock Classes="muted" Text="{Binding [Profiles.NoMods], Source={x:Static services:LocalizationService.Instance}}"
+                         IsVisible="{Binding !HasComposition}" Margin="0,8,0,4" />
+              <ItemsControl ItemsSource="{Binding Composition}" IsVisible="{Binding HasComposition}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ProfileModItem}">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" MinHeight="42">
+                      <mi:MaterialIcon Kind="PackageVariantClosed" Width="18" Height="18" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Classes="muted" FontSize="12">
+                          <Run Text="{Binding [Profiles.Pinned], Source={x:Static services:LocalizationService.Instance}}" />
+                          <Run Text=": " />
+                          <Run Text="{Binding Version}" />
+                        </TextBlock>
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding StateText}" Classes="muted" VerticalAlignment="Center" />
+                      <Button Grid.Column="3" Classes="icon" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).AskRemoveModCommand}"
+                              CommandParameter="{Binding}" IsEnabled="{Binding CanRemove}"
+                              AutomationProperties.Name="{Binding [Profiles.RemoveMod], Source={x:Static services:LocalizationService.Instance}}">
+                        <mi:MaterialIcon Kind="DeleteOutline" Width="17" Height="17" />
+                      </Button>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <DockPanel>
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <TextBlock Classes="sectionTitle" Text="{Binding [Profiles.History], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Grid.Column="1" Classes="breadcrumb" Command="{Binding ShowHistoryCommand}" IsEnabled="{Binding !IsCleanProfile}"
+                        Content="{Binding [Profiles.CompareVersions], Source={x:Static services:LocalizationService.Instance}}" />
+              </Grid>
+              <TextBlock Classes="muted" Text="{Binding HistoryEmptyText}" IsVisible="{Binding !HasHistory}" Margin="0,8" />
+              <ItemsControl ItemsSource="{Binding History}" IsVisible="{Binding HasHistory}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ProfileHistoryItem}">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" MinHeight="44">
+                      <mi:MaterialIcon Kind="History" Width="17" Height="17" Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Description}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding CreatedAt}" Classes="muted" FontSize="12" />
+                      </StackPanel>
+                      <Button Grid.Column="2" Classes="secondary" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).CompareCommand}"
+                              CommandParameter="{Binding}" Content="{Binding [Profiles.Compare], Source={x:Static services:LocalizationService.Instance}}" />
+                      <Button Grid.Column="3" Classes="secondary" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).AskRollbackCommand}"
+                              CommandParameter="{Binding}" Content="{Binding [Profiles.Rollback], Source={x:Static services:LocalizationService.Instance}}"
+                              IsVisible="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).IsHistoryModal}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,14" Padding="14,10" CornerRadius="8"
+            Background="{DynamicResource RaisedBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+            IsVisible="{Binding IsToastVisible}" ZIndex="9" AutomationProperties.LiveSetting="Polite">
+      <TextBlock Text="{Binding ShareStatus}" TextWrapping="Wrap" MaxWidth="360" />
+    </Border>
+
+    <Border Grid.RowSpan="2" Background="#99000000" IsVisible="{Binding IsModalOpen}" ZIndex="10" Padding="20">
+      <Border Classes="card" MaxWidth="620" MaxHeight="680" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="22">
+        <DockPanel LastChildFill="True">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,14">
+            <TextBlock Classes="sectionTitle" Text="{Binding ModalTitle}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="icon" Command="{Binding CloseModalCommand}"
+                    AutomationProperties.Name="{Binding [Profiles.Close], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="Close" Width="18" Height="18" />
+            </Button>
+          </Grid>
+          <StackPanel Spacing="12">
+            <StackPanel IsVisible="{Binding IsNewProfileModal}" Spacing="10">
+              <TextBlock Text="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+              <TextBox Text="{Binding ProfileName, Mode=TwoWay}" PlaceholderText="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.Name="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsEditProfileModal}" Spacing="10">
+              <TextBlock Text="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+              <TextBox Text="{Binding ProfileName, Mode=TwoWay}" PlaceholderText="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.Name="{Binding [Profiles.Name], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsRemoveModModal}" Spacing="12">
+              <TextBlock Text="{Binding [Profiles.DeleteMod], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ProtectedModMessage}" Classes="muted" IsVisible="{Binding IsRequiredMod}" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsHistoryModal}" Spacing="8">
+              <TextBlock Text="{Binding [Profiles.History], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+              <ItemsControl ItemsSource="{Binding History}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ProfileHistoryItem}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" MinHeight="42">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Description}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding CreatedAt}" Classes="muted" FontSize="12" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Classes="secondary" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).CompareCommand}"
+                              CommandParameter="{Binding}" Content="{Binding [Profiles.Compare], Source={x:Static services:LocalizationService.Instance}}" />
+                      <Button Grid.Column="2" Classes="secondary" Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).AskRollbackCommand}"
+                              CommandParameter="{Binding}" Content="{Binding [Profiles.Rollback], Source={x:Static services:LocalizationService.Instance}}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsDiffModal}" Spacing="8">
+              <TextBlock Text="{Binding ComparisonTitle}" Classes="muted" />
+              <ItemsControl ItemsSource="{Binding Diff}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ProfileDiffItem}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" MinHeight="34">
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding FromVersion}" Classes="muted" />
+                        <TextBlock Text="→" Classes="muted" />
+                        <TextBlock Text="{Binding ToVersion}" />
+                        <TextBlock Text="{Binding StateText}" Foreground="{DynamicResource GoldTextBrush}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsRollbackModal}" Spacing="12">
+              <TextBlock Text="{Binding [Profiles.RollbackWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding RestoreTargetSummary}" Classes="muted" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsShareModal}" Spacing="10">
+              <TextBlock Text="{Binding [Profiles.ShareDescription], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+              <TextBox Text="{Binding ShareLink}" IsReadOnly="True" AutomationProperties.Name="{Binding [Profiles.LinkFormat], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Text="{Binding ShareStatus}" Classes="muted" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsImportModal}" Spacing="10">
+              <TextBlock Text="{Binding [Profiles.ImportHint], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Text="{Binding ImportLink, Mode=TwoWay}" PlaceholderText="phaket://profile/..."
+                         AutomationProperties.Name="{Binding [Profiles.Import], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Grid.Column="1" Classes="secondary" Command="{Binding PreviewImportCommand}"
+                        Content="{Binding [Profiles.Compare], Source={x:Static services:LocalizationService.Instance}}" />
+              </Grid>
+              <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource WarningBrush}" IsVisible="{Binding !IsStatusEmpty}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ImportProfileName}" FontWeight="SemiBold" IsVisible="{Binding HasImportPreview}" />
+              <TextBlock Text="{Binding [Profiles.ImportPreview], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" IsVisible="{Binding HasImportPreview}" />
+              <ItemsControl ItemsSource="{Binding Diff}" IsVisible="{Binding HasImportPreview}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ProfileDiffItem}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                      <TextBlock Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding StateText}" Classes="muted" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsPathsModal}" Spacing="8">
+              <TextBlock Text="{Binding [Profiles.PathsNotFound], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" IsVisible="{Binding !HasInstallations}" />
+              <ItemsControl ItemsSource="{Binding Installations}" IsVisible="{Binding HasInstallations}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:InstallationChoice">
+                    <StackPanel Spacing="4" Margin="0,0,0,8">
+                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding RootPath}" Classes="muted" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource WarningBrush}" IsVisible="{Binding !IsStatusEmpty}"
+                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+              <Button Classes="secondary" Command="{Binding CloseModalCommand}" Content="{Binding [Profiles.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding ShowCancelButton}" />
+              <Button Classes="primary" Command="{Binding SaveProfileCommand}" Content="{Binding [Profiles.Save], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsProfileEditModal}" />
+              <Button Classes="danger" Command="{Binding ConfirmRemoveModCommand}" Content="{Binding [Profiles.RemoveMod], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsRemoveModModal}" IsEnabled="{Binding !IsRequiredMod}" />
+              <Button Classes="primary" Command="{Binding ConfirmRollbackCommand}" Content="{Binding [Profiles.Rollback], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsRollbackModal}" />
+              <Button Classes="secondary" Command="{Binding CopyShareLinkCommand}" Content="{Binding [Profiles.CopyLink], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsShareModal}" />
+              <Button Classes="primary" Command="{Binding PublishProfileCommand}" Content="{Binding PublishLabel}"
+                      IsVisible="{Binding IsShareModal}" IsEnabled="{Binding CanPublish}"
+                      AutomationProperties.Name="{Binding [Profiles.Publish], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Classes="primary" Command="{Binding ConfirmImportCommand}" Content="{Binding [Profiles.ImportCreate], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsImportModal}" IsEnabled="{Binding HasImportPreview}" />
+              <Button Classes="secondary" Command="{Binding CloseModalCommand}" Content="{Binding [Profiles.Close], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsHistoryModal, FallbackValue=False}" />
+              <Button Classes="secondary" Command="{Binding CloseModalCommand}" Content="{Binding [Profiles.Close], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsDiffModal}" />
+              <Button Classes="secondary" Command="{Binding CloseModalCommand}" Content="{Binding [Profiles.Close], Source={x:Static services:LocalizationService.Instance}}"
+                      IsVisible="{Binding IsPathsModal}" />
+            </StackPanel>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </Border>
+      </Grid>
+    </Grid>
 </UserControl>

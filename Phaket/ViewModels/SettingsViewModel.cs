@@ -63,6 +63,25 @@ public partial class SettingsViewModel : ViewModelBase
     private bool secretsBusy;
 
     public ObservableCollection<string> Languages { get; } = [];
+    [ObservableProperty] private string selectedSection = "general";
+    public bool IsGeneralSection => SelectedSection == "general";
+    public bool IsCatalogSection => SelectedSection == "catalog";
+    public bool IsToolsSection => SelectedSection == "tools";
+    public bool IsSecretsSection => SelectedSection == "secrets";
+
+    partial void OnSelectedSectionChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsGeneralSection));
+        OnPropertyChanged(nameof(IsCatalogSection));
+        OnPropertyChanged(nameof(IsToolsSection));
+        OnPropertyChanged(nameof(IsSecretsSection));
+    }
+
+    [RelayCommand]
+    private void SelectSection(string? section)
+    {
+        if (section is "general" or "catalog" or "tools" or "secrets") SelectedSection = section;
+    }
 
     // Narzędzia: the version pins Core/Tools reads from settings.json, plus the
     // release list and a forced update check for each tool.
@@ -305,40 +324,21 @@ public partial class SettingsViewModel : ViewModelBase
         catch { /* corrupt settings never block startup */ }
     }
 
-    // settings.json is shared (language, catalog endpoint, tool pins from Core/Tools),
-    // so every write merges into the existing document instead of replacing it.
-    private bool Save()
+    // settings.json is shared (language, catalog endpoint, tool pins from Core/Tools, theme,
+    // device nick), so every write merges into the existing document under the common gate
+    // instead of replacing it, and a corrupt document is left untouched rather than overwritten.
+    private bool Save() => Services.SettingsFile.TryUpdate(settingsPath, node =>
     {
-        try
+        node["language"] = SelectedLanguage;
+        node["catalogEndpoint"] = persistedEndpoint;
+        if (toolPins.Count > 0)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-            System.Text.Json.Nodes.JsonObject node;
-            try
+            if (node["tools"] is not System.Text.Json.Nodes.JsonObject toolsNode) node["tools"] = toolsNode = [];
+            foreach ((string tool, string? version) in toolPins)
             {
-                node = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(settingsPath))?.AsObject() ?? [];
+                if (toolsNode[tool] is not System.Text.Json.Nodes.JsonObject toolNode) toolsNode[tool] = toolNode = [];
+                toolNode["version"] = version;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
-            {
-                node = [];
-            }
-            node["language"] = SelectedLanguage;
-            node["catalogEndpoint"] = persistedEndpoint;
-            if (toolPins.Count > 0)
-            {
-                if (node["tools"] is not System.Text.Json.Nodes.JsonObject toolsNode) node["tools"] = toolsNode = [];
-                foreach ((string tool, string? version) in toolPins)
-                {
-                    if (toolsNode[tool] is not System.Text.Json.Nodes.JsonObject toolNode) toolsNode[tool] = toolNode = [];
-                    toolNode["version"] = version;
-                }
-            }
-
-            File.WriteAllText(settingsPath, node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-            return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
+    });
 }

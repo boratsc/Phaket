@@ -40,7 +40,7 @@
                 <TextBlock Classes="sectionTitle" Text="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}" />
                 <TextBox Text="{Binding AuthorizationInput}" AcceptsReturn="True" TextWrapping="Wrap"
                          MinHeight="120" VerticalContentAlignment="Top" FontFamily="Consolas, Courier New, monospace" FontSize="12"
-                         Watermark="{Binding [Account.EpicHint], Source={x:Static services:LocalizationService.Instance}}"
+                         PlaceholderText="{Binding [Account.EpicHint], Source={x:Static services:LocalizationService.Instance}}"
                          AutomationProperties.Name="{Binding [Account.EpicCode], Source={x:Static services:LocalizationService.Instance}}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
                     <Button Classes="secondary" Command="{Binding OpenBrowserCommand}"

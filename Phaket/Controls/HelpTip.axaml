@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Phaket.Controls"
+             x:Class="Phaket.Controls.HelpTip" x:DataType="controls:HelpTip"
+             x:Name="Root" KeyDown="OnKeyDown">
+  <UserControl.Styles>
+    <Style Selector="Button:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource GoldTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+    </Style>
+    <Style Selector="Button:focus-visible">
+      <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+  </UserControl.Styles>
+  <Grid>
+    <Button x:Name="Trigger" Width="36" Height="36" MinWidth="36" MinHeight="36" Padding="0"
+            CornerRadius="10" FontSize="11" FontWeight="SemiBold" Content="?"
+            Background="{DynamicResource RaisedBrush}" Foreground="{DynamicResource MutedBrush}"
+            BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+            Click="OnTriggerClick" GotFocus="OnTriggerGotFocus" LostFocus="OnTriggerLostFocus"
+            PointerEntered="OnPointerEntered" PointerExited="OnPointerExited"
+            AutomationProperties.Name="{Binding Label, ElementName=Root}"
+            AutomationProperties.HelpText="{Binding Message, ElementName=Root}"
+            AutomationProperties.AutomationId="HelpTip.Trigger" />
+    <Popup x:Name="TipPopup" PlacementTarget="{Binding #Trigger}" Placement="Bottom" IsLightDismissEnabled="True"
+           Closed="OnPopupClosed">
+      <Border x:Name="TipContent" MaxWidth="280" Padding="10" CornerRadius="7" Background="{DynamicResource RaisedBrush}"
+              BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" KeyDown="OnPopupKeyDown"
+              BoxShadow="0 5 17 0 #55000000" PointerEntered="OnPointerEntered" PointerExited="OnPointerExited"
+              AutomationProperties.Name="{Binding Label, ElementName=Root}"
+              AutomationProperties.HelpText="{Binding Message, ElementName=Root}"
+              AutomationProperties.AutomationId="HelpTip.Content">
+        <StackPanel Spacing="5">
+          <TextBlock Text="{Binding Label, ElementName=Root}" FontSize="13" FontWeight="SemiBold"
+                     Foreground="{DynamicResource InkBrush}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Message, ElementName=Root}" FontSize="12" LineHeight="17"
+                     Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Popup>
+  </Grid>
+</UserControl>

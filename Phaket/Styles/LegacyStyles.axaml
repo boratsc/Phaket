@@ -1,0 +1,37 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mi="using:Material.Icons.Avalonia">
+  <Style Selector="mi|MaterialIcon">
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+  </Style>
+  <Style Selector="ToggleButton.modToggle">
+    <Setter Property="Width" Value="36" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Padding" Value="2" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="2">
+          <Ellipse x:Name="Knob" Width="14" Height="14" Fill="{DynamicResource InkBrush}" HorizontalAlignment="Left" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.modToggle:checked">
+    <Setter Property="Background" Value="{DynamicResource GoldBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.modToggle:checked /template/ Ellipse#Knob">
+    <Setter Property="HorizontalAlignment" Value="Right" />
+  </Style>
+  <Style Selector="ToggleButton.modToggle:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.modToggle:checked:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AmberHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AmberHoverBrush}" />
+  </Style>
+</Styles>

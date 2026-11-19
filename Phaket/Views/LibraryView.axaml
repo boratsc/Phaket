@@ -1,100 +1,319 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services" xmlns:mi="using:Material.Icons.Avalonia" x:Class="Phaket.Views.LibraryView" x:DataType="vm:LibraryViewModel">
- <DockPanel>
-  <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="0,0,0,28">
-   <StackPanel Spacing="5"><TextBlock Classes="pageTitle" Text="{Binding [Library.Title], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Classes="muted" FontSize="15" Text="{Binding [Library.Subtitle], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-   <Grid Grid.Column="1" Width="230" VerticalAlignment="Center"><TextBox Padding="36,8,10,8" PlaceholderText="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}" Text="{Binding SearchText}" AutomationProperties.Name="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}"/><mi:MaterialIcon Kind="Magnify" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource MutedBrush}" IsHitTestVisible="False"/></Grid>
-   <Button Grid.Column="2" Classes="outline" VerticalAlignment="Center" Command="{Binding AddFolderCommand}" AutomationProperties.Name="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Plus"/><TextBlock Text="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Button>
-  </Grid>
-  <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,16" IsVisible="{Binding !EpicSignedIn}">
-   <TextBlock VerticalAlignment="Center" Text="{Binding [Library.EpicSignInHint], Source={x:Static services:LocalizationService.Instance}}"/>
-   <Button Command="{Binding OpenAccountsCommand}" Content="{Binding [Library.EpicSignIn], Source={x:Static services:LocalizationService.Instance}}"/>
-  </StackPanel>
-   <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12"><TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/><Button IsVisible="{Binding EpicError}" Command="{Binding OpenAccountsCommand}" Content="{Binding [Library.EpicSignIn], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-   <SelectableTextBlock DockPanel.Dock="Top" Text="{Binding SteamStatus}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
-   <StackPanel DockPanel.Dock="Top" Spacing="6">
-    <Button HorizontalAlignment="Left" Command="{Binding ListDepotSessionsCommand}" Content="{Binding [SteamInstall.SessionCleanup], Source={x:Static services:LocalizationService.Instance}}"/>
-    <SelectableTextBlock Text="{Binding SessionCleanupStatus}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
-    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ConfirmSessionCleanup}"><Button Command="{Binding ConfirmDepotSessionCleanupCommand}" Content="{Binding [SteamInstall.SessionConfirm], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding CancelDepotSessionCleanupCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-   </StackPanel>
-   <ContentControl DockPanel.Dock="Top" Content="{Binding SteamInstall}">
-    <ContentControl.ContentTemplate><DataTemplate x:DataType="vm:SteamInstallFlowViewModel">
-     <Border Classes="gameCard" Margin="0,8,0,16" MaxHeight="500"><Grid RowDefinitions="*,Auto" RowSpacing="8"><ScrollViewer><StackPanel Spacing="8">
-      <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding [SteamInstall.Title], Source={x:Static services:LocalizationService.Instance}}"/>
-      <TextBlock Text="{Binding [SteamInstall.Build], Source={x:Static services:LocalizationService.Instance}}"/>
-      <ComboBox ItemsSource="{Binding BuildOptions}" SelectedItem="{Binding SelectedBuild}" IsEnabled="{Binding !Installing}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [SteamInstall.Build], Source={x:Static services:LocalizationService.Instance}}"><ComboBox.ItemTemplate><DataTemplate x:DataType="vm:BuildOption"><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
-      <TextBlock Text="{Binding [SteamInstall.Arch], Source={x:Static services:LocalizationService.Instance}}"/>
-      <ComboBox SelectedItem="{Binding OsArch}" IsEnabled="{Binding !Installing}" HorizontalAlignment="Left" AutomationProperties.Name="{Binding [SteamInstall.Arch], Source={x:Static services:LocalizationService.Instance}}"><x:String>32</x:String><x:String>64</x:String></ComboBox>
-      <TextBlock IsVisible="{Binding ArchitectureUnknown}" Text="{Binding [SteamInstall.Error.ArchRequired], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap"/>
-      <TextBlock Text="{Binding ArchitectureWarning}" TextWrapping="Wrap"/>
-      <TextBlock Text="{Binding [SteamInstall.Folder], Source={x:Static services:LocalizationService.Instance}}"/>
-      <TextBox Text="{Binding TargetDir}" IsEnabled="{Binding !Installing}" AutomationProperties.Name="{Binding [SteamInstall.Folder], Source={x:Static services:LocalizationService.Instance}}"/>
-      <StackPanel Orientation="Horizontal" Spacing="8"><Button Command="{Binding PickFolderCommand}" IsEnabled="{Binding !Installing}" Content="{Binding [Library.InstallChooseFolder], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding PrepareCommand}" IsEnabled="{Binding !Installing}" Content="{Binding [SteamInstall.Prepare], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-      <StackPanel IsVisible="{Binding HasPreview}" Spacing="6">
-       <TextBlock Text="{Binding PreviewTargetPath}" TextWrapping="Wrap"/><TextBlock Text="{Binding PreviewSize}"/><TextBlock Text="{Binding [Library.InstallOverwriteWarning], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding HasConflicts}" TextWrapping="Wrap"/>
-       <TextBlock Text="{Binding [SteamInstall.Username], Source={x:Static services:LocalizationService.Instance}}"/><TextBox Text="{Binding Username}" IsEnabled="{Binding CanEditUsername}" AutomationProperties.Name="{Binding [SteamInstall.Username], Source={x:Static services:LocalizationService.Instance}}"/>
-       <CheckBox IsChecked="{Binding ConsentSession}" IsEnabled="{Binding !Installing}" Content="{Binding [SteamInstall.ConsentSession], Source={x:Static services:LocalizationService.Instance}}"/>
-       <CheckBox IsVisible="{Binding HasConflicts}" IsEnabled="{Binding !Installing}" IsChecked="{Binding ConsentOverwrite}" Content="{Binding [Library.InstallOverwriteConsent], Source={x:Static services:LocalizationService.Instance}}"/>
-       <CheckBox IsChecked="{Binding AcceptPlan}" IsEnabled="{Binding !Installing}" Content="{Binding [Library.InstallAccept], Source={x:Static services:LocalizationService.Instance}}"/>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             x:Class="Phaket.Views.LibraryView"
+             x:DataType="vm:LibraryViewModel">
+  <DockPanel LastChildFill="True">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="0,0,0,16">
+      <StackPanel Spacing="5">
+        <TextBlock Classes="pageTitle" Text="{Binding [Library.Title], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.HeadingLevel="1" />
+        <TextBlock Classes="pageSubtitle" Text="{Binding [Library.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
       </StackPanel>
-      <StackPanel IsVisible="{Binding DialogCredentialOpen}" Spacing="6"><TextBlock Text="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}"/><TextBox PasswordChar="●" Text="{Binding Password}" AutomationProperties.Name="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}"/><StackPanel Orientation="Horizontal" Spacing="8"><Button Command="{Binding ConfirmCredentialCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></StackPanel>
-      <!-- PoK-60: one Steam sign-in for installs. Stored credentials auto-fill the tool;
-           without them this dialog asks once and keeps them in the system secret store. -->
-      <StackPanel IsVisible="{Binding SigninDialog.IsOpen}" Spacing="6" AutomationProperties.Name="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}">
-       <TextBlock Text="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.SteamCred.Hint], Source={x:Static services:LocalizationService.Instance}}"/>
-       <TextBlock Text="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}"/><TextBox Text="{Binding SigninDialog.Username}" PlaceholderText="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.Name="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}"/>
-       <TextBlock Text="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}"/><TextBox PasswordChar="●" Text="{Binding SigninDialog.Password}" AutomationProperties.Name="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}"/>
-       <CheckBox IsChecked="{Binding SigninDialog.Remember}" Content="{Binding [Account.SteamCred.Remember], Source={x:Static services:LocalizationService.Instance}}"/>
-       <TextBlock Text="{Binding SigninDialog.StatusMessage}" TextWrapping="Wrap" IsVisible="{Binding SigninDialog.HasStatusMessage}" AutomationProperties.LiveSetting="Assertive"/>
-       <StackPanel Orientation="Horizontal" Spacing="8"><Button Classes="cta" Command="{Binding SigninDialog.ConfirmCommand}" Content="{Binding [Account.SteamCred.Confirm], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding SigninDialog.CancelCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-      </StackPanel>
-      <StackPanel IsVisible="{Binding DialogTwoFactorOpen}" Spacing="6"><TextBlock Text="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}"/><TextBox Text="{Binding TwoFactorCode}" AutomationProperties.Name="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}"/><StackPanel Orientation="Horizontal" Spacing="8"><Button Command="{Binding ConfirmTwoFactorCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></StackPanel>
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive"/><SelectableTextBlock Text="{Binding LogTail}" TextWrapping="Wrap"/>
-     </StackPanel></ScrollViewer><StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-      <Button Classes="cta" IsVisible="{Binding HasPreview}" Command="{Binding ExecuteCommand}" Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}"/>
-      <Button IsEnabled="{Binding !Installing}" Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).CloseSteamInstallCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/>
-     </StackPanel></Grid></Border>
-    </DataTemplate></ContentControl.ContentTemplate>
-   </ContentControl>
-   <TextBlock DockPanel.Dock="Top" Text="{Binding InstallError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive"/>
-   <ScrollViewer DockPanel.Dock="Top" MaxHeight="450" IsVisible="{Binding HasInstallPlan}">
-    <Border Classes="gameCard" Margin="0,0,0,16"><StackPanel Spacing="8">
-     <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding [Library.InstallPlan], Source={x:Static services:LocalizationService.Instance}}"/>
-     <TextBlock Text="{Binding InstallPlanAppName}" TextWrapping="Wrap"/>
-     <TextBlock Text="{Binding InstallPlanTargetPath}" TextWrapping="Wrap"/>
-     <TextBlock Text="{Binding InstallSize}"/>
-     <TextBlock IsVisible="{Binding HasInstallConflicts}" Text="{Binding [Library.InstallOverwriteWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap"/>
-     <TextBlock IsVisible="{Binding HasInstallConflicts}" Text="{Binding InstallConflicts}" TextWrapping="Wrap"/>
-     <CheckBox IsChecked="{Binding TokenConsent}" Content="{Binding [Library.InstallTokenConsent], Source={x:Static services:LocalizationService.Instance}}"/>
-     <CheckBox IsVisible="{Binding HasInstallConflicts}" IsChecked="{Binding OverwriteConsent}" Content="{Binding [Library.InstallOverwriteConsent], Source={x:Static services:LocalizationService.Instance}}"/>
-     <CheckBox IsChecked="{Binding PlanAccepted}" Content="{Binding [Library.InstallAccept], Source={x:Static services:LocalizationService.Instance}}"/>
-     <StackPanel Orientation="Horizontal" Spacing="8"><Button Classes="cta" Command="{Binding ExecuteGameInstallCommand}" Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}"/><Button Command="{Binding CancelGameInstallCommand}" IsEnabled="{Binding !InstallingGame}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
-     <TextBlock Text="{Binding InstallLog}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
-    </StackPanel></Border>
-   </ScrollViewer>
-  <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding [Library.Empty], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding Games.Count, Converter={x:Static services:CountToVisibilityConverter.Instance}}"/>
-  <ScrollViewer><ItemsControl ItemsSource="{Binding Games}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:GameCatalogItem">
-   <Border Classes="gameCard" Margin="0,0,0,16"><Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="20">
-     <Button Background="Transparent" BorderThickness="0" Padding="0" IsVisible="{Binding CanOpenGame}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}">
-      <Border Width="120" Height="180" CornerRadius="12" ClipToBounds="True"><Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill"/></Border>
-     </Button>
-     <Border Width="120" Height="180" CornerRadius="12" ClipToBounds="True" IsVisible="{Binding !CanOpenGame}"><Grid><Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill" IsVisible="{Binding HasCover}"/><mi:MaterialIcon Kind="GamepadVariant" Width="48" Height="48" Foreground="{StaticResource MutedBrush}" IsVisible="{Binding !HasCover}"/></Grid></Border>
-    <StackPanel Grid.Column="1" Spacing="12" VerticalAlignment="Center">
-      <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Left" IsVisible="{Binding CanOpenGame}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}"><TextBlock Text="{Binding Title}" FontSize="21" FontWeight="SemiBold"/></Button>
-      <TextBlock Text="{Binding Title}" FontSize="21" FontWeight="SemiBold" IsVisible="{Binding !CanOpenGame}"/>
-        <StackPanel Orientation="Horizontal" Spacing="10"><mi:MaterialIcon Kind="Steam" IsVisible="{Binding ShowSteam}"/><TextBlock Text="Steam" IsVisible="{Binding ShowSteam}"/><TextBlock Text="{Binding [Library.State.Installed], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding SteamInstalled}"/><TextBlock Classes="muted" Text="{Binding [Library.State.OwnedNotInstalled], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding SteamOwnedNotInstalled}"/><TextBlock Text="Epic" IsVisible="{Binding EpicOwned}"/><mi:MaterialIcon Kind="CheckCircle" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding EpicInstalled}"/><TextBlock Text="{Binding [Library.State.Installed], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding EpicInstalled}"/><TextBlock Classes="muted" Text="{Binding [Library.State.OwnedNotInstalled], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding EpicOwnedNotInstalled}"/><TextBlock Classes="muted" Text="{Binding [Library.State.NotDetected], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding NotDetected}"/></StackPanel>
-        <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding EpicUnsupported}" Text="{Binding [Library.State.Unsupported], Source={x:Static services:LocalizationService.Instance}}"/>
-       <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsInstalled}"><TextBlock Classes="muted" Text="{Binding [Game.Architecture], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding InstallationArchitecture}"/></StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanOpenGame}"><mi:MaterialIcon Kind="Layers"/><TextBlock Classes="muted" Text="{Binding [Library.ActiveProfile], Source={x:Static services:LocalizationService.Instance}}"/><TextBlock Text="{Binding [Library.DefaultProfile], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel>
+      <Grid Grid.Column="1" Width="230" VerticalAlignment="Center">
+        <TextBox Classes="search" PlaceholderText="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}"
+                 Text="{Binding SearchText}" AutomationProperties.Name="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}" />
+        <mi:MaterialIcon Kind="Magnify" Width="17" Height="17" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="11,0,0,0"
+                         Foreground="{DynamicResource QuietBrush}" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+      </Grid>
+      <Button Grid.Column="2" Classes="outline" VerticalAlignment="Center" Command="{Binding AddFolderCommand}"
+              AutomationProperties.Name="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <mi:MaterialIcon Kind="Plus" Width="16" Height="16" />
+          <TextBlock Text="{Binding [Library.AddGame], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="9" Margin="0,0,0,8" IsVisible="{Binding !EpicSignedIn}">
+      <mi:MaterialIcon Kind="InformationOutline" Width="16" Height="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+      <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding [Library.EpicSignInHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+      <Button Classes="secondary" Command="{Binding OpenAccountsCommand}" Content="{Binding [Library.EpicSignIn], Source={x:Static services:LocalizationService.Instance}}" />
     </StackPanel>
-     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" IsVisible="{Binding CanOpenGame}">
-     <Border Classes="pill"><StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding ModCount}"/><TextBlock Text="{Binding [Library.Mods], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Border>
-      <Button Classes="cta" IsEnabled="{Binding CanOpenGame}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).PlayCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="8"><mi:MaterialIcon Kind="Play"/><TextBlock Text="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}"/></StackPanel></Button>
-      <Button Classes="icon" IsEnabled="{Binding CanOpenGame}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenGameCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding [Game.Details], Source={x:Static services:LocalizationService.Instance}}"><mi:MaterialIcon Kind="DotsHorizontal"/></Button>
-     </StackPanel>
-      <Button Grid.Column="2" VerticalAlignment="Bottom" IsVisible="{Binding CanInstallEpic}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).PrepareGameInstallCommand}" CommandParameter="{Binding}" Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}"/>
-      <Button Grid.Column="2" VerticalAlignment="Top" IsVisible="{Binding CanInstallSteam}" Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).OpenSteamInstallCommand}" CommandParameter="{Binding}" Content="{Binding [SteamInstall.Title], Source={x:Static services:LocalizationService.Instance}}"/>
-   </Grid></Border>
-  </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
- </DockPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    <SelectableTextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding SteamStatus}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+
+    <Grid ColumnDefinitions="0.9*,1.35*" ColumnSpacing="14">
+      <Border Grid.Column="0" Classes="card listPane" Padding="12">
+        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+          <Grid ColumnDefinitions="*,Auto" Margin="2,0,2,2">
+            <TextBlock Classes="sectionTitle" Text="{Binding [Ui.Library.MyGames], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+            <Border Grid.Column="1" Classes="pill" Padding="7,3">
+              <TextBlock Text="{Binding Games.Count}" Classes="muted" FontSize="12" />
+            </Border>
+          </Grid>
+          <Grid Grid.Row="1">
+            <ListBox Classes="plainList" ItemsSource="{Binding Games}" SelectedItem="{Binding SelectedGame}"
+                     AutomationProperties.Name="{Binding [Ui.Library.MyGames], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.HelpText="{Binding [Library.Search], Source={x:Static services:LocalizationService.Instance}}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:GameCatalogItem">
+                  <Border Classes="selectableRow" Padding="8" AutomationProperties.Name="{Binding Title}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                      <Border Width="36" Height="36" CornerRadius="7" ClipToBounds="True" Background="{DynamicResource RaisedBrush}">
+                        <Grid>
+                          <Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
+                          <mi:MaterialIcon Kind="GamepadVariant" Width="19" Height="19" Foreground="{DynamicResource MutedBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasCover}" />
+                        </Grid>
+                      </Border>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis">
+                          <Run Text="{Binding LauncherLabel}" />
+                          <Run Text=" · " />
+                          <Run Text="{Binding SelectedBuild}" />
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding UnsupportedOwned}"
+                                    AutomationProperties.Name="{Binding [Ui.Library.Unsupported], Source={x:Static services:LocalizationService.Instance}}">
+                          <mi:MaterialIcon Kind="AlertCircle" Width="13" Height="13" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                          <TextBlock Classes="muted" FontSize="11" Text="{Binding [Ui.Library.Unsupported], Source={x:Static services:LocalizationService.Instance}}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding SupportedOwnedNotInstalled}">
+                          <mi:MaterialIcon Kind="AlertCircle" Width="13" Height="13" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                          <TextBlock Classes="muted" FontSize="11" Text="{Binding [Library.State.OwnedNotInstalled], Source={x:Static services:LocalizationService.Instance}}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <StackPanel IsVisible="{Binding Games.Count, Converter={x:Static services:CountToVisibilityConverter.Instance}}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="260">
+              <mi:MaterialIcon Kind="GamepadVariant" Width="26" Height="26" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding [Library.Empty], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Classes="card detailPane" Padding="16">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="14">
+            <StackPanel IsVisible="{Binding HasSelectedGame}" Spacing="14">
+              <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                <Border Width="64" Height="64" CornerRadius="9" ClipToBounds="True" Background="{DynamicResource RaisedBrush}">
+                  <Grid>
+                    <Image Source="{Binding SelectedGame.Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill"
+                           IsVisible="{Binding SelectedGame.HasCover}" />
+                    <mi:MaterialIcon Kind="GamepadVariant" Width="28" Height="28" Foreground="{DynamicResource MutedBrush}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !SelectedGame.HasCover}" />
+                  </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                  <TextBlock Classes="sectionTitle" FontSize="21" Text="{Binding SelectedGame.Title}" TextWrapping="Wrap" />
+                  <TextBlock Classes="muted" Text="{Binding SelectedGame.LauncherLabel}" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="icon" Command="{Binding OpenGameCommand}" CommandParameter="{Binding SelectedGame}"
+                        IsVisible="{Binding SelectedGame.CanOpenGame}"
+                        AutomationProperties.Name="{Binding [Ui.Library.OpenGame], Source={x:Static services:LocalizationService.Instance}}">
+                  <mi:MaterialIcon Kind="OpenInNew" Width="18" Height="18" />
+                </Button>
+              </Grid>
+
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                <TextBlock Classes="muted" Text="{Binding [Ui.Library.Launcher], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Grid.Column="1" Text="{Binding SelectedGame.LauncherLabel}" />
+                <TextBlock Grid.Row="1" Classes="muted" Text="{Binding [Ui.Library.Version], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedGame.SelectedBuild}" />
+                <TextBlock Grid.Row="2" Classes="muted" Text="{Binding [Ui.Library.ActiveProfile], Source={x:Static services:LocalizationService.Instance}}" />
+                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="7">
+                  <mi:MaterialIcon Kind="Layers" Width="16" Height="16" Foreground="{DynamicResource MutedBrush}" />
+                  <TextBlock Text="{Binding SelectedGame.ProfileName}" />
+                  <TextBlock Text="{Binding SelectedGame.ModCount, StringFormat='{}{0}'}" Classes="muted" />
+                  <TextBlock Text="{Binding [Library.Mods], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+                </StackPanel>
+              </Grid>
+
+              <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding SelectedGame.IsInstalled}">
+                <mi:MaterialIcon Kind="CheckCircle" Width="16" Height="16" Foreground="{DynamicResource SuccessBrush}" />
+                <TextBlock Classes="muted" Text="{Binding [Library.State.Installed], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding SelectedGame.SupportedOwnedNotInstalled}">
+                <mi:MaterialIcon Kind="AlertCircle" Width="16" Height="16" Foreground="{DynamicResource WarningBrush}" />
+                <TextBlock Classes="muted" Text="{Binding [Library.State.OwnedNotInstalled], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding SelectedGame.NotDetected}">
+                <mi:MaterialIcon Kind="InformationOutline" Width="16" Height="16" Foreground="{DynamicResource MutedBrush}" />
+                <TextBlock Classes="muted" Text="{Binding [Library.State.NotDetected], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding SelectedGame.EpicUnsupported}"
+                          AutomationProperties.Name="{Binding [Ui.Library.Unsupported], Source={x:Static services:LocalizationService.Instance}}">
+                <mi:MaterialIcon Kind="AlertCircle" Width="13" Height="13" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center"
+                                 AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Classes="muted" Text="{Binding [Ui.Library.Unsupported], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedGame.IsInstalled}">
+                <TextBlock Classes="muted" Text="{Binding [Game.Architecture], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding SelectedGame.InstallationArchitecture}" />
+              </StackPanel>
+
+              <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedGame.IsInstalled}">
+                <TextBlock Classes="muted" Text="{Binding [Library.Installation], Source={x:Static services:LocalizationService.Instance}}" />
+                <ComboBox ItemsSource="{Binding SelectedGame.AvailableInstallations}" SelectedItem="{Binding SelectedGame.SelectedInstallation}"
+                          HorizontalAlignment="Stretch" MinWidth="180"
+                          AutomationProperties.Name="{Binding [Game.SelectInstallation], Source={x:Static services:LocalizationService.Instance}}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:InstallationChoice"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" /></DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Classes="primary" Command="{Binding PlayCommand}" CommandParameter="{Binding SelectedGame}"
+                        IsVisible="{Binding SelectedGame.CanOpenGame}"
+                        AutomationProperties.Name="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <mi:MaterialIcon Kind="Play" Width="16" Height="16" />
+                    <TextBlock Text="{Binding [Library.Play], Source={x:Static services:LocalizationService.Instance}}" />
+                  </StackPanel>
+                </Button>
+                <Button Classes="secondary" Command="{Binding OpenGameCommand}" CommandParameter="{Binding SelectedGame}"
+                        IsVisible="{Binding SelectedGame.CanOpenGame}" Content="{Binding [Ui.Library.OpenGame], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Classes="secondary" IsVisible="{Binding SelectedGame.CanInstallEpic}"
+                        Command="{Binding PrepareGameInstallCommand}" CommandParameter="{Binding SelectedGame}"
+                        Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Classes="secondary" IsVisible="{Binding SelectedGame.CanInstallSteam}"
+                        Command="{Binding OpenSteamInstallCommand}" CommandParameter="{Binding SelectedGame}"
+                        Content="{Binding [SteamInstall.Title], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding !HasSelectedGame}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="260">
+              <TextBlock Classes="sectionTitle" Text="{Binding [Ui.Library.Configuration], Source={x:Static services:LocalizationService.Instance}}" TextAlignment="Center" />
+              <TextBlock Classes="muted" Text="{Binding [Ui.Library.SelectPrompt], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" TextAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel Spacing="7">
+              <TextBlock Text="{Binding SessionCleanupStatus}" TextWrapping="Wrap" Classes="muted" AutomationProperties.LiveSetting="Polite" />
+              <Expander Classes="disclosure">
+                <Expander.Header>
+                  <TextBlock Text="{Binding [SteamInstall.SessionCleanup], Source={x:Static services:LocalizationService.Instance}}" />
+                </Expander.Header>
+                <StackPanel Spacing="7" Margin="0,8,0,0">
+                  <Button HorizontalAlignment="Left" Command="{Binding ListDepotSessionsCommand}"
+                          Content="{Binding [SteamInstall.SessionCleanup], Source={x:Static services:LocalizationService.Instance}}" />
+                  <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ConfirmSessionCleanup}">
+                    <Button Command="{Binding ConfirmDepotSessionCleanupCommand}" Content="{Binding [SteamInstall.SessionConfirm], Source={x:Static services:LocalizationService.Instance}}" />
+                    <Button Command="{Binding CancelDepotSessionCleanupCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                  </StackPanel>
+                </StackPanel>
+              </Expander>
+            </StackPanel>
+
+            <ContentControl Content="{Binding SteamInstall}">
+              <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:SteamInstallFlowViewModel">
+                  <Border Classes="card" Padding="12" MaxHeight="500">
+                    <Grid RowDefinitions="*,Auto" RowSpacing="8">
+                      <ScrollViewer>
+                        <StackPanel Spacing="8">
+                          <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding [SteamInstall.Title], Source={x:Static services:LocalizationService.Instance}}" />
+                          <TextBlock Text="{Binding [SteamInstall.Build], Source={x:Static services:LocalizationService.Instance}}" />
+                          <ComboBox ItemsSource="{Binding BuildOptions}" SelectedItem="{Binding SelectedBuild}" IsEnabled="{Binding !Installing}"
+                                    HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding [SteamInstall.Build], Source={x:Static services:LocalizationService.Instance}}">
+                            <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:BuildOption"><TextBlock Text="{Binding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <TextBlock Text="{Binding [SteamInstall.Arch], Source={x:Static services:LocalizationService.Instance}}" />
+                          <ComboBox SelectedItem="{Binding OsArch}" IsEnabled="{Binding !Installing}" HorizontalAlignment="Left"
+                                    AutomationProperties.Name="{Binding [SteamInstall.Arch], Source={x:Static services:LocalizationService.Instance}}">
+                            <x:String>32</x:String><x:String>64</x:String>
+                          </ComboBox>
+                          <TextBlock IsVisible="{Binding ArchitectureUnknown}" Text="{Binding [SteamInstall.Error.ArchRequired], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding ArchitectureWarning}" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding [SteamInstall.Folder], Source={x:Static services:LocalizationService.Instance}}" />
+                          <TextBox Text="{Binding TargetDir}" IsEnabled="{Binding !Installing}"
+                                   AutomationProperties.Name="{Binding [SteamInstall.Folder], Source={x:Static services:LocalizationService.Instance}}" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Command="{Binding PickFolderCommand}" IsEnabled="{Binding !Installing}" Content="{Binding [Library.InstallChooseFolder], Source={x:Static services:LocalizationService.Instance}}" />
+                            <Button Command="{Binding PrepareCommand}" IsEnabled="{Binding !Installing}" Content="{Binding [SteamInstall.Prepare], Source={x:Static services:LocalizationService.Instance}}" />
+                          </StackPanel>
+                          <StackPanel IsVisible="{Binding HasPreview}" Spacing="6">
+                            <TextBlock Text="{Binding PreviewTargetPath}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding PreviewSize}" />
+                            <TextBlock Text="{Binding [Library.InstallOverwriteWarning], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding HasConflicts}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding [SteamInstall.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBox Text="{Binding Username}" IsEnabled="{Binding CanEditUsername}"
+                                     AutomationProperties.Name="{Binding [SteamInstall.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                            <CheckBox IsChecked="{Binding ConsentSession}" IsEnabled="{Binding !Installing}" Content="{Binding [SteamInstall.ConsentSession], Source={x:Static services:LocalizationService.Instance}}" />
+                            <CheckBox IsVisible="{Binding HasConflicts}" IsEnabled="{Binding !Installing}" IsChecked="{Binding ConsentOverwrite}"
+                                      Content="{Binding [Library.InstallOverwriteConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                            <CheckBox IsChecked="{Binding AcceptPlan}" IsEnabled="{Binding !Installing}" Content="{Binding [Library.InstallAccept], Source={x:Static services:LocalizationService.Instance}}" />
+                          </StackPanel>
+                          <StackPanel IsVisible="{Binding DialogCredentialOpen}" Spacing="6">
+                            <TextBlock Text="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBox PasswordChar="●" Text="{Binding Password}" AutomationProperties.Name="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Button Command="{Binding ConfirmCredentialCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+                              <Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                            </StackPanel>
+                          </StackPanel>
+                          <StackPanel IsVisible="{Binding SigninDialog.IsOpen}" Spacing="6"
+                                      AutomationProperties.Name="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}">
+                            <TextBlock Text="{Binding [Account.SteamCred.Title], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Account.SteamCred.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBlock Text="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBox Text="{Binding SigninDialog.Username}" PlaceholderText="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}"
+                                     AutomationProperties.Name="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBlock Text="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBox PasswordChar="●" Text="{Binding SigninDialog.Password}" AutomationProperties.Name="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                            <CheckBox IsChecked="{Binding SigninDialog.Remember}" Content="{Binding [Account.SteamCred.Remember], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBlock Text="{Binding SigninDialog.StatusMessage}" TextWrapping="Wrap" IsVisible="{Binding SigninDialog.HasStatusMessage}" AutomationProperties.LiveSetting="Assertive" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Button Classes="primary" Command="{Binding SigninDialog.ConfirmCommand}" Content="{Binding [Account.SteamCred.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+                              <Button Command="{Binding SigninDialog.CancelCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                            </StackPanel>
+                          </StackPanel>
+                          <StackPanel IsVisible="{Binding DialogTwoFactorOpen}" Spacing="6">
+                            <TextBlock Text="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}" />
+                            <TextBox Text="{Binding TwoFactorCode}" AutomationProperties.Name="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Button Command="{Binding ConfirmTwoFactorCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+                              <Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                            </StackPanel>
+                          </StackPanel>
+                          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+                          <SelectableTextBlock Text="{Binding LogTail}" TextWrapping="Wrap" />
+                        </StackPanel>
+                      </ScrollViewer>
+                      <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <Button Classes="primary" IsVisible="{Binding HasPreview}" Command="{Binding ExecuteCommand}" Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}" />
+                        <Button IsEnabled="{Binding !Installing}"
+                                Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).CloseSteamInstallCommand}"
+                                Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ContentControl.ContentTemplate>
+            </ContentControl>
+
+            <TextBlock Text="{Binding InstallError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+            <Border Classes="card" IsVisible="{Binding HasInstallPlan}">
+              <StackPanel Spacing="8">
+                <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding [Library.InstallPlan], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding InstallPlanAppName}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding InstallPlanTargetPath}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding InstallSize}" />
+                <TextBlock IsVisible="{Binding HasInstallConflicts}" Text="{Binding [Library.InstallOverwriteWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                <TextBlock IsVisible="{Binding HasInstallConflicts}" Text="{Binding InstallConflicts}" TextWrapping="Wrap" />
+                <CheckBox IsChecked="{Binding TokenConsent}" Content="{Binding [Library.InstallTokenConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                <CheckBox IsVisible="{Binding HasInstallConflicts}" IsChecked="{Binding OverwriteConsent}" Content="{Binding [Library.InstallOverwriteConsent], Source={x:Static services:LocalizationService.Instance}}" />
+                <CheckBox IsChecked="{Binding PlanAccepted}" Content="{Binding [Library.InstallAccept], Source={x:Static services:LocalizationService.Instance}}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="primary" Command="{Binding ExecuteGameInstallCommand}" Content="{Binding [Library.Install], Source={x:Static services:LocalizationService.Instance}}" />
+                  <Button Command="{Binding CancelGameInstallCommand}" IsEnabled="{Binding !InstallingGame}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
+                <TextBlock Text="{Binding InstallLog}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+  </DockPanel>
 </UserControl>

@@ -1,42 +1,93 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services"
- x:Class="Phaket.Views.HelpView" x:DataType="vm:HelpViewModel">
- <ScrollViewer>
-  <StackPanel Spacing="20">
-   <TextBlock Classes="pageTitle" Text="{Binding [Help.Title], Source={x:Static services:LocalizationService.Instance}}" />
-   <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Help.About], Source={x:Static services:LocalizationService.Instance}}" />
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.UsageTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Usage], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Studio], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Management], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SafetyTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Safety], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SecretsTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Secrets], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsMigration], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsFallback], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SecretsDelete], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.SteamKeyTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.SteamKey], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.ToolsTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Tools], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.ToolsLegendary], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.ToolsDepotDownloader], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
-   <Border Classes="card"><StackPanel Spacing="12">
-    <TextBlock Classes="sectionTitle" Text="{Binding [Help.CatalogTitle], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.Catalog], Source={x:Static services:LocalizationService.Instance}}" />
-    <TextBlock TextWrapping="Wrap" Text="{Binding [Help.CatalogEndpoint], Source={x:Static services:LocalizationService.Instance}}" />
-   </StackPanel></Border>
+             xmlns:vm="using:Phaket.ViewModels" xmlns:services="using:Phaket.Services" xmlns:controls="using:Phaket.Controls"
+             x:Class="Phaket.Views.HelpView" x:DataType="vm:HelpViewModel" x:CompileBindings="False">
+  <UserControl.Styles>
+    <Style Selector="ListBox.guideList">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.guideList ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,0,7" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.guideList ListBoxItem:selected Border.guideRow">
+      <Setter Property="Background" Value="{DynamicResource SoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+    </Style>
+    <Style Selector="ListBox.guideList ListBoxItem:focus-visible Border.guideRow">
+      <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel Spacing="18">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="3">
+        <TextBlock Classes="pageTitle" Text="{Binding [Guides.Title], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.HeadingLevel="1" />
+        <TextBlock Classes="pageSubtitle" Text="{Binding [Ui.Help.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+      <TextBlock Grid.Column="1" Text="{Binding GameName}" Classes="muted" VerticalAlignment="Center" IsVisible="{Binding HasGame}" />
+    </Grid>
+
+    <Border Classes="card" IsVisible="{Binding !HasGame}">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding EmptyTitle}" Classes="sectionTitle" />
+        <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="0.95*,1.25*" ColumnSpacing="15" IsVisible="{Binding HasGame}">
+      <Border Classes="card" Padding="12">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+            <TextBlock Text="{Binding GameName}" FontWeight="SemiBold" AutomationProperties.HeadingLevel="2" />
+            <controls:HelpTip
+                              Label="{Binding [HelpTip.Profile.Label], Source={x:Static services:LocalizationService.Instance}}"
+                              Message="{Binding [HelpTip.Profile.Content], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <TextBox Classes="search" Text="{Binding SearchText, Mode=TwoWay}" PlaceholderText="{Binding [Guides.Search], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.Name="{Binding [Guides.Search], Source={x:Static services:LocalizationService.Instance}}" />
+          <ListBox Classes="guideList" ItemsSource="{Binding Guides}" SelectedItem="{Binding SelectedGuide, Mode=TwoWay}"
+                   AutomationProperties.Name="{Binding GameName}" AutomationProperties.HelpText="{Binding [Guides.Title], Source={x:Static services:LocalizationService.Instance}}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:GuideViewModel">
+                <Border Classes="guideRow" CornerRadius="7" Padding="10" BorderThickness="1" BorderBrush="{DynamicResource LineBrush}">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="12" TextWrapping="Wrap" LineHeight="17" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="›" Classes="muted" FontSize="20" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Text="{Binding EmptyList}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasGuides}" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Classes="card" IsVisible="{Binding HasSelectedGuide}" AutomationProperties.Name="{Binding SelectedGuide.Title}">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="6">
+            <TextBlock Text="{Binding SelectedGuide.Title}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" AutomationProperties.HeadingLevel="2" />
+            <TextBlock Text="{Binding SelectedGuide.Summary}" Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding SelectedGuide.Steps}" AutomationProperties.Name="{Binding SelectedGuide.Title}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:GuideStepViewModel">
+                <Grid ColumnDefinitions="30,*" ColumnSpacing="10" Margin="0,2,0,6">
+                  <Border Width="23" Height="23" CornerRadius="12" Background="{DynamicResource SoftBrush}" BorderBrush="{DynamicResource GoldBrush}" BorderThickness="1" VerticalAlignment="Top">
+                    <TextBlock Text="{Binding Number}" Foreground="{DynamicResource GoldTextBrush}" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" LineHeight="21" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </Grid>
   </StackPanel>
- </ScrollViewer>
 </UserControl>

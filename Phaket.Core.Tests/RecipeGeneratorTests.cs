@@ -28,6 +28,19 @@ public sealed class RecipeGeneratorTests
     }
 
     [Theory]
+    [InlineData("1.2.3", "1.2.3")]
+    [InlineData("v1.2.3", "1.2.3")]
+    [InlineData("release-7", "0.0.0-release-7")]
+    [InlineData("###", "0.0.0-pinned")]
+    [InlineData("v", "0.0.0-v")]
+    public void PinnedTagsFoldIntoValidSemverEvenWithoutDigits(string tag, string expected)
+    {
+        var version = RecipeGenerator.ToRecipeVersion(tag);
+        Assert.Equal(expected, version);
+        Assert.Matches(@"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.\-]*)?$", version);
+    }
+
+    [Theory]
     [InlineData("among-us", new[] { "epic", "steam" })]
     [InlineData("valheim", new[] { "steam" })]
     public void EditionsFollowGameDefinition(string slug, string[] stores)

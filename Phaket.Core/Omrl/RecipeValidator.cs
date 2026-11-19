@@ -71,7 +71,7 @@ public static class RecipeValidator
             {
                 if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source, artifact.Sha256))
                     Add(ErrorCodes.ValidationFailed, ("detail", $"https source not on allowlist: {artifact.Source}"));
-                if (artifact.Sha256 is null)
+                if (artifact.Sha256 is null && !SourcePolicy.IsGitHubAssetUrl(artifact.Source))
                     Add(ErrorCodes.ValidationFailed, ("detail", $"sha256 required for remote artifact: {artifact.Id}"));
             }
             else

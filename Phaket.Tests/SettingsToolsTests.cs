@@ -228,6 +228,7 @@ public class SettingsToolsTests
         loc.CurrentLanguage = "pl-PL";
         var stub = new Stub { Failure = new HttpRequestException("boom") };
         using var h = Create(stub: stub);
+        h.Vm.SelectSectionCommand.Execute("tools");
         var window = new Window { Width = 1280, Height = 800, Content = new Phaket.Views.SettingsView { DataContext = h.Vm } };
         window.Show();
         try
@@ -263,12 +264,15 @@ public class SettingsToolsTests
         var previous = loc.CurrentLanguage;
         loc.CurrentLanguage = "pl-PL";
         using var h = Create();
+        h.Vm.SelectSectionCommand.Execute("tools");
         var window = new Window { Width = 1280, Height = 800, Content = new Phaket.Views.SettingsView { DataContext = h.Vm } };
         window.Show();
         try
         {
             Dispatcher.UIThread.RunJobs();
             Assert.Contains(loc["Settings.Tools.Title"], window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+            Assert.Equal("tools", h.Vm.SelectedSection);
+            Assert.True(h.Vm.IsToolsSection);
             var combos = window.GetVisualDescendants().OfType<ComboBox>()
                 .Where(c => c.DataContext is ToolSettingsSection).ToArray();
             Assert.Equal(2, combos.Length);

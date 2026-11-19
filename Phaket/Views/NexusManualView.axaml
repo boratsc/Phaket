@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.NexusManualView"
+             x:DataType="vm:NexusManualViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.sourceCard">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="18" />
+    </Style>
+    <Style Selector="TextBlock.fieldLabel">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+  </UserControl.Styles>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="16" MaxWidth="760" HorizontalAlignment="Left">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="pageTitle" Text="{Binding [Sources.Nexus.Title], Source={x:Static services:LocalizationService.Instance}}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Sources.Nexus.Description], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+      <Border Classes="sourceCard">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="fieldLabel" Text="{Binding [Sources.Nexus.Url], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding Url}" PlaceholderText="https://www.nexusmods.com/game/mods/123"
+                     AutomationProperties.Name="{Binding [Sources.Nexus.Url], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.AutomationId="nexus.url" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Classes="fieldLabel" Text="{Binding [Sources.Nexus.Name], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding Name}" AutomationProperties.Name="{Binding [Sources.Nexus.Name], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.AutomationId="nexus.name" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Classes="fieldLabel" Text="{Binding [Sources.Nexus.PinnedVersion], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding PinnedVersion}" AutomationProperties.Name="{Binding [Sources.Nexus.PinnedVersion], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.AutomationId="nexus.version" />
+          </StackPanel>
+          <StackPanel Spacing="8">
+            <TextBlock Classes="fieldLabel" Text="{Binding [Sources.Nexus.Archive], Source={x:Static services:LocalizationService.Instance}}" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox Grid.Column="0" Text="{Binding LocalArchivePath}" IsReadOnly="True"
+                       AutomationProperties.Name="{Binding [Sources.Nexus.Archive], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.AutomationId="nexus.archive-path" />
+              <Button Grid.Column="1" Command="{Binding ChooseArchiveCommand}"
+                      AutomationProperties.Name="{Binding [Sources.Nexus.Browse], Source={x:Static services:LocalizationService.Instance}}">
+                <TextBlock Text="{Binding [Sources.Nexus.Browse], Source={x:Static services:LocalizationService.Instance}}" />
+              </Button>
+            </Grid>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Sources.Nexus.ArchiveHelp], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <Border IsVisible="{Binding HasValidationMessage}" Padding="10" CornerRadius="7" Background="{DynamicResource RaisedBrush}"
+                  AutomationProperties.LiveSetting="Polite">
+            <TextBlock TextWrapping="Wrap" Text="{Binding ValidationMessage, Converter={x:Static services:LocKeyConverter.Instance}}" />
+          </Border>
+          <Button Classes="primary" Command="{Binding PinSelectionCommand}" HorizontalAlignment="Left"
+                  AutomationProperties.Name="{Binding [Sources.Nexus.Pin], Source={x:Static services:LocalizationService.Instance}}">
+            <TextBlock Text="{Binding [Sources.Nexus.Pin], Source={x:Static services:LocalizationService.Instance}}" />
+          </Button>
+        </StackPanel>
+      </Border>
+      <Border Classes="sourceCard" IsVisible="{Binding HasResult}">
+        <StackPanel Spacing="6">
+          <TextBlock Classes="sectionTitle" Text="{Binding [Sources.Nexus.Pinned], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Text="{Binding Result.Name}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Result.PinnedVersion}" />
+          <TextBlock Text="{Binding Result.Url}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Result.LocalArchivePath}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

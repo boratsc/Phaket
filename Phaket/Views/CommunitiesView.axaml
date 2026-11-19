@@ -1,0 +1,342 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.CommunitiesView"
+             x:DataType="vm:CommunitiesViewModel"
+             Focusable="True"
+             KeyDown="OnKeyDown">
+  <Grid MinHeight="600">
+    <StackPanel Spacing="16">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="5">
+          <TextBlock Classes="pageTitle" Text="{Binding Title}" />
+          <TextBlock Classes="muted" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Classes="secondary" Content="{Binding [Communities.JoinByCode], Source={x:Static services:LocalizationService.Instance}}"
+                  Command="{Binding OpenJoinByCodeDialogCommand}"
+                  AutomationProperties.Name="{Binding [Communities.JoinByCode], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button Classes="primary" Content="{Binding [Communities.Create], Source={x:Static services:LocalizationService.Instance}}"
+                  Command="{Binding OpenCreateDialogCommand}"
+                  AutomationProperties.Name="{Binding [Communities.Create], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+      </Grid>
+
+      <Border Classes="card" IsVisible="{Binding IsDemoMode}" Background="{DynamicResource WarningBackgroundBrush}"
+              BorderBrush="{DynamicResource WarningBrush}">
+        <TextBlock Text="{Binding ModeNotice}" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}"
+                   AutomationProperties.LiveSetting="Polite" />
+      </Border>
+      <Border Classes="card" IsVisible="{Binding IsOffline}" Background="{DynamicResource RaisedBrush}">
+        <TextBlock Text="{Binding OfflineNotice}" TextWrapping="Wrap" Classes="muted" />
+      </Border>
+      <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasStatusMessage}" Classes="muted"
+                 TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        <TextBox Text="{Binding SearchText}"
+                 PlaceholderText="{Binding [Communities.Search], Source={x:Static services:LocalizationService.Instance}}"
+                 AutomationProperties.Name="{Binding [Communities.Search], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Grid.Column="1" Classes="secondary"
+                Content="{Binding [Communities.Refresh], Source={x:Static services:LocalizationService.Instance}}"
+                Command="{Binding RefreshCommand}" IsEnabled="{Binding IsNotLoading}"
+                AutomationProperties.Name="{Binding [Communities.Refresh], Source={x:Static services:LocalizationService.Instance}}" />
+      </Grid>
+
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3" />
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsCompactLayout}">
+        <Button Classes="secondary" Content="{Binding [Communities.ListTitle], Source={x:Static services:LocalizationService.Instance}}"
+                Command="{Binding SelectCommunityListCommand}" />
+        <Button Classes="secondary" Content="{Binding [Communities.Details], Source={x:Static services:LocalizationService.Instance}}"
+                Command="{Binding SelectCommunityDetailsCommand}" IsEnabled="{Binding HasSelectedCommunity}" />
+      </StackPanel>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <Border Classes="card" Width="{Binding ListPaneWidth}" Margin="0,0,12,12" Padding="0"
+                IsVisible="{Binding ShowCommunityList}">
+          <StackPanel Spacing="10" Margin="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="sectionTitle" Text="{Binding [Communities.ListTitle], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Grid.Column="1" Text="{Binding Communities.Count}" Classes="muted" VerticalAlignment="Center" />
+            </Grid>
+            <ListBox ItemsSource="{Binding Communities}" SelectedItem="{Binding SelectedCommunity}"
+                   SelectionChanged="OnCommunitySelectionChanged"
+                     MaxHeight="430" Background="Transparent" BorderThickness="0"
+                     AutomationProperties.Name="{Binding [Communities.ListTitle], Source={x:Static services:LocalizationService.Instance}}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:CommunityItemViewModel">
+                  <Border Padding="10" Margin="0,2" CornerRadius="7" Background="{DynamicResource SurfaceBrush}"
+                          BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+                    <StackPanel Spacing="4">
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="1" Classes="pill">
+                          <TextBlock Text="{Binding AccessModeText}" FontSize="12" />
+                        </Border>
+                      </Grid>
+                      <TextBlock Text="{Binding Description}" Classes="muted" TextWrapping="Wrap" MaxHeight="42"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding MemberCountText}" Classes="quiet" FontSize="12" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Border Classes="card" IsVisible="{Binding ShowEmptyState}" Padding="14">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding EmptyTitle}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Classes="card" Width="{Binding DetailPaneWidth}" Margin="0,0,0,12"
+                IsVisible="{Binding ShowCommunityDetails}">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding SelectedCommunity.Name}" Classes="sectionTitle" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedCommunity.AccessModeText}" Classes="muted" />
+              </StackPanel>
+              <Border Grid.Column="1" Classes="pill" VerticalAlignment="Top">
+                <TextBlock Text="{Binding SelectedCommunity.MemberCountText}" FontSize="12" />
+              </Border>
+            </Grid>
+            <TextBlock Text="{Binding SelectedCommunity.Description}" TextWrapping="Wrap" Classes="muted" />
+
+            <StackPanel Spacing="6" IsVisible="{Binding SelectedCommunity.HasPackage}">
+              <TextBlock Text="{Binding [Communities.Package], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedCommunity.PackageName}" />
+              <TextBlock Text="{Binding SelectedCommunity.ProfileCompatibilityText}" Classes="muted" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Spacing="6" IsVisible="{Binding SelectedCommunity.HasChannels}">
+              <TextBlock Text="{Binding [Communities.Channels], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+              <ItemsControl ItemsSource="{Binding SelectedCommunity.Channels}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="services:CommunityChannel">
+                    <Border Classes="pill" Margin="0,0,6,4">
+                      <TextBlock Text="{Binding Name, Converter={x:Static services:ChannelNameConverter.Instance}}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedCommunity.IsMember}">
+              <Button Classes="primary" Content="{Binding [Communities.OpenChat], Source={x:Static services:LocalizationService.Instance}}"
+                      Command="{Binding OpenChatCommand}" CommandParameter="{Binding SelectedCommunity.Slug}"
+                      AutomationProperties.Name="{Binding [Communities.OpenChat], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Classes="secondary" Content="{Binding [Communities.Leave], Source={x:Static services:LocalizationService.Instance}}"
+                      Command="{Binding LeaveSelectedCommand}" IsEnabled="{Binding IsNotBusy}"
+                      AutomationProperties.Name="{Binding [Communities.Leave], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+            <Button Classes="primary" Content="{Binding [Communities.Join], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding RequestJoinCommand}" IsVisible="{Binding SelectedCommunity.CanJoin}"
+                    AutomationProperties.Name="{Binding [Communities.Join], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </StackPanel>
+
+    <Grid IsVisible="{Binding IsCreateDialogOpen}" Background="{DynamicResource ShadowBrush}" ZIndex="10" Focusable="True">
+      <Border Classes="card" Width="560" MaxWidth="700" MaxHeight="690" Margin="16" HorizontalAlignment="Center"
+              VerticalAlignment="Center" BoxShadow="0 12 30 0 #44000000">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding [Communities.CreateTitle], Source={x:Static services:LocalizationService.Instance}}" Classes="sectionTitle" />
+            <Button Grid.Column="1" Classes="icon" Content="×" Command="{Binding CloseCommunityDialogCommand}"
+                    AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="12">
+              <StackPanel Spacing="5">
+                <TextBlock x:Name="CreateNameLabel" Text="{Binding [Communities.Name], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding NewCommunityName}" MaxLength="60"
+                         AutomationProperties.LabeledBy="{Binding ElementName=CreateNameLabel}"
+                         AutomationProperties.IsRequiredForForm="True" />
+              </StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock x:Name="CreateDescriptionLabel" Text="{Binding [Communities.Description], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding NewCommunityDescription}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" MaxLength="2000"
+                         AutomationProperties.LabeledBy="{Binding ElementName=CreateDescriptionLabel}" />
+              </StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock x:Name="AccessModeLabel" Text="{Binding [Communities.AccessMode], Source={x:Static services:LocalizationService.Instance}}" />
+                <ComboBox ItemsSource="{Binding AccessModes}" SelectedItem="{Binding SelectedAccessMode}"
+                          AutomationProperties.LabeledBy="{Binding ElementName=AccessModeLabel}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CommunityAccessModeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+              <StackPanel Spacing="5" IsVisible="{Binding IsPasswordAccess}">
+                <TextBlock x:Name="CreatePasswordLabel" Text="{Binding [Communities.Password], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding NewPassword}" PasswordChar="•" MaxLength="128"
+                         AutomationProperties.LabeledBy="{Binding ElementName=CreatePasswordLabel}" />
+              </StackPanel>
+              <StackPanel Spacing="5" IsVisible="{Binding IsInviteCodeAccess}">
+                <TextBlock x:Name="CreateCodeLabel" Text="{Binding [Communities.InviteCode], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding NewInviteCode}" MaxLength="128"
+                         AutomationProperties.LabeledBy="{Binding ElementName=CreateCodeLabel}" />
+              </StackPanel>
+              <TextBlock Text="{Binding [Communities.SecretLengthHint], Source={x:Static services:LocalizationService.Instance}}"
+                         Classes="muted" IsVisible="{Binding IsPasswordAccess}" TextWrapping="Wrap" />
+              <StackPanel Spacing="5">
+                <TextBlock x:Name="CreatePackageLabel" Text="{Binding [Communities.PackageSlug], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBox Text="{Binding NewPackageSlug}" MaxLength="80"
+                         AutomationProperties.LabeledBy="{Binding ElementName=CreatePackageLabel}" />
+              </StackPanel>
+              <TextBlock Text="{Binding CommunityError}" IsVisible="{Binding HasCommunityError}" Foreground="{DynamicResource WarningBrush}"
+                         TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+            </StackPanel>
+          </ScrollViewer>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Content="{Binding [Communities.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding CloseCommunityDialogCommand}" />
+            <Button Classes="primary" Content="{Binding [Communities.Create], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding CreateCommunityCommand}" IsEnabled="{Binding IsNotBusy}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <Grid IsVisible="{Binding IsJoinDialogOpen}" Background="{DynamicResource ShadowBrush}" ZIndex="10" Focusable="True">
+      <Border Classes="card" Width="520" MaxWidth="680" MaxHeight="620" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding JoinDialogTitle}" Classes="sectionTitle" />
+            <Button Grid.Column="1" Classes="icon" Content="×" Command="{Binding CloseCommunityDialogCommand}"
+                    AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+          <TextBlock Text="{Binding JoinTarget.Description}" Classes="muted" TextWrapping="Wrap" />
+          <StackPanel Spacing="5" IsVisible="{Binding JoinNeedsPassword}">
+            <TextBlock x:Name="JoinPasswordLabel" Text="{Binding [Communities.Password], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding JoinPassword}" PasswordChar="•" MaxLength="128"
+                     AutomationProperties.LabeledBy="{Binding ElementName=JoinPasswordLabel}" />
+          </StackPanel>
+          <StackPanel Spacing="5" IsVisible="{Binding JoinNeedsCode}">
+            <TextBlock x:Name="JoinCodeLabel" Text="{Binding [Communities.InviteCode], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding JoinInviteCode}" MaxLength="128"
+                     AutomationProperties.LabeledBy="{Binding ElementName=JoinCodeLabel}" />
+          </StackPanel>
+          <TextBlock Text="{Binding [Communities.OneCredentialIsEnough], Source={x:Static services:LocalizationService.Instance}}"
+                     Classes="muted" IsVisible="{Binding JoinNeedsCode}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding JoinError}" IsVisible="{Binding HasJoinError}" Foreground="{DynamicResource WarningBrush}"
+                     TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Content="{Binding [Communities.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding CloseCommunityDialogCommand}" />
+            <Button Classes="primary" Content="{Binding [Communities.Join], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding JoinSelectedCommand}" IsEnabled="{Binding IsNotBusy}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid IsVisible="{Binding IsJoinCodeDialogOpen}" Background="{DynamicResource ShadowBrush}" ZIndex="10" Focusable="True">
+      <Border Classes="card" Width="520" MaxWidth="680" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding [Communities.JoinByCodeTitle], Source={x:Static services:LocalizationService.Instance}}" Classes="sectionTitle" />
+            <Button Grid.Column="1" Classes="icon" Content="×" Command="{Binding CloseCommunityDialogCommand}"
+                    AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+          <TextBlock Text="{Binding [Communities.InviteSlugHint], Source={x:Static services:LocalizationService.Instance}}"
+                     Classes="muted" TextWrapping="Wrap" />
+          <StackPanel Spacing="5">
+            <TextBlock x:Name="InviteSlugLabel" Text="{Binding [Communities.CommunitySlug], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding JoinCommunitySlug}" MaxLength="80" AutomationProperties.LabeledBy="{Binding ElementName=InviteSlugLabel}" />
+          </StackPanel>
+          <StackPanel Spacing="5">
+            <TextBlock x:Name="InviteCodeLabel" Text="{Binding [Communities.InviteCode], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBox Text="{Binding JoinInviteCode}" MaxLength="128"
+                     AutomationProperties.LabeledBy="{Binding ElementName=InviteCodeLabel}" />
+          </StackPanel>
+          <TextBlock Text="{Binding JoinError}" IsVisible="{Binding HasJoinError}" Foreground="{DynamicResource WarningBrush}"
+                     TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Content="{Binding [Communities.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding CloseCommunityDialogCommand}" />
+            <Button Classes="primary" Content="{Binding [Communities.Join], Source={x:Static services:LocalizationService.Instance}}"
+                    Command="{Binding JoinByCodeCommand}" IsEnabled="{Binding IsNotBusy}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid IsVisible="{Binding IsChatOpen}" Background="{DynamicResource ShadowBrush}" ZIndex="20" Focusable="True">
+      <Border Classes="card" MaxWidth="940" MaxHeight="650" Margin="16" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+              BoxShadow="0 12 30 0 #44000000">
+        <Grid RowDefinitions="Auto,*" RowSpacing="12">
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding ChatTitle}" Classes="sectionTitle" />
+              <TextBlock Text="{Binding ChatDemoNotice}" Classes="muted" IsVisible="{Binding IsDemoMode}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="2" Classes="icon" Content="×" Command="{Binding CloseChatCommand}"
+                    AutomationProperties.Name="{Binding [Chat.Close], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+          <Grid Grid.Row="1" ColumnDefinitions="190,*" ColumnSpacing="14">
+            <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="8" Padding="10">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding [Chat.Channels], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+                <ListBox ItemsSource="{Binding ChatChannels}" SelectedItem="{Binding SelectedChatChannel}"
+                         Background="Transparent" BorderThickness="0"
+                         AutomationProperties.Name="{Binding [Chat.Channels], Source={x:Static services:LocalizationService.Instance}}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="services:CommunityChannel">
+                      <TextBlock Text="{Binding Name, Converter={x:Static services:ChannelNameConverter.Instance}}" TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </StackPanel>
+            </Border>
+            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto" RowSpacing="10">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="8">
+                  <ItemsControl ItemsSource="{Binding ChatMessages}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:CommunityMessageViewModel">
+                        <Border Classes="card" Padding="10" Background="{DynamicResource SurfaceBrush}">
+                          <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                              <TextBlock Text="{Binding Author}" FontWeight="SemiBold" />
+                              <TextBlock Grid.Column="1" Text="{Binding KeyShort}" Classes="quiet" FontSize="12" />
+                            </Grid>
+                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Timestamp}" Classes="quiet" FontSize="12" HorizontalAlignment="Right" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <StackPanel Spacing="6" IsVisible="{Binding HasNoChatMessages}">
+                    <TextBlock Text="{Binding ChatEmptyMessage}" Classes="muted" TextWrapping="Wrap" />
+                  </StackPanel>
+                </StackPanel>
+              </ScrollViewer>
+              <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding ChatStatus}" IsVisible="{Binding HasChatStatus}"
+                           Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                <Button Grid.Column="1" Classes="secondary" VerticalAlignment="Top"
+                        Content="{Binding [Chat.RetryPolling], Source={x:Static services:LocalizationService.Instance}}"
+                        Command="{Binding RetryChatPollingCommand}" IsVisible="{Binding IsChatConnectionLost}"
+                        AutomationProperties.Name="{Binding [Chat.RetryPolling], Source={x:Static services:LocalizationService.Instance}}" />
+              </Grid>
+              <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Text="{Binding ChatDraft}" MaxLength="2000"
+                         PlaceholderText="{Binding [Chat.MessagePlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+                         AutomationProperties.Name="{Binding [Chat.MessageLabel], Source={x:Static services:LocalizationService.Instance}}" />
+                <Button Grid.Column="1" Classes="primary" Content="{Binding [Chat.Send], Source={x:Static services:LocalizationService.Instance}}"
+                        Command="{Binding SendMessageCommand}" IsEnabled="{Binding CanSendMessage}" />
+              </Grid>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

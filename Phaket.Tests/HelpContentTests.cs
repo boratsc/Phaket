@@ -14,7 +14,7 @@ public class HelpContentTests
     [AvaloniaTheory]
     [InlineData("pl-PL")]
     [InlineData("en")]
-    public void Help_page_covers_secrets_steam_key_tools_and_catalog(string language)
+    public void Help_page_shows_localized_empty_state_without_a_selected_game(string language)
     {
         var loc = LocalizationService.Instance;
         var previous = loc.CurrentLanguage;
@@ -26,27 +26,14 @@ public class HelpContentTests
             Dispatcher.UIThread.RunJobs();
             var texts = window.GetVisualDescendants().OfType<TextBlock>()
                 .Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToHashSet(StringComparer.Ordinal);
-            foreach (string key in new[]
-            {
-                "Help.SecretsTitle", "Help.SteamKeyTitle", "Help.ToolsTitle", "Help.CatalogTitle",
-                "Help.Secrets", "Help.SecretsMigration", "Help.SecretsFallback", "Help.SteamKey",
-                "Help.Tools", "Help.Catalog", "Help.CatalogEndpoint"
-            })
-                Assert.Contains(loc[key], texts);
-
-            // Licenses verified against the upstream repositories on 2026-11-15.
-            Assert.Contains(loc["Help.ToolsLegendary"], texts);
-            Assert.Contains(loc["Help.ToolsDepotDownloader"], texts);
-            Assert.Contains("GPL v3", loc["Help.ToolsLegendary"]);
-            Assert.Contains("GPL v2", loc["Help.ToolsDepotDownloader"]);
-            Assert.DoesNotContain(texts, t => t!.Contains("dev/apikey", StringComparison.Ordinal));
+            Assert.Contains(loc["Guides.Title"], texts);
+            Assert.Contains(loc["Guides.EmptyTitle"], texts);
+            Assert.Contains(loc["Guides.EmptyMessage"], texts);
+            Assert.DoesNotContain(texts, text => text!.Contains("dev/apikey", StringComparison.Ordinal));
 
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First();
-            scroll.Offset = new Avalonia.Point(0, scroll.Extent.Height);
-            Dispatcher.UIThread.RunJobs();
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-            frame!.Save("/tmp/opencode/phaket-render/help-bottom.png");
+            frame!.Save("/tmp/opencode/phaket-render/help-empty.png");
         }
         finally
         {

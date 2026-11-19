@@ -1,0 +1,134 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.DiscoverView"
+             x:DataType="vm:DiscoverViewModel">
+  <StackPanel Spacing="16">
+    <StackPanel Spacing="5">
+      <TextBlock Classes="pageTitle" Text="{Binding Title}" />
+      <TextBlock Classes="muted" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Classes="primary" IsVisible="{Binding IsPackageTab}"
+              Content="{Binding [Discover.Packages], Source={x:Static services:LocalizationService.Instance}}"
+              Command="{Binding ShowPackagesTabCommand}" />
+      <Button Classes="secondary" IsVisible="{Binding IsPackageTab}"
+              Content="{Binding [Discover.Communities], Source={x:Static services:LocalizationService.Instance}}"
+              Command="{Binding ShowCommunitiesTabCommand}" />
+      <Button Classes="secondary" IsVisible="{Binding IsCommunityTab}"
+              Content="{Binding [Discover.Packages], Source={x:Static services:LocalizationService.Instance}}"
+              Command="{Binding ShowPackagesTabCommand}" />
+      <Button Classes="primary" IsVisible="{Binding IsCommunityTab}"
+              Content="{Binding [Discover.Communities], Source={x:Static services:LocalizationService.Instance}}"
+              Command="{Binding ShowCommunitiesTabCommand}" />
+    </StackPanel>
+
+    <Border Classes="card" IsVisible="{Binding IsOffline}" Background="{DynamicResource RaisedBrush}">
+      <TextBlock Text="{Binding OfflineNotice}" Classes="muted" TextWrapping="Wrap" />
+    </Border>
+    <Border Classes="card" IsVisible="{Binding IsDemoMode}" Background="{DynamicResource WarningBackgroundBrush}"
+            BorderBrush="{DynamicResource WarningBrush}">
+      <TextBlock Text="{Binding DemoNotice}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+    </Border>
+    <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasStatusMessage}" Classes="muted" TextWrapping="Wrap"
+               AutomationProperties.LiveSetting="Polite" />
+
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+      <TextBox Text="{Binding SearchText}"
+               PlaceholderText="{Binding [Discover.Search], Source={x:Static services:LocalizationService.Instance}}"
+               AutomationProperties.Name="{Binding [Discover.Search], Source={x:Static services:LocalizationService.Instance}}" />
+      <Button Grid.Column="1" Classes="secondary" Content="{Binding [Discover.Refresh], Source={x:Static services:LocalizationService.Instance}}"
+              Command="{Binding RefreshCommand}" IsEnabled="{Binding IsNotLoading}" />
+    </Grid>
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3" />
+
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <Border Classes="card" IsVisible="{Binding IsPackageTab}" Padding="0" Width="440" Margin="0,0,12,12">
+        <StackPanel Spacing="10" Margin="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding [Discover.Packages], Source={x:Static services:LocalizationService.Instance}}" Classes="sectionTitle" />
+            <TextBlock Grid.Column="1" Text="{Binding Packages.Count}" Classes="muted" VerticalAlignment="Center" />
+          </Grid>
+          <ListBox ItemsSource="{Binding Packages}" SelectedItem="{Binding SelectedPackage}"
+                   MaxHeight="490" Background="Transparent" BorderThickness="0"
+                   AutomationProperties.Name="{Binding [Discover.Packages], Source={x:Static services:LocalizationService.Instance}}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="services:ModpackDefinition">
+                <Border Padding="10" Margin="0,2" CornerRadius="7" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Author}" Classes="muted" />
+                    <TextBlock Text="{Binding Description}" Classes="muted" TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Border Classes="card" IsVisible="{Binding HasNoPackages}" Padding="14">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding EmptyTitle}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
+      <Border Grid.Column="1" Classes="card" Width="520" IsVisible="{Binding HasSelectedPackage}">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding SelectedPackage.Name}" Classes="sectionTitle" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding SelectedPackage.Author}" Classes="muted" />
+          <TextBlock Text="{Binding SelectedPackage.Description}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding SelectedPackage.GameId}" Classes="quiet" />
+          <TextBlock Text="{Binding [Discover.ReadOnlyHint], Source={x:Static services:LocalizationService.Instance}}"
+                     Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card" IsVisible="{Binding IsCommunityTab}" Padding="0" Width="440" Margin="0,0,12,12">
+        <StackPanel Spacing="10" Margin="14">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding [Discover.Communities], Source={x:Static services:LocalizationService.Instance}}" Classes="sectionTitle" />
+            <TextBlock Grid.Column="1" Text="{Binding Communities.Count}" Classes="muted" VerticalAlignment="Center" />
+          </Grid>
+          <ListBox ItemsSource="{Binding Communities}" SelectedItem="{Binding SelectedCommunity}"
+                   MaxHeight="490" Background="Transparent" BorderThickness="0"
+                   AutomationProperties.Name="{Binding [Discover.Communities], Source={x:Static services:LocalizationService.Instance}}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CommunityItemViewModel">
+                <Border Padding="10" Margin="0,2" CornerRadius="7" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding AccessModeText}" Classes="muted" />
+                    <TextBlock Text="{Binding MemberCountText}" Classes="quiet" FontSize="12" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Border Classes="card" IsVisible="{Binding HasNoCommunities}" Padding="14">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding EmptyTitle}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
+      <Border Grid.Column="1" Classes="card" Width="520" IsVisible="{Binding HasSelectedCommunity}">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding SelectedCommunity.Name}" Classes="sectionTitle" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding SelectedCommunity.Description}" TextWrapping="Wrap" Classes="muted" />
+          <TextBlock Text="{Binding SelectedCommunity.AccessModeText}" Classes="muted" />
+          <TextBlock Text="{Binding SelectedCommunity.MemberCountText}" Classes="quiet" />
+          <TextBlock Text="{Binding SelectedCommunity.PackageName}" IsVisible="{Binding SelectedCommunity.HasPackage}" />
+          <TextBlock Text="{Binding SelectedCommunity.ProfileCompatibilityText}" IsVisible="{Binding SelectedCommunity.HasPackageStatus}"
+                     Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding [Discover.CommunityReadOnlyHint], Source={x:Static services:LocalizationService.Instance}}"
+                     Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </StackPanel>
+</UserControl>

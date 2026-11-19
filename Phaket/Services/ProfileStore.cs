@@ -12,6 +12,7 @@ public sealed class ModEntry
     public string Version { get; set; } = "";
     public bool Enabled { get; set; } = true;
     public bool Compatible { get; set; } = true;
+    public bool Required { get; set; }
 }
 
 public sealed class GameProfile
@@ -19,6 +20,8 @@ public sealed class GameProfile
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "";
     public List<ModEntry> Mods { get; set; } = [];
+    // Server slug of the first publication; older profiles.json files simply have no key here (null).
+    public string? Slug { get; set; }
 }
 
 public sealed class BackupEntry
@@ -48,6 +51,7 @@ public sealed class ProfileStore
     private readonly string root;
     private readonly string profilesPath;
     private readonly string backupsDir;
+    private bool loadFailed;
     private Dictionary<string, GameProfileData> data = new(StringComparer.Ordinal);
 
     public ProfileStore()
@@ -74,6 +78,7 @@ public sealed class ProfileStore
             {
                 // Unreadable user file: keep it on disk untouched and never seed
                 // sample data over it. The user can recover manually.
+                loadFailed = true;
                 data = new Dictionary<string, GameProfileData>(StringComparer.Ordinal);
                 return;
             }
@@ -95,6 +100,8 @@ public sealed class ProfileStore
         Save();
     }
 
+    internal bool IsLoadFailed => loadFailed;
+
     public GameProfileData For(string gameId) =>
         data.TryGetValue(gameId, out var d) ? d : new GameProfileData();
 
@@ -106,14 +113,30 @@ public sealed class ProfileStore
 
     public void SetActive(string gameId, string profileId)
     {
+        if (loadFailed) throw new InvalidDataException("The profile file is unreadable and was left untouched.");
         var d = For(gameId);
+        if (!d.Profiles.Any(profile => profile.Id == profileId)) throw new InvalidOperationException("Profile not found.");
         d.ActiveProfileId = profileId;
         data[gameId] = d;
         Save();
     }
 
+    public GameProfile AddCleanProfile(string gameId, string name)
+    {
+        if (loadFailed) throw new InvalidDataException("The profile file is unreadable and was left untouched.");
+        var d = For(gameId);
+        if (d.Profiles.Any(p => p.Id == "clean-game")) throw new InvalidOperationException("The clean profile already exists.");
+        var profile = new GameProfile { Id = "clean-game", Name = name, Mods = [] };
+        d.Profiles.Add(profile);
+        d.ActiveProfileId ??= profile.Id;
+        data[gameId] = d;
+        Save();
+        return profile;
+    }
+
     public GameProfile AddProfile(string gameId, string name)
     {
+        if (loadFailed) throw new InvalidDataException("The profile file is unreadable and was left untouched.");
         var d = For(gameId);
         var profile = new GameProfile { Name = name };
         d.Profiles.Add(profile);
@@ -127,6 +150,7 @@ public sealed class ProfileStore
     // failure cannot leave an empty draft.
     public GameProfile AddProfile(string gameId, string name, IEnumerable<ModEntry> mods)
     {
+        if (loadFailed) throw new InvalidDataException("The profile file is unreadable and was left untouched.");
         var d = For(gameId);
         var profile = new GameProfile { Name = name, Mods = mods.ToList() };
         d.Profiles.Add(profile);
@@ -138,9 +162,25 @@ public sealed class ProfileStore
 
     public void Save()
     {
+        if (loadFailed) throw new InvalidDataException("The profile file is unreadable and was left untouched.");
+        foreach (var profile in data.Values.SelectMany(game => game.Profiles)
+                     .Where(profile => profile.Id == "clean-game" || profile.Name is "Czysta gra" or "Clean game"))
+            profile.Mods.Clear();
         var temp = profilesPath + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(data, Options));
-        File.Move(temp, profilesPath, overwrite: true);
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(data, Options));
+            File.Move(temp, profilesPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+        var history = new ProfileHistoryStore(root);
+        foreach (var (gameId, gameData) in data)
+            foreach (var profile in gameData.Profiles)
+                try { history.Record(gameId, profile); }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceError("Profile history could not be persisted: {0}", ex); }
     }
 
     public IReadOnlyList<BackupEntry> Backups(string gameId)

@@ -1,45 +1,241 @@
-<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- xmlns:vm="using:Phaket.ViewModels" xmlns:views="using:Phaket.Views" xmlns:services="using:Phaket.Services" xmlns:mi="using:Material.Icons.Avalonia"
- x:Class="Phaket.MainWindow" x:DataType="vm:MainWindowViewModel" Title="phaket" Width="1280" Height="800" MinWidth="900" MinHeight="600">
- <Window.DataTemplates>
-  <DataTemplate DataType="{x:Type vm:LibraryViewModel}"><views:LibraryView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:GameViewModel}"><views:GameView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:RecipeStudioViewModel}"><views:RecipeStudioView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:SettingsViewModel}"><views:SettingsView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:ModsViewModel}"><views:ModsView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:ProfilesViewModel}"><views:ProfilesView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:BackupViewModel}"><views:BackupView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:CompatibilityViewModel}"><views:CompatibilityView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:InstallViewModel}"><views:InstallView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:BuildsViewModel}"><views:BuildsView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:ShareViewModel}"><views:ShareView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:GraphViewModel}"><views:GraphView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:ReportViewModel}"><views:ReportView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:HelpViewModel}"><views:HelpView /></DataTemplate>
-  <DataTemplate DataType="{x:Type vm:AccountsViewModel}"><views:AccountsView /></DataTemplate>
- </Window.DataTemplates>
- <Grid ColumnDefinitions="250,*">
-  <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
-   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="20,24,16,32">
-     <Image Source="avares://Phaket/Assets/lioness.png" Width="48" Height="48" />
-     <TextBlock Text="phaket" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AmberBrush}" VerticalAlignment="Center" />
-    </StackPanel>
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10" Margin="22,16,16,26">
-     <Ellipse Width="10" Height="10" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" />
-     <TextBlock Classes="muted" MaxWidth="185" TextWrapping="Wrap" Text="{Binding [App.Footer], Source={x:Static services:LocalizationService.Instance}}" />
-    </StackPanel>
-    <StackPanel Spacing="2">
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=library}" Command="{Binding NavigateCommand}" CommandParameter="library" AutomationProperties.Name="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="GamepadVariant"/><TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=profiles}" Command="{Binding NavigateCommand}" CommandParameter="profiles" AutomationProperties.Name="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Layers"/><TextBlock Text="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=mods}" Command="{Binding NavigateCommand}" CommandParameter="mods" AutomationProperties.Name="{Binding [Nav.Mods], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="PackageVariant"/><TextBlock Text="{Binding [Nav.Mods], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=studio}" Command="{Binding NavigateCommand}" CommandParameter="studio" AutomationProperties.Name="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Flask"/><TextBlock Text="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=settings}" Command="{Binding NavigateCommand}" CommandParameter="settings" AutomationProperties.Name="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="Cog"/><TextBlock Text="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-     <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=account}" Command="{Binding NavigateCommand}" CommandParameter="account" AutomationProperties.Name="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="AccountCircle"/><TextBlock Text="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-    <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=help}" Command="{Binding NavigateCommand}" CommandParameter="help" AutomationProperties.Name="{Binding [Nav.Help], Source={x:Static services:LocalizationService.Instance}}"><StackPanel Orientation="Horizontal" Spacing="16"><mi:MaterialIcon Kind="HelpCircle"/><TextBlock Text="{Binding [Nav.Help], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel></Button>
-    </StackPanel>
-   </DockPanel>
-  </Border>
-  <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" Margin="32,32,32,24" />
- </Grid>
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Phaket.ViewModels"
+        xmlns:views="using:Phaket.Views"
+        xmlns:services="using:Phaket.Services"
+        xmlns:mi="using:Material.Icons.Avalonia"
+        x:Class="Phaket.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="phaket" Icon="avares://Phaket/Assets/brand/phaket-app-icon.ico" Width="1280" Height="800" MinWidth="640" MinHeight="520">
+  <Window.DataTemplates>
+    <DataTemplate DataType="{x:Type vm:LibraryViewModel}"><views:LibraryView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:GameViewModel}"><views:GameView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:RecipeStudioViewModel}"><views:RecipeStudioView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:SettingsViewModel}"><views:SettingsView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ModsViewModel}"><views:ModsView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ProfilesViewModel}"><views:ProfilesView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:BackupViewModel}"><views:BackupView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:CompatibilityViewModel}"><views:CompatibilityView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:InstallViewModel}"><views:InstallView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:BuildsViewModel}"><views:BuildsView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ShareViewModel}"><views:ShareView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:GraphViewModel}"><views:GraphView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ReportViewModel}"><views:ReportView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:HelpViewModel}"><views:HelpView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:AccountsViewModel}"><views:AccountsView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:ModpackCatalogViewModel}"><views:ModpackCatalogView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:DiscoverViewModel}"><views:DiscoverView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:CommunitiesViewModel}"><views:CommunitiesView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:DownloadsViewModel}"><views:DownloadsView /></DataTemplate>
+  </Window.DataTemplates>
+  <Grid RowDefinitions="62,*,33" ColumnDefinitions="231,*" Background="{DynamicResource AppBackgroundBrush}" x:Name="ShellRoot">
+    <Grid.Styles>
+      <Style Selector="Grid#ShellRoot Button.nav Border.navMarker"><Setter Property="Opacity" Value="0" /></Style>
+      <Style Selector="Grid#ShellRoot Button.nav.active Border.navMarker"><Setter Property="Opacity" Value="1" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Button.nav TextBlock"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Button.nav"><Setter Property="HorizontalContentAlignment" Value="Center" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Button.nav StackPanel"><Setter Property="Spacing" Value="0" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Border.navMarker"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon TextBlock.appHeader"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon StackPanel.footerText"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Border.gamePicker"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarNarrow Border.gamePicker"><Setter Property="Padding" Value="2" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarNarrow Border.gamePicker TextBlock"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarNarrow ComboBox"><Setter Property="MinWidth" Value="38" /></Style>
+      <Style Selector="Grid#ShellRoot.sidebarIcon Border#FooterMark"><Setter Property="HorizontalAlignment" Value="Center" /></Style>
+    </Grid.Styles>
+    <!-- Global topbar -->
+    <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource SidebarBackgroundBrush}"
+            BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="231,*,Auto" x:Name="TopbarGrid">
+        <Grid.Styles>
+          <Style Selector="Grid#TopbarGrid /template/ Border#DragRegion"><Setter Property="Cursor" Value="SizeAll" /></Style>
+        </Grid.Styles>
+        <Border Grid.Column="0" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,1,0"
+                PointerPressed="OnDragRegionPointerPressed" x:Name="DragRegion">
+          <StackPanel Orientation="Horizontal" Spacing="9" Margin="21,0" VerticalAlignment="Center">
+            <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource SoftBrush}"
+                    BorderBrush="#44F7AE27" BorderThickness="1" AutomationProperties.Name="Phaket">
+              <Image Source="avares://Phaket/Assets/brand/phaket-lioness-metallic-34.png" Width="34" Height="34" Stretch="Uniform" />
+            </Border>
+            <Image Source="avares://Phaket/Assets/brand/phaket-wordmark.png" Width="75" Height="25" Stretch="Uniform"
+                   AutomationProperties.Name="Phaket" VerticalAlignment="Center" />
+          </StackPanel>
+        </Border>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" Margin="24,0"
+                    x:Name="BreadcrumbBar">
+          <Button Classes="icon breadcrumb" Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="library"
+                  Content="{Binding BreadcrumbLibrary}" AutomationProperties.Name="{Binding BreadcrumbLibrary}" />
+          <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource QuietBrush}" VerticalAlignment="Center" />
+          <Button Classes="icon breadcrumb" Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="catalog"
+                  Content="{Binding GameName}" IsEnabled="{Binding HasGame}" AutomationProperties.Name="{Binding GameName}" />
+          <mi:MaterialIcon Kind="ChevronRight" Width="14" Height="14" Foreground="{DynamicResource QuietBrush}" VerticalAlignment="Center" />
+          <Button Classes="icon breadcrumb currentBreadcrumb" Content="{Binding BreadcrumbView}"
+                  Command="{Binding NavigateBreadcrumbCommand}" CommandParameter="{Binding ActiveNav}"
+                  AutomationProperties.Name="{Binding BreadcrumbView}" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,12,0">
+          <Button Classes="icon topbarAction" Command="{Binding OpenTopbarPanelCommand}" CommandParameter="chat"
+                  AutomationProperties.Name="{Binding [Shell.ChatTitle], Source={x:Static services:LocalizationService.Instance}}">
+            <Grid><mi:MaterialIcon Kind="MessageTextOutline" Width="18" Height="18" />
+              <Border Width="13" Height="13" CornerRadius="7" Background="{DynamicResource GoldBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0">
+                <TextBlock Text="0" FontSize="8" FontWeight="Bold" Foreground="#171108" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+          </Button>
+          <Button Classes="icon topbarAction" Command="{Binding OpenTopbarPanelCommand}" CommandParameter="notifications"
+                  AutomationProperties.Name="{Binding [Shell.NotificationsTitle], Source={x:Static services:LocalizationService.Instance}}">
+            <Grid><mi:MaterialIcon Kind="BellOutline" Width="18" Height="18" />
+              <Border Width="13" Height="13" CornerRadius="7" Background="{DynamicResource GoldBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0">
+                <TextBlock Text="0" FontSize="8" FontWeight="Bold" Foreground="#171108" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+          </Button>
+          <Button Classes="icon avatar" Command="{Binding NavigateCommand}" CommandParameter="account"
+                  AutomationProperties.Name="{Binding [Account.Nav], Source={x:Static services:LocalizationService.Instance}}">
+            <Border Width="36" Height="36" CornerRadius="18" Background="{DynamicResource SoftBrush}">
+              <TextBlock Text="B" Foreground="{DynamicResource GoldTextBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+            </Border>
+          </Button>
+          <StackPanel Orientation="Horizontal" Spacing="0" Margin="6,0,0,0" x:Name="WindowControls" IsVisible="False">
+            <Button Classes="windowControl" Content="—" Click="OnMinimizeClick" AutomationProperties.Name="{Binding [Shell.Minimize], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="windowControl" Content="□" Click="OnToggleMaximizeClick" AutomationProperties.Name="{Binding [Shell.Maximize], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="windowControl closeControl" Content="×" Click="OnCloseClick" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Navigation -->
+    <Border x:Name="SidebarPanel" Grid.Row="1" Grid.Column="0" Background="{DynamicResource SidebarBackgroundBrush}"
+            BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="*,Auto">
+        <!-- Decorative amber orbital arcs from the prototype; kept behind interactive content. -->
+        <Canvas Grid.RowSpan="2" Height="205" VerticalAlignment="Bottom" IsHitTestVisible="False" ClipToBounds="True" ZIndex="0">
+          <Path Data="M -40,220 C -17,156 14,112 52,90 C 99,61 169,66 212,98 C 246,124 272,165 301,182" Stroke="#44F7AE27" StrokeThickness="2" />
+          <Path Data="M -37,238 C -13,170 19,126 56,105 C 103,77 171,81 216,113 C 251,139 277,179 305,196" Stroke="#3CF7AE27" StrokeThickness="2" />
+          <Path Data="M -34,256 C -9,184 23,140 61,120 C 108,93 174,96 220,128 C 256,154 282,193 309,210" Stroke="#34F7AE27" StrokeThickness="2" />
+          <Path Data="M -30,274 C -5,198 28,154 66,135 C 113,109 177,111 224,143 C 261,169 287,207 313,224" Stroke="#2CF7AE27" StrokeThickness="2" />
+        </Canvas>
+        <ScrollViewer x:Name="SidebarScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="8,12,8,12" Spacing="0">
+            <Border Classes="gamePicker" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Background="{DynamicResource AppBackgroundBrush}"
+                    CornerRadius="9" Padding="8,8,8,6" IsVisible="{Binding HasGame}">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding [Shell.SelectedGame], Source={x:Static services:LocalizationService.Instance}}"
+                           FontSize="10" FontWeight="Bold" LetterSpacing="1.1" Foreground="{DynamicResource QuietBrush}" Margin="2,0,0,0" />
+                <ComboBox x:Name="GamePicker" ItemsSource="{Binding Library.Games}" SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
+                          MinHeight="42" AutomationProperties.Name="{Binding [Shell.GamePicker], Source={x:Static services:LocalizationService.Instance}}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameCatalogItem">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Width="28" Height="28" CornerRadius="6" Background="{DynamicResource SoftBrush}" ClipToBounds="True">
+                          <Image Source="{Binding Cover, Converter={x:Static services:AssetImageConverter.Instance}}" Stretch="UniformToFill" />
+                        </Border>
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=catalog}"
+                        Command="{Binding NavigateCommand}" CommandParameter="catalog" AutomationProperties.Name="{Binding [Catalog.Title], Source={x:Static services:LocalizationService.Instance}}">
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" />
+                    <mi:MaterialIcon Kind="ViewGridOutline" Width="16" Height="16" />
+                    <TextBlock Text="{Binding [Catalog.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=profiles}"
+                        Command="{Binding NavigateCommand}" CommandParameter="profiles" AutomationProperties.Name="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}">
+                  <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="LayersOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Nav.Profiles], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+                </Button>
+                <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=compatibility}"
+                        Command="{Binding NavigateCommand}" CommandParameter="compatibility" AutomationProperties.Name="{Binding [Compat.Title], Source={x:Static services:LocalizationService.Instance}}">
+                  <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="ShieldCheckOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Compat.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+                </Button>
+                <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=help}"
+                        Command="{Binding NavigateCommand}" CommandParameter="help" AutomationProperties.Name="{Binding [Nav.Guides], Source={x:Static services:LocalizationService.Instance}}">
+                  <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="BookOpenOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Nav.Guides], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+                </Button>
+              </StackPanel>
+            </Border>
+            <TextBlock Classes="appHeader" Text="{Binding [Shell.Application], Source={x:Static services:LocalizationService.Instance}}"
+                       FontSize="10" FontWeight="Bold" LetterSpacing="1.1" Foreground="{DynamicResource QuietBrush}" Margin="9,19,0,7" />
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=library}"
+                    Command="{Binding NavigateCommand}" CommandParameter="library" AutomationProperties.Name="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="GamepadVariantOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Nav.Library], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=discover}"
+                    Command="{Binding NavigateCommand}" CommandParameter="discover" AutomationProperties.Name="{Binding [Discover.Title], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="CompassOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Discover.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=communities}"
+                    Command="{Binding NavigateCommand}" CommandParameter="communities" AutomationProperties.Name="{Binding [Communities.Title], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="AccountGroupOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Communities.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=downloads}"
+                    Command="{Binding NavigateCommand}" CommandParameter="downloads" AutomationProperties.Name="{Binding [Downloads.Title], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="DownloadOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Downloads.Title], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /><Border Width="16" Height="16" CornerRadius="5" Background="{DynamicResource SoftBrush}" Margin="0,0,0,0"><TextBlock Text="0" FontSize="9" Foreground="{DynamicResource GoldTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></StackPanel>
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=studio}"
+                    Command="{Binding NavigateCommand}" CommandParameter="studio" AutomationProperties.Name="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="FlaskOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Nav.RecipeStudio], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+            </Button>
+            <Button Classes="nav" Classes.active="{Binding ActiveNav, Converter={x:Static services:StringEqualsConverter.Instance}, ConverterParameter=settings}"
+                    Command="{Binding NavigateCommand}" CommandParameter="settings" AutomationProperties.Name="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="10"><Border Classes="navMarker" Width="3" Height="19" CornerRadius="2" Background="{DynamicResource GoldBrush}" /><mi:MaterialIcon Kind="CogOutline" Width="16" Height="16" /><TextBlock Text="{Binding [Nav.Settings], Source={x:Static services:LocalizationService.Instance}}" VerticalAlignment="Center" /></StackPanel>
+            </Button>
+          </StackPanel>
+        </ScrollViewer>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="18,10"
+                Background="{DynamicResource SidebarBackgroundBrush}">
+          <Grid ColumnDefinitions="28,*" ColumnSpacing="9">
+            <Border x:Name="FooterMark" Width="28" Height="28" CornerRadius="7" Background="{DynamicResource SoftBrush}" BorderBrush="#44F7AE27" BorderThickness="1">
+              <Image Source="avares://Phaket/Assets/brand/phaket-sygnet-28.png" Width="28" Height="28" Stretch="Uniform" />
+            </Border>
+            <StackPanel Classes="footerText" Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+              <TextBlock Text="phaket 0.1.0" FontSize="12" FontWeight="SemiBold" />
+              <TextBlock Text="Czeladzki Saturn" FontSize="11" Foreground="{DynamicResource MutedBrush}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
+
+    <!-- Main content -->
+    <Grid Grid.Row="1" Grid.Column="1">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ContentControl Content="{Binding CurrentPage}" Margin="30,24,30,26" />
+      </ScrollViewer>
+      <Border IsVisible="{Binding IsTopbarPanelOpen}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,20,0"
+              Width="300" Padding="16" CornerRadius="10" Background="{DynamicResource RaisedBrush}"
+              BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" BoxShadow="0 12 30 0 #44000000">
+        <StackPanel Spacing="12">
+          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding TopbarPanelTitle}" FontSize="18" FontWeight="SemiBold"/><Button Grid.Column="1" Classes="icon" Content="×" Command="{Binding CloseTopbarPanelCommand}" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}"/></Grid>
+          <TextBlock Text="{Binding TopbarPanelMessage}" Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- Status bar -->
+    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource SidebarBackgroundBrush}"
+            BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="16,0" ColumnSpacing="18">
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Ellipse Width="7" Height="7" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding [Shell.Connected], Source={x:Static services:LocalizationService.Instance}}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <mi:MaterialIcon Kind="Monitor" Width="13" Height="13" Foreground="{DynamicResource QuietBrush}" />
+          <TextBlock Text="{Binding PlatformName}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <mi:MaterialIcon Kind="DownloadOutline" Width="13" Height="13" Foreground="{DynamicResource QuietBrush}" />
+          <TextBlock Text="{Binding [Shell.UpdateCount], Source={x:Static services:LocalizationService.Instance}}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+        </StackPanel>
+        <Button Grid.Column="4" Classes="icon diagnostic" Content="{Binding [Shell.Diagnostics], Source={x:Static services:LocalizationService.Instance}} ›"
+                Command="{Binding NavigateCommand}" CommandParameter="help" AutomationProperties.Name="{Binding [Shell.Diagnostics], Source={x:Static services:LocalizationService.Instance}}" />
+      </Grid>
+    </Border>
+  </Grid>
 </Window>

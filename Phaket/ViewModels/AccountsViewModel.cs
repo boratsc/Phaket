@@ -17,6 +17,9 @@ public partial class AccountsViewModel : ViewModelBase
 
     // Steam sign-in for installs (PAK-60): status, one-time sign-in dialog, deletion.
     public SteamSigninDialogViewModel SteamSignin { get; }
+    public DeviceIdentityViewModel DeviceIdentity { get; }
+    // The signed profile publication client the profiles page publishes with; created once per window.
+    public IProfilePublishService ProfilePublisher { get; }
 
     public AccountsViewModel() : this(new AccountServices()) { }
 
@@ -27,6 +30,12 @@ public partial class AccountsViewModel : ViewModelBase
         // fallback) instead of a bare system-browser tab.
         epicService = accounts.Epic;
         SteamSignin = new SteamSigninDialogViewModel(accounts.SteamCredentials);
+        var identityServices = DeviceIdentityServices.Current is { } configured && ReferenceEquals(configured.KeyStore, accounts.DeviceKeys)
+            ? configured : new DeviceIdentityServices(accounts.DeviceKeys, new DeviceKeySigner(accounts.DeviceKeys));
+        var signer = DeviceIdentityServices.Current is null ? new DeviceKeySigner(accounts.DeviceKeys, registerBeforeSigning: false) : identityServices.Signer;
+        ProfilePublisher = identityServices.CreateProfilePublisher(CatalogSettings.Load());
+        DeviceIdentity = new DeviceIdentityViewModel(accounts.DeviceKeys, signer,
+            ct => identityServices.RegisterDeviceAsync(CatalogSettings.Load(), ct));
         _ = SteamSignin.RefreshCommand.ExecuteAsync(null);
         accounts.OpenEpicAuth += url => Dispatcher.UIThread.Post(() => OpenEpicAuth(url));
         Providers =
@@ -52,6 +61,124 @@ public partial class AccountsViewModel : ViewModelBase
         };
         epicAuth.Show();
     }
+}
+
+public partial class DeviceIdentityViewModel : ViewModelBase
+{
+    private readonly DeviceKeyStore keyStore;
+    private readonly Func<CancellationToken, Task> registerDevice;
+    [ObservableProperty] private string nick = "";
+    [ObservableProperty] private string fingerprint = "";
+    [ObservableProperty] private string statusMessage = "";
+    [ObservableProperty] private bool isOnline;
+    [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoaded;
+
+    public Task Initialization { get; }
+    public bool HasFingerprint => !string.IsNullOrEmpty(Fingerprint);
+    public bool HasStatusMessage => !string.IsNullOrEmpty(StatusMessage);
+    public bool CanSave => IsLoaded && !IsBusy;
+    public bool CanRegister => IsLoaded && !IsBusy;
+
+    public DeviceIdentityViewModel(DeviceKeyStore keyStore, ISignedRequestSigner signer,
+        Func<CancellationToken, Task> registerDevice)
+    {
+        this.keyStore = keyStore ?? throw new ArgumentNullException(nameof(keyStore));
+        ArgumentNullException.ThrowIfNull(signer);
+        this.registerDevice = registerDevice ?? throw new ArgumentNullException(nameof(registerDevice));
+        IsOnline = keyStore.IsOnline;
+        keyStore.RegistrationStateChanged += OnRegistrationStateChanged;
+        Initialization = LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            DevicePublicIdentity identity = await keyStore.GetPublicIdentityAsync();
+            Nick = identity.Nick;
+            Fingerprint = identity.Fingerprint;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("Device identity is unavailable: {0}", ex);
+            StatusMessage = Loc("Identity.Error.KeyStore");
+        }
+        finally
+        {
+            IsLoaded = true;
+            OnPropertyChanged(nameof(CanSave));
+            OnPropertyChanged(nameof(CanRegister));
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveNickAsync()
+    {
+        if (!CanSave) return;
+        string value = Nick.Trim();
+        if (!DeviceKeyStore.IsValidNick(value))
+        {
+            StatusMessage = Loc("Identity.Error.Nick");
+            return;
+        }
+        try
+        {
+            await keyStore.SaveNickAsync(value);
+            Nick = value;
+            StatusMessage = Loc("Identity.Saved");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("Device nick could not be saved: {0}", ex);
+            StatusMessage = Loc("Identity.Error.Save");
+        }
+    }
+
+    [RelayCommand]
+    private async Task RegisterAsync()
+    {
+        if (!CanRegister) return;
+        IsBusy = true;
+        OnPropertyChanged(nameof(CanSave));
+        OnPropertyChanged(nameof(CanRegister));
+        try
+        {
+            await registerDevice(CancellationToken.None);
+            StatusMessage = Loc("Identity.Registered");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("Device registration failed: {0}", ex);
+            keyStore.SetOnline(false);
+            StatusMessage = Loc("Identity.Error.Offline");
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(CanSave));
+            OnPropertyChanged(nameof(CanRegister));
+        }
+    }
+
+    private void OnRegistrationStateChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() => IsOnline = keyStore.IsOnline);
+
+    partial void OnNickChanged(string value) => OnPropertyChanged(nameof(CanSave));
+    partial void OnStatusMessageChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanSave));
+        OnPropertyChanged(nameof(CanRegister));
+    }
+    partial void OnIsLoadedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanSave));
+        OnPropertyChanged(nameof(CanRegister));
+    }
+    partial void OnFingerprintChanged(string value) => OnPropertyChanged(nameof(HasFingerprint));
+
+    private static string Loc(string key) => LocalizationService.Instance[key];
 }
 
 public partial class ProviderAccountViewModel : ViewModelBase

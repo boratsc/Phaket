@@ -11,6 +11,7 @@ using Phaket.Core.Tools;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Material.Icons.Avalonia;
 
 namespace Phaket.Tests;
 
@@ -191,9 +192,10 @@ public class LibraryInstallFlowTests
         var vm = new LibraryViewModel(_ => { }, new Account(), null, _ => Task.FromResult<IReadOnlyList<OwnedEpicGame>>([other]), () => []);
         await vm.ScanCommand.ExecuteAsync(null);
         var item = Assert.Single(vm.Games, g => g.Title == "Unknown game");
+        vm.SelectedGame = item;
         Assert.True(item.EpicOwned); Assert.False(item.IsSupported); Assert.False(item.CanOpenGame);
         Assert.True(item.EpicOwnedNotInstalled);
-        Assert.False(item.CanInstallEpic); Assert.True(item.EpicUnsupported);
+        Assert.False(item.CanInstallEpic); Assert.True(item.EpicUnsupported); Assert.True(item.UnsupportedOwned);
         var noExecutable = new GameCatalogItem(new GameDefinition("supported", []), "", "") { EpicOwned = true };
         Assert.False(noExecutable.CanInstallEpic); Assert.True(noExecutable.EpicUnsupported);
         var language = LocalizationService.Instance.CurrentLanguage;
@@ -202,15 +204,19 @@ public class LibraryInstallFlowTests
             foreach (var locale in new[] { "pl-PL", "en" })
             {
                 LocalizationService.Instance.CurrentLanguage = locale;
-                Assert.NotEqual("Library.State.Unsupported", LocalizationService.Instance["Library.State.Unsupported"]);
+                Assert.NotEqual("Ui.Library.Unsupported", LocalizationService.Instance["Ui.Library.Unsupported"]);
             }
         }
         finally { LocalizationService.Instance.CurrentLanguage = language; }
         var window = new Window { Width = 1280, Height = 800, Content = new LibraryView { DataContext = vm } };
         window.Show(); Dispatcher.UIThread.RunJobs();
-        var controls = window.GetVisualDescendants().OfType<Control>().Where(c => ReferenceEquals(c.DataContext, item)).ToList();
-        Assert.Contains(controls.OfType<TextBlock>(), text => text.IsVisible && text.Text == LocalizationService.Instance["Library.State.Unsupported"]);
-        Assert.DoesNotContain(controls.OfType<Button>(), button => button.IsVisible && Equals(button.Content, LocalizationService.Instance["Library.Install"]));
+        var row = window.GetVisualDescendants().OfType<ListBoxItem>().Single(listItem => ReferenceEquals(listItem.DataContext, item));
+        var rowText = row.GetVisualDescendants().OfType<TextBlock>().ToArray();
+        var localizedUnsupported = LocalizationService.Instance["Ui.Library.Unsupported"];
+        Assert.Contains(rowText, text => text.IsVisible && text.Text == localizedUnsupported);
+        Assert.NotEqual("Ui.Library.Unsupported", localizedUnsupported);
+        Assert.Contains(row.GetVisualDescendants().OfType<MaterialIcon>(), icon => icon.IsVisible);
+        Assert.False(item.CanOpenGame);
         window.Close();
         await vm.PrepareGameInstallCommand.ExecuteAsync(item);
         Assert.Null(vm.InstallPlan);

@@ -21,7 +21,7 @@ public class ReceiptSenderTests
         Assert.Equal(result, receipt.Result);
         Assert.Equal(errorCode, receipt.ErrorCode);
         Assert.Contains(receipt.Os, new[] { "windows", "linux" });
-        Assert.Equal("0.0.1", receipt.AppVersion);
+        Assert.Equal("0.1.0", receipt.AppVersion);
     }
 
     [Fact]

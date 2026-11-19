@@ -72,6 +72,7 @@ public partial class ModsViewModel : ViewModelBase
     public ObservableCollection<ModItemViewModel> Mods { get; } = [];
     public ObservableCollection<InstalledRecipeViewModel> InstalledRecipes { get; } = [];
     public bool InstalledEmpty => InstalledRecipes.Count == 0;
+    [ObservableProperty] private ModItemViewModel? selectedMod;
     [ObservableProperty] private string status = "";
     [ObservableProperty] private string launchRequirements = "";
     public bool HasLaunchRequirements => !string.IsNullOrEmpty(LaunchRequirements);
@@ -176,26 +177,40 @@ public partial class ModsViewModel : ViewModelBase
     [ObservableProperty] private int selectedTabIndex;
 
     public string AllLabel => $"{LocalizationService.Instance["Mods.All"]} ({CountAll})";
+    public bool IsAllFilter => Filter == "all";
+    public bool IsActiveFilter => Filter == "active";
+    public bool IsInactiveFilter => Filter == "inactive";
     private int CountAll => store.Active(gameId)?.Mods.Count ?? 0;
 
     private void Reload()
     {
+        var previous = SelectedMod;
         ActiveProfileName = store.Active(gameId)?.Name ?? "";
         Mods.Clear();
         var profile = store.Active(gameId);
-        if (profile is null) return;
-        foreach (var mod in profile.Mods)
+        if (profile is not null)
         {
-            if (Filter == "active" && !mod.Enabled) continue;
-            if (Filter == "inactive" && mod.Enabled) continue;
-            if (!string.IsNullOrWhiteSpace(SearchText) &&
-                !mod.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) continue;
-            Mods.Add(new ModItemViewModel(mod, () => store.Save()));
+            foreach (var mod in profile.Mods)
+            {
+                if (Filter == "active" && !mod.Enabled) continue;
+                if (Filter == "inactive" && mod.Enabled) continue;
+                if (!string.IsNullOrWhiteSpace(SearchText) &&
+                    !mod.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) continue;
+                Mods.Add(new ModItemViewModel(mod, () => store.Save()));
+            }
         }
+        SelectedMod = previous is not null && Mods.FirstOrDefault(mod => mod.Name == previous.Name) is { } match
+            ? match : Mods.FirstOrDefault();
         OnPropertyChanged(nameof(AllLabel));
     }
 
-    partial void OnFilterChanged(string value) => Reload();
+    partial void OnFilterChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsAllFilter));
+        OnPropertyChanged(nameof(IsActiveFilter));
+        OnPropertyChanged(nameof(IsInactiveFilter));
+        Reload();
+    }
     partial void OnSearchTextChanged(string value) => Reload();
 
     [RelayCommand] private void Back() => back();
@@ -225,63 +240,6 @@ public sealed class InstalledRecipeViewModel
     public IRelayCommand LaunchCommand { get; }
     public bool HasUpdate { get; }
     public IAsyncRelayCommand UpdateCommand { get; }
-}
-
-public partial class ProfilesViewModel : ViewModelBase
-{
-    private readonly ProfileStore store = new();
-    private readonly Action back;
-    private readonly string gameId;
-
-    public ProfilesViewModel(GameCatalogItem game, Action back)
-    {
-        this.back = back;
-        gameId = game.Definition.Slug;
-        GameTitle = game.Title;
-        Reload();
-    }
-
-    public string GameTitle { get; }
-    public ObservableCollection<ProfileItem> Profiles { get; } = [];
-
-    private void Reload()
-    {
-        Profiles.Clear();
-        var data = store.For(gameId);
-        foreach (var profile in data.Profiles)
-            Profiles.Add(new ProfileItem
-            {
-                Id = profile.Id,
-                Name = profile.Name,
-                ModCount = profile.Mods.Count,
-                IsActive = profile.Id == data.ActiveProfileId,
-            });
-    }
-
-    [RelayCommand] private void Back() => back();
-
-    [RelayCommand]
-    private void Select(ProfileItem? item)
-    {
-        if (item is null) return;
-        store.SetActive(gameId, item.Id);
-        Reload();
-    }
-
-    [RelayCommand]
-    private void NewProfile()
-    {
-        store.AddProfile(gameId, string.Format(LocalizationService.Instance["Profiles.DefaultName"], store.For(gameId).Profiles.Count + 1));
-        Reload();
-    }
-}
-
-public partial class ProfileItem : ViewModelBase
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public int ModCount { get; set; }
-    [ObservableProperty] private bool isActive;
 }
 
 public partial class BackupViewModel : ViewModelBase

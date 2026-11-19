@@ -22,9 +22,12 @@ public partial class CompatibilityViewModel : ViewModelBase
     public int ModCount => Mods.Count;
     public bool AllModsCompatible => Report.AllModsCompatible;
     public string ProtonVersion => "—";
-    public string GameSource => Game.Detected is null ? "—" : "Steam";
+    public string GameSource => Game.LauncherLabel;
     public bool IsCompat => SelectedTab == "compat";
     public bool IsGeneral => SelectedTab == "general";
+    public bool IsLaunch => SelectedTab == "launch";
+    public bool IsFiles => SelectedTab == "files";
+    public bool IsDiagnostics => SelectedTab == "diag";
     public bool IsOther => !IsCompat && !IsGeneral;
     [ObservableProperty] private string selectedTab = "compat";
     [ObservableProperty] private string statusMessage = "";
@@ -115,6 +118,9 @@ public partial class CompatibilityViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsCompat));
         OnPropertyChanged(nameof(IsGeneral));
+        OnPropertyChanged(nameof(IsLaunch));
+        OnPropertyChanged(nameof(IsFiles));
+        OnPropertyChanged(nameof(IsDiagnostics));
         OnPropertyChanged(nameof(IsOther));
     }
     [RelayCommand] private void Back() => back();

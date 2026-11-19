@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.DownloadsView"
+             x:DataType="vm:DownloadsViewModel">
+  <StackPanel Spacing="18">
+    <StackPanel Spacing="5">
+      <TextBlock Classes="pageTitle" Text="{Binding Title}" />
+      <TextBlock Classes="muted" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <Border Classes="card" IsVisible="{Binding IsEmpty}" Padding="0">
+      <StackPanel Spacing="10" HorizontalAlignment="Center" Margin="30,48" MaxWidth="520">
+        <TextBlock Text="⇩" FontSize="34" Foreground="{DynamicResource GoldTextBrush}" HorizontalAlignment="Center"
+                   AutomationProperties.AccessibilityView="Raw" />
+        <TextBlock Text="{Binding EmptyTitle}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
+    </Border>
+
+    <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding HasItems}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:DownloadItemViewModel">
+          <Border Classes="card" Margin="0,0,0,10">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="8" ColumnSpacing="12">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <Border Grid.Column="1" Classes="pill" VerticalAlignment="Top">
+                <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource MutedBrush}" />
+              </Border>
+              <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding Progress}" IsVisible="{Binding ShowProgress}" Height="8" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

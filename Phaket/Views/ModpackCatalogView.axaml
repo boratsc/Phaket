@@ -1,0 +1,284 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:views="using:Phaket.Views"
+             x:Class="Phaket.Views.ModpackCatalogView"
+             x:DataType="vm:ModpackCatalogViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.catalogPane">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="9" />
+    </Style>
+    <Style Selector="Button.segment">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+      <Setter Property="Padding" Value="11,7" />
+    </Style>
+    <Style Selector="Button.segment.active">
+      <Setter Property="Background" Value="{DynamicResource SoftBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource GoldTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.segment.active">
+      <Setter Property="Background" Value="{DynamicResource SoftBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource GoldTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.packRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="10,11" />
+      <Setter Property="MinHeight" Value="64" />
+    </Style>
+    <Style Selector="Button.packRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    </Style>
+    <Style Selector="Border.packIcon">
+      <Setter Property="Background" Value="{DynamicResource SoftBrush}" />
+      <Setter Property="BorderBrush" Value="#44F7AE27" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Width" Value="36" />
+      <Setter Property="Height" Value="36" />
+    </Style>
+    <Style Selector="Border.statusBox">
+      <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="11" />
+    </Style>
+    <Style Selector="Border.statusBox.warning">
+      <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
+    </Style>
+    <Style Selector="Border.statusBox.safe">
+      <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+    </Style>
+    <Style Selector="Border.modalShade">
+      <Setter Property="Background" Value="#99000000" />
+    </Style>
+    <Style Selector="Border.modalCard">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="20" />
+    </Style>
+  </UserControl.Styles>
+  <Grid>
+    <views:ModPackView DataContext="{Binding Editor}" IsVisible="{Binding $parent[UserControl].((vm:ModpackCatalogViewModel)DataContext).HasEditor}" />
+    <Grid RowDefinitions="Auto,*" Margin="0,0,0,4" IsVisible="{Binding ShowCatalog}">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+        <StackPanel Grid.Column="0" Spacing="4">
+          <TextBlock Classes="pageTitle" Text="{Binding [Catalog.Title], Source={x:Static services:LocalizationService.Instance}}" AutomationProperties.HeadingLevel="1" />
+          <TextBlock Classes="pageSubtitle" Text="{Binding Subtitle}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Classes="primary" Command="{Binding CreatePackCommand}" IsVisible="{Binding IsLocalTab}"
+                  Content="{Binding [Catalog.NewPack], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [Catalog.NewPack], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button Classes="secondary" Command="{Binding OpenProfilesCommand}"
+                  Content="{Binding [Catalog.ManageProfiles], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [Catalog.ManageProfiles], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+      </Grid>
+      <Grid Grid.Row="1" ColumnDefinitions="*,1.18*" ColumnSpacing="14">
+        <Border Grid.Column="0" Classes="catalogPane" Padding="12">
+          <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+            <Border Grid.Row="0" Classes="segmentGroup" HorizontalAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="3">
+              <Button Classes="segment" Classes.active="{Binding IsLocalTab}" Command="{Binding ShowLocalCommand}" CommandParameter="{x:Null}"
+                      AutomationProperties.Name="{Binding [Catalog.MyModpacks], Source={x:Static services:LocalizationService.Instance}}">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <TextBlock Text="{Binding [Catalog.MyModpacks], Source={x:Static services:LocalizationService.Instance}}" />
+                  <Border Classes="pill"><TextBlock Text="{Binding MyPackCount}" Foreground="{DynamicResource GoldTextBrush}" FontSize="11" FontWeight="Bold" /></Border>
+                </StackPanel>
+              </Button>
+              <Button Classes="segment" Classes.active="{Binding IsPublicTab}" Command="{Binding ShowPublicPacksCommand}" CommandParameter="{x:Null}"
+                      AutomationProperties.Name="{Binding [Catalog.PublicModpacks], Source={x:Static services:LocalizationService.Instance}}">
+                <TextBlock Text="{Binding [Catalog.PublicModpacks], Source={x:Static services:LocalizationService.Instance}}" />
+              </Button>
+              </StackPanel>
+            </Border>
+            <TextBox Grid.Row="1" Classes="search" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="{Binding [Catalog.Search], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.Name="{Binding [Catalog.Search], Source={x:Static services:LocalizationService.Instance}}" />
+            <Grid Grid.Row="2">
+              <StackPanel IsVisible="{Binding IsRefreshing}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <ProgressBar IsIndeterminate="True" Width="180" Height="6" />
+                <TextBlock Text="{Binding [Catalog.InstallWorking], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+              </StackPanel>
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding VisiblePacks}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="services:ModpackDefinition">
+                      <Button Classes="packRow" Command="{Binding $parent[ItemsControl].((vm:ModpackCatalogViewModel)DataContext).SelectPackCommand}"
+                              CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                          <Border Classes="packIcon" Grid.Column="0"><TextBlock Text="▧" Foreground="{DynamicResource GoldTextBrush}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                          <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="muted" FontSize="12">
+                               <Run Text="{Binding Author}" /><Run Text=" · " /><Run Text="{Binding Version}" />
+                             </TextBlock>
+                          </StackPanel>
+                          <TextBlock Grid.Column="2" Classes="muted" FontSize="11" VerticalAlignment="Center"
+                                     Text="{Binding Items.Count, StringFormat='{}{0} modów'}" />
+                          <TextBlock Grid.Column="3" Text="›" Foreground="{DynamicResource QuietBrush}" FontSize="20" VerticalAlignment="Center" />
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <StackPanel IsVisible="{Binding IsLocalEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="9" MaxWidth="280">
+                <TextBlock Text="{Binding [Catalog.LocalEmpty], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" TextAlignment="Center" TextWrapping="Wrap" />
+                <Button Classes="secondary" Command="{Binding ShowPublicPacksCommand}" CommandParameter="{x:Null}"
+                        Content="{Binding [Catalog.BrowsePublic], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel IsVisible="{Binding IsPublicEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="7">
+                <TextBlock Text="{Binding [Catalog.PublicEmpty], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
+              </StackPanel>
+            </Grid>
+            <StackPanel Grid.Row="3" Spacing="6">
+              <TextBlock Classes="muted" Text="{Binding [Catalog.Offline], Source={x:Static services:LocalizationService.Instance}}" IsVisible="{Binding IsOffline}" TextWrapping="Wrap" />
+              <Button Content="{Binding [Catalog.LoadMore], Source={x:Static services:LocalizationService.Instance}}" Command="{Binding LoadMoreCommand}"
+                      IsVisible="{Binding CanLoadMore}" HorizontalAlignment="Center" Classes="secondary" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Classes="catalogPane detailPane" Padding="18">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid RowDefinitions="Auto,*">
+            <StackPanel Grid.Row="0" Spacing="12" IsVisible="{Binding HasSelectedPack}">
+              <TextBlock Text="{Binding SelectedPack.Name}" FontSize="22" FontWeight="Bold" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{Binding SelectedMeta}" />
+              <TextBlock Classes="muted" Text="{Binding SelectedPack.Description}" TextWrapping="Wrap" />
+              <Border Classes="statusBox" Classes.safe="{Binding IsProfileReady}">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="{Binding ReadyTitle}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding ReadyDescription}" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+              <Button Classes="primary" Command="{Binding StartInstallCommand}" IsVisible="{Binding CanInstallButton}"
+                      Content="{Binding [Catalog.Install], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.Name="{Binding InstallActionLabel}" />
+              <Button Classes="primary" Command="{Binding StartInstallCommand}" IsVisible="{Binding CanPlay}"
+                      Content="{Binding [Catalog.Play], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.Name="{Binding [Catalog.Play], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Text="{Binding [Catalog.PlayUnavailable], Source={x:Static services:LocalizationService.Instance}}"
+                         Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowPlayUnavailable}" />
+              <TextBlock Text="{Binding StatusKey, Converter={x:Static services:LocKeyConverter.Instance}}" Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
+              <Expander Classes="disclosure" IsExpanded="True">
+                <Expander.Header>
+                  <TextBlock Text="{Binding ContentsLabel}" />
+                </Expander.Header>
+                <ItemsControl ItemsSource="{Binding SelectedPack.Items}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="services:ModpackMod">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Version}" Margin="8,0,0,0" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Expander>
+              <Expander Classes="disclosure">
+                <Expander.Header><TextBlock Text="{Binding [Catalog.AutoDependencies], Source={x:Static services:LocalizationService.Instance}}" /></Expander.Header>
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="muted" Text="{Binding [Catalog.AutoDependenciesDescription], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding SelectedPack.Items}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="services:ModpackMod">
+                        <ItemsControl ItemsSource="{Binding Dependencies}">
+                          <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" /></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Expander>
+              <Button Classes="secondary" Command="{Binding OpenEditorCommand}" IsVisible="{Binding CanShowEditor}"
+                      Content="{Binding [Catalog.EditContents], Source={x:Static services:LocalizationService.Instance}}" />
+              <StackPanel Spacing="6" IsVisible="{Binding HasPublishAction}">
+                <Button Classes="secondary" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}"
+                        Content="{Binding PublishLabel}"
+                        AutomationProperties.Name="{Binding [Catalog.Publish], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding PublishMessage}" Classes="muted" TextWrapping="Wrap"
+                           IsVisible="{Binding HasPublishMessage}" AutomationProperties.LiveSetting="Polite" />
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Row="1" IsVisible="{Binding HasNoSelection}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+              <TextBlock Text="{Binding [Catalog.SelectPrompt], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" TextAlignment="Center" />
+            </StackPanel>
+            </Grid>
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </Grid>
+    <Border Grid.RowSpan="2" Classes="modalShade" IsVisible="{Binding IsPlanOpen}" ZIndex="10">
+      <Border Classes="modalCard" Width="560" MaxWidth="600" MaxHeight="720" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+          <TextBlock Grid.Row="0" Text="{Binding [Catalog.PlanTitle], Source={x:Static services:LocalizationService.Instance}}" FontSize="18" FontWeight="Bold" />
+          <StackPanel Grid.Row="1" Spacing="12">
+            <TextBlock Text="{Binding SelectedPack.Name}" FontWeight="SemiBold" />
+            <ItemsControl ItemsSource="{Binding PlanSteps}">
+              <ItemsControl.ItemTemplate><DataTemplate><Border Classes="statusBox" Margin="0,2"><TextBlock Text="{Binding}" TextWrapping="Wrap" /></Border></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding InstallPlanWarnings}" AutomationProperties.LiveSetting="Polite">
+              <ItemsControl.ItemTemplate><DataTemplate><Border Classes="statusBox" Background="{DynamicResource SoftBrush}" Margin="0,2"><TextBlock Text="{Binding}" TextWrapping="Wrap" /></Border></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Command="{Binding CancelPlanCommand}" Content="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="primary" Command="{Binding ConfirmInstallCommand}" Content="{Binding [Catalog.ConfirmInstall], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Border>
+    <Border Grid.RowSpan="2" Classes="modalShade" IsVisible="{Binding IsProgressOpen}" ZIndex="11">
+      <Border Classes="modalCard" Width="480" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding [Catalog.InstallProgress], Source={x:Static services:LocalizationService.Instance}}" FontSize="18" FontWeight="Bold" />
+          <ProgressBar Minimum="0" Maximum="100" Value="{Binding InstallProgress}" Height="8" />
+          <TextBlock Text="{Binding ProgressDescription}" Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Border>
+    <Border Grid.RowSpan="2" Classes="modalShade" IsVisible="{Binding IsNexusPickerOpen}" ZIndex="13">
+      <Border Classes="modalCard" Width="760" MaxWidth="820" MaxHeight="700" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding [Catalog.NexusPickerTitle], Source={x:Static services:LocalizationService.Instance}}" FontSize="18" FontWeight="Bold" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"
+                       Text="{Binding [Catalog.InstallNexusLocalArchiveRequired], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <views:NexusManualView Grid.Row="1" DataContext="{Binding NexusPicker}" />
+          <Button Grid.Row="2" Classes="secondary" HorizontalAlignment="Right" Command="{Binding CancelNexusPickerCommand}"
+                  Content="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+        </Grid>
+      </Border>
+    </Border>
+    <Border Grid.RowSpan="2" Classes="modalShade" IsVisible="{Binding IsFailureOpen}" ZIndex="12">
+      <Border Classes="modalCard" Width="500" MaxWidth="540" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding [Catalog.InstallFailed], Source={x:Static services:LocalizationService.Instance}}" FontSize="18" FontWeight="Bold" />
+          <TextBlock Text="{Binding InstallErrorKey, Converter={x:Static services:LocKeyConverter.Instance}}" Classes="muted" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" Command="{Binding CloseFailureCommand}" Content="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="primary" Command="{Binding RetryInstallCommand}" Content="{Binding [Catalog.Retry], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+  </Grid>
+</UserControl>
