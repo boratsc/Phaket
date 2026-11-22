@@ -86,17 +86,27 @@ public sealed class ModInstallServiceTests
         name.Split('-')[0], name[(name.IndexOf('-') + 1)..], name, "", "test", "https://example.test", null,
         false, DateTimeOffset.UnixEpoch, latest);
 
-    private static async Task<(ModInstallService Service, Receipts Receipts)> CreateService(string root,
+    // The client keeps its SQLite handle open for the whole test; Windows refuses to delete the
+    // fixture directory until it is released, so every test disposes the lease before cleanup.
+    private sealed class ServiceLease(ModCatalogStore store, ModInstallService service, Receipts receipts) : IDisposable
+    {
+        public void Deconstruct(out ModInstallService leaseService, out Receipts leaseReceipts)
+        { leaseService = service; leaseReceipts = receipts; }
+        public void Dispose() => store.Dispose();
+    }
+
+    private static Task<ServiceLease> CreateService(string root,
         IReadOnlyDictionary<string, byte[]> packages, params (string Name, ThunderstoreVersion[] Versions)[] entries)
     {
         var versions = entries.ToDictionary(e => e.Name, e => e.Versions, StringComparer.OrdinalIgnoreCase);
         var mods = entries.Select(e => Mod(e.Name, e.Versions[^1])).ToArray();
         var details = entries.ToDictionary(e => e.Name, e => new ThunderstoreModDetails(Mod(e.Name, e.Versions[^1]), e.Versions, DateTimeOffset.UnixEpoch), StringComparer.OrdinalIgnoreCase);
         var transport = new Catalog(new Details(details), mods);
-        var client = new ModCatalogClient(transport, new ModCatalogStore(Path.Combine(root, "catalog.db")));
+        var store = new ModCatalogStore(Path.Combine(root, "catalog.db"));
         var receipts = new Receipts();
-        return (new ModInstallService(root, client, new Packages(packages), receipts,
-            new ProfileStore(Path.Combine(root, "profiles"))), receipts);
+        return Task.FromResult(new ServiceLease(store, new ModInstallService(root,
+            new ModCatalogClient(transport, store), new Packages(packages), receipts,
+            new ProfileStore(Path.Combine(root, "profiles"))), receipts));
     }
 
 // N3: the version gate belongs to the service, so every caller (catalog button,
@@ -109,7 +119,8 @@ public sealed class ModInstallServiceTests
         {
             var version = new ThunderstoreVersion("2.0", $"{RootName}-2.0", "", null, DateTimeOffset.UnixEpoch, [],
                 true, Availability: "unavailable");
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]>(), (RootName, [version]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>(), (RootName, [version]));
+            var (service, _) = lease;
 
             var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName,
                 "2.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
@@ -132,8 +143,9 @@ public sealed class ModInstallServiceTests
         {
             var zip = Zip(("plugins/Mod.dll", "plugin"));
             var version = Version(RootName, "1.0.0", RootUrl, zip);
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip },
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip },
                 (RootName, [version]));
+            var (service, _) = lease;
 
             var preparation = await service.PrepareAsync("among-us", "test-mod", "1.0.0", "",
                 new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
@@ -169,7 +181,8 @@ public sealed class ModInstallServiceTests
                 ["https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip"] =
                     FixtureBytes("bepinex-il2cpp-x64-be793.zip")
             };
-            var (service, _) = await CreateService(root, x64, (LoaderName, [loader]));
+            using var lease = await CreateService(root, x64, (LoaderName, [loader]));
+            var (service, _) = lease;
             // PAK-65: a sandbox has nothing to probe, so the current retail architecture from the
             // game definition is the plan's fact — the x64 loader pack, not a refusal.
             var prep = await service.PrepareAsync("among-us", LoaderName, "1.0.0", "", new("", "steam", true),
@@ -189,7 +202,8 @@ public sealed class ModInstallServiceTests
         {
             var (modZip, loaderZip) = TestPackages();
             var loader = Version(LoaderName, "1.0.0", LoaderUrl, loaderZip);
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [LoaderUrl] = loaderZip }, (LoaderName, [loader]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [LoaderUrl] = loaderZip }, (LoaderName, [loader]));
+            var (service, _) = lease;
             var prep = await service.PrepareAsync("among-us", LoaderName, "1.0.0", "", new("", "steam", true, "x86"),
                 ct: TestContext.Current.CancellationToken);
             var loaderStep = Assert.Single(Assert.Single(prep.Plans).Operations);
@@ -210,7 +224,8 @@ public sealed class ModInstallServiceTests
             Directory.CreateDirectory(gameRoot);
             File.WriteAllText(Path.Combine(gameRoot, "Among Us.exe"), "not a PE");
             var loader = Version(LoaderName, "1.0.0", LoaderUrl, []);
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]>(), (LoaderName, [loader]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>(), (LoaderName, [loader]));
+            var (service, _) = lease;
             var ex = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", LoaderName,
                 "1.0.0", "", new(gameRoot, "steam", false), ct: TestContext.Current.CancellationToken));
             Assert.Equal("LOADER_ARCH_UNAVAILABLE", ex.Error.Code);
@@ -258,7 +273,8 @@ public sealed class ModInstallServiceTests
             var (modZip, loaderZip) = TestPackages();
             var loader = Version(LoaderName, "1.0.0", LoaderUrl, loaderZip);
             var mod = Version(RootName, "1.0.0", RootUrl, modZip, "Test-BepInExPack-1.0.0");
-            var (service, receipts) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
+            var (service, receipts) = lease;
             var definitions = GameDefinitions.LoadAll();
             var game = new GameCatalogItem(definitions.First(g => g.Slug == "among-us"), "", "");
             game.Detected = new SteamAdapter(definitions).FromManualFolder(gameRoot, game.SteamAppId);
@@ -312,7 +328,9 @@ public sealed class ModInstallServiceTests
             var registry = new InstallRegistry(path);
             var entry = new InstalledRecipe("recipe", "1", "among-us", "steam", "/game", "/profile", "/stage", "/state", null, DateTimeOffset.UnixEpoch);
             registry.Add(entry);
-            var json = File.ReadAllText(path).Replace(",\n    \"ModFullName\": \"\",\n    \"ModVersion\": \"\"", "");
+            // System.Text.Json indents with the platform newline, so normalise CRLF before stripping the new fields.
+            var json = File.ReadAllText(path).Replace("\r\n", "\n")
+                .Replace(",\n    \"ModFullName\": \"\",\n    \"ModVersion\": \"\"", "");
             Assert.DoesNotContain("ModFullName", json);
             File.WriteAllText(path, json);
             var old = Assert.Single(registry.All());
@@ -334,7 +352,8 @@ public sealed class ModInstallServiceTests
         {
             var zip = Zip(("plugins/Mod.dll", "plugin"));
             var version = Version(RootName, "1.0.0", RootUrl, zip);
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
+            var (service, _) = lease;
             var gameRoot = Path.Combine(root, "nonexistent-game");
             await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new(gameRoot, "steam", false)));
             Assert.False(Directory.Exists(gameRoot));
@@ -351,8 +370,9 @@ public sealed class ModInstallServiceTests
         var mod = Version(RootName, "1.0.0", RootUrl, modZip, "Test-BepInExPack-1.0.0");
         try
         {
-            var (service, receipts) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip },
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip },
                 (LoaderName, [loader]), (RootName, [mod]));
+            var (service, receipts) = lease;
             var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
             var outcome = await service.ExecuteAsync(prep, true);
             Assert.True(outcome.Success, outcome.ErrorCode);
@@ -383,7 +403,8 @@ public sealed class ModInstallServiceTests
         var root = Directory.CreateTempSubdirectory("mod-install-").FullName;
         try
         {
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]>());
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>());
+            var (service, _) = lease;
             var prep = new InstallPreparation("among-us", RootName, "1.0.0", "", new("", "steam", true), [], [], [], [], "", "", "", "", "");
             var error = await Assert.ThrowsAsync<PhaketException>(() => service.ExecuteAsync(prep, false));
             Assert.Equal("PLAN_NOT_ACCEPTED", error.Error.Code);
@@ -404,7 +425,8 @@ public sealed class ModInstallServiceTests
         try
         {
             var packages = new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip, [otherUrl] = modZip };
-            var (service, _) = await CreateService(root, packages, (LoaderName, [loader1, loader2]), (RootName, [mod]), ("Test-Other", [other]));
+            using var lease = await CreateService(root, packages, (LoaderName, [loader1, loader2]), (RootName, [mod]), ("Test-Other", [other]));
+            var (service, _) = lease;
             var conflictPrep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true));
             var conflict = Assert.Single(conflictPrep.Conflicts);
             Assert.Equal(LoaderName, conflict.Package);
@@ -426,7 +448,8 @@ public sealed class ModInstallServiceTests
         try
         {
             var mod = Version(RootName, "1.0.0", url, [1, 2, 3]);
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [url] = [1, 2, 3] }, (RootName, [mod]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [url] = [1, 2, 3] }, (RootName, [mod]));
+            var (service, _) = lease;
             await Assert.ThrowsAnyAsync<Exception>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true)));
         }
         finally { Directory.Delete(root, true); }
@@ -441,7 +464,8 @@ public sealed class ModInstallServiceTests
         var mod = Version(RootName, "1.0.0", RootUrl, modZip, "Test-BepInExPack-1.0.0");
         try
         {
-            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
+            var (service, _) = lease;
             var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
             using var cts = new CancellationTokenSource(); cts.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ExecuteAsync(prep, true, ct: cts.Token));
@@ -464,9 +488,10 @@ public sealed class ModInstallServiceTests
             var corruptMod = Version(RootName, "2.0.0", corruptUrl, modZip, "Test-BepInExPack-1.0.0");
         try
         {
-            var (service, receipts) = await CreateService(root,
+            using var lease = await CreateService(root,
                 new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip, [corruptUrl] = modZip },
                 (LoaderName, [loader]), (RootName, [mod, corruptMod]));
+            var (service, receipts) = lease;
             var prep = await service.PrepareAsync("among-us", RootName, "2.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
             await File.WriteAllBytesAsync(Path.Combine(prep.PackageRoots[1], "package.zip"), [1, 2, 3], TestContext.Current.CancellationToken);
             var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);

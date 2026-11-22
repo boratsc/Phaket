@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Avalonia.Automation;
@@ -20,7 +21,10 @@ namespace Phaket.Tests;
 // opened; an unreachable GitHub ends as a localized TOOL_OFFLINE sentence, never as a raw exception.
 public class SettingsToolsTests
 {
-    private const string LegendaryAsset = "legendary_linux_x64";
+    // ToolProvider names the asset per host OS/arch; the fixture must advertise the same one.
+    private static string LegendaryAsset => OperatingSystem.IsWindows()
+        ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe"
+        : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64";
     private const string Latest = "Najnowsza (automatycznie)";
 
     private sealed record Harness(string Root, string SettingsPath, string ToolsRoot, SettingsViewModel Vm) : IDisposable

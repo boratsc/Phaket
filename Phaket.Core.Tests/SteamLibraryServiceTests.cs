@@ -26,6 +26,8 @@ public class SteamLibraryServiceTests
     [Fact]
     public async Task MissingApiKeyDoesNotBlockOfflineLibrary()
     {
+        // The fixture is a native Linux Steam layout; Windows detection reads Program Files.
+        if (!OperatingSystem.IsLinux()) return;
         var home = Directory.CreateTempSubdirectory("phaket-steam-library-").FullName;
         try
         {

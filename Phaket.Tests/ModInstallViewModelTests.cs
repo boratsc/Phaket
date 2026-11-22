@@ -99,6 +99,8 @@ public class ModInstallViewModelTests
             button.Command.Execute(button.CommandParameter);
             if (vm.Catalog.InstallVersionCommand.ExecutionTask is { } task) await task;
             Assert.True(vm.Catalog.HasPreview); window.Close();
+            // The details lookup started by SelectedMod still holds modcatalog.db; Windows needs it closed.
+            if (vm.Catalog.PendingDetails is { } details) await details;
         } finally { Directory.Delete(root, true); }
     }
 

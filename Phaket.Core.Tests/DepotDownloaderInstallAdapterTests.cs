@@ -120,7 +120,9 @@ public sealed class DepotDownloaderInstallAdapterTests : IDisposable
             Directory.CreateDirectory(plan.TargetPath); File.WriteAllText(Path.Combine(plan.TargetPath, plan.Executable), "game");
             return Task.FromResult(0);
         };
-        await pinnedAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true, ct: TestContext.Current.CancellationToken);
+        // Windows keeps the session store only under explicit persistence consent.
+        await pinnedAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true,
+            rememberSessionConsent: OperatingSystem.IsWindows(), ct: TestContext.Current.CancellationToken);
     }
     [Fact]
     public async Task RejectsExecutableLinkEscapingTarget()

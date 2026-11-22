@@ -80,8 +80,10 @@ public partial class ModCatalogViewModel : ViewModelBase
     {
         var generation = ++selectionGeneration;
         Details = null; DetailsStatus = "";
-        if (value is not null) _ = LoadDetailsAsync(value, generation);
+        if (value is not null) PendingDetails = LoadDetailsAsync(value, generation);
     }
+    // Tests must close the cache handle before deleting their fixture directory (Windows).
+    internal Task? PendingDetails { get; private set; }
     internal string? LatestVersion(string fullName) =>
         all.Concat(Mods).FirstOrDefault(m => string.Equals(m.FullName, fullName, StringComparison.OrdinalIgnoreCase))
             is { Latest.IsAvailable: true } mod ? mod.Latest.VersionNumber : null;

@@ -309,7 +309,10 @@ public class RenderTests
             })]
         };
         store.Save(pack);
-        return new ModPackViewModel(pack, store, () => { }, root);
+        var vm = new ModPackViewModel(pack, store, () => { }, root);
+        // Selecting the Thunderstore source starts a background refresh; keep it off the network.
+        vm.ThunderstoreCatalog.Endpoint = "http://127.0.0.1:1/";
+        return vm;
     }
 
     // Ten sam układ co shell: pionowe marginesy poza ScrollViewerem, strona w ScrollViewerze.
@@ -346,7 +349,7 @@ public class RenderTests
     [InlineData("thunderstore", "light", "40-modpack-add-thunderstore-light.png")]
     [InlineData("github", "light", "41-modpack-add-github-light.png")]
     [InlineData("nexus", "light", "42-modpack-add-nexus-light.png")]
-    public void Render_modpack_add_panel(string source, string theme, string filename)
+    public async Task Render_modpack_add_panel(string source, string theme, string filename)
     {
         var language = LocalizationService.Instance.CurrentLanguage;
         var variant = Application.Current!.RequestedThemeVariant;
@@ -354,9 +357,10 @@ public class RenderTests
         Application.Current.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
         var root = TestAccounts.TempPath();
         Window? window = null;
+        ModPackViewModel? vm = null;
         try
         {
-            var vm = RenderModPack(root);
+            vm = RenderModPack(root);
             window = ModPackRenderWindow(vm);
             window.Show();
             vm.OpenAddModsCommand.Execute(null);
@@ -375,6 +379,7 @@ public class RenderTests
         }
         finally
         {
+            if (vm?.ThunderstoreCatalog.RefreshCommand.ExecutionTask is { } refresh) await refresh;
             window?.Close();
             Application.Current.RequestedThemeVariant = variant;
             LocalizationService.Instance.CurrentLanguage = language;
@@ -383,12 +388,13 @@ public class RenderTests
     }
 
     [AvaloniaFact]
-    public void Modpack_add_panel_card_and_fields_share_one_width_across_sources()
+    public async Task Modpack_add_panel_card_and_fields_share_one_width_across_sources()
     {
         var root = TestAccounts.TempPath();
+        ModPackViewModel? vm = null;
         try
         {
-            var vm = RenderModPack(root);
+            vm = RenderModPack(root);
             var window = ModPackRenderWindow(vm);
             window.Show();
             try
@@ -411,7 +417,11 @@ public class RenderTests
             }
             finally { window.Close(); }
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            if (vm?.ThunderstoreCatalog.RefreshCommand.ExecutionTask is { } refresh) await refresh;
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     [AvaloniaFact]
@@ -469,14 +479,15 @@ public class RenderTests
     }
 
     [AvaloniaFact]
-    public void Render_modpack_add_panel_help_tip_open()
+    public async Task Render_modpack_add_panel_help_tip_open()
     {
         var language = LocalizationService.Instance.CurrentLanguage;
         LocalizationService.Instance.CurrentLanguage = "pl-PL";
         var root = TestAccounts.TempPath();
+        ModPackViewModel? vm = null;
         try
         {
-            var vm = RenderModPack(root);
+            vm = RenderModPack(root);
             var window = ModPackRenderWindow(vm);
             window.Show();
             try
@@ -496,6 +507,7 @@ public class RenderTests
         }
         finally
         {
+            if (vm?.ThunderstoreCatalog.RefreshCommand.ExecutionTask is { } refresh) await refresh;
             LocalizationService.Instance.CurrentLanguage = language;
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
