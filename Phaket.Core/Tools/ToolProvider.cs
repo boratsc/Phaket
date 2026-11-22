@@ -41,7 +41,7 @@ public sealed class ToolProvider
         {
             string toolRoot = Path.Combine(root, tool);
             string? Existing(string version) { var exe = Executable(tool, version); return File.Exists(exe) ? exe : null; }
-            string Executable(string name, string version) => Path.Combine(toolRoot, version, name == "legendary" ? (OperatingSystem.IsWindows() ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe" : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64") : "DepotDownloader.dll");
+            string Executable(string name, string version) => ExecutablePath(toolRoot, name, version);
             if (pinnedVersion != null && !forceRefresh && Existing(pinnedVersion) is { } pinned) return pinned;
             var installed = Directory.Exists(toolRoot) ? Directory.GetDirectories(toolRoot).OrderByDescending(Directory.GetCreationTimeUtc).Select(Path.GetFileName).Where(v => v != null).Select(v => (Version: v!, Path: Existing(v!))).Where(x => x.Path != null).ToArray() : [];
             string cache = Path.Combine(toolRoot, ".updatecheck");
@@ -62,7 +62,9 @@ public sealed class ToolProvider
             {
                 if (RuntimeInformation.ProcessArchitecture is not (Architecture.X64 or Architecture.Arm64)) throw new PhaketException("TOOL_DOWNLOAD_FAILED");
                 string rid = (OperatingSystem.IsWindows() ? "win" : "linux") + "-" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64");
-                string assetName = tool == "legendary" ? (OperatingSystem.IsWindows() ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe" : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64") : $"DepotDownloader-{rid}.zip";
+                // Upstream names its archives DepotDownloader-windows|linux-<arch>.zip; the
+                // inner binary is native, not the framework-dependent DepotDownloader.dll.
+                string assetName = tool == "legendary" ? (OperatingSystem.IsWindows() ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe" : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64") : $"DepotDownloader-{(OperatingSystem.IsWindows() ? "windows" : "linux")}-{(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64")}.zip";
                 var candidates = json.RootElement.EnumerateArray().SelectMany(r => r.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).Select(a => (Version:r.GetProperty("tag_name").GetString()!, Url:a.GetProperty("browser_download_url").GetString()!, Digest:a.TryGetProperty("digest", out var d) ? d.GetString() : null)));
                 var releases = candidates.Where(x => pinnedVersion == null || x.Version == pinnedVersion);
                 (string Version,string Url,string? Digest) release = default;
@@ -100,14 +102,50 @@ public sealed class ToolProvider
                 try { if (expected == null || expected.Length != 64 || !CryptographicOperations.FixedTimeEquals(Convert.FromHexString(expected), SHA256.HashData(bytes))) throw new PhaketException("TOOL_VERIFICATION_FAILED"); }
                 catch (FormatException) { throw new PhaketException("TOOL_VERIFICATION_FAILED"); }
                 string destination = Path.Combine(toolRoot, release.Version!); string executable = Executable(tool, release.Version!);
+                // The version is a remote tag: never let it address anything outside the tool root.
+                if (release.Version!.IndexOfAny(['/', '\\']) >= 0 || release.Version.Contains("..", StringComparison.Ordinal))
+                    throw new PhaketException("TOOL_VERIFICATION_FAILED");
                 Directory.CreateDirectory(toolRoot); string staging = Path.Combine(toolRoot, ".stage-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(staging);
-                 try { if (tool == "legendary") { var staged = Path.Combine(staging, Path.GetFileName(executable)); await File.WriteAllBytesAsync(staged, bytes, ct); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staged, UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute); } else { try { Extract(bytes, staging); } catch (InvalidDataException) { throw new PhaketException("TOOL_VERIFICATION_FAILED"); } } if (!File.Exists(Path.Combine(staging, Path.GetFileName(executable)))) throw new PhaketException("TOOL_VERIFICATION_FAILED"); if (!Directory.Exists(destination)) Directory.Move(staging, destination); }
+                 try { if (tool == "legendary") { var staged = Path.Combine(staging, Path.GetFileName(executable)); await File.WriteAllBytesAsync(staged, bytes, ct); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staged, UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute); } else { try { Extract(bytes, staging); } catch (InvalidDataException) { throw new PhaketException("TOOL_VERIFICATION_FAILED"); } }
+                    var stagedExe = Path.Combine(staging, Path.GetFileName(executable));
+                    if (!File.Exists(stagedExe)) throw new PhaketException("TOOL_VERIFICATION_FAILED");
+                    // The archive is native and loses its mode when written; without +x it cannot run.
+                    if (tool == "depotdownloader" && !OperatingSystem.IsWindows()) File.SetUnixFileMode(stagedExe, UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute);
+                    if (!Directory.Exists(destination)) Directory.Move(staging, destination);
+                    // An interrupted earlier run can leave the version folder without its
+                    // binary; replace it instead of returning a path that does not exist.
+                    if (!File.Exists(executable)) { if (Directory.Exists(destination)) Directory.Delete(destination, true); Directory.Move(staging, destination); }
+                    if (!File.Exists(executable)) throw new PhaketException("TOOL_VERIFICATION_FAILED"); }
                 finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
                 await File.WriteAllTextAsync(cache, DateTimeOffset.UtcNow.ToString("O"), ct); return executable;
             }
         }
         finally { Gate.Release(); }
     }
+
+    // The binary inside a versioned folder, without touching the network.
+    public string? ResolveInstalled(string tool)
+    {
+        if (tool is not ("legendary" or "depotdownloader")) throw new ArgumentException("Unknown tool", nameof(tool));
+        string toolRoot = Path.Combine(root, tool);
+        if (!Directory.Exists(toolRoot)) return null;
+        try
+        {
+            return Directory.GetDirectories(toolRoot)
+                .Where(dir => !Path.GetFileName(dir).StartsWith('.'))
+                .OrderByDescending(Directory.GetCreationTimeUtc)
+                .Select(dir => ExecutablePath(toolRoot, tool, Path.GetFileName(dir)))
+                .FirstOrDefault(File.Exists);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static string ExecutablePath(string toolRoot, string tool, string version) =>
+        Path.Combine(toolRoot, version, tool == "legendary"
+            ? (OperatingSystem.IsWindows()
+                ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe"
+                : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64")
+            : OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader");
 
     private static void Extract(byte[] bytes, string target)
     {

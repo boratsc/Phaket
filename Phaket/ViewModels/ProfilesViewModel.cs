@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,10 +11,11 @@ using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
-public partial class ProfilesViewModel : ViewModelBase
+public partial class ProfilesViewModel : ViewModelBase, IDisposable
 {
     private readonly ProfileStore store;
     private readonly ProfileHistoryStore history;
+    private readonly PropertyChangedEventHandler localizationChanged;
     private readonly Action back;
     private readonly GameCatalogItem game;
     private readonly string appDataRoot;
@@ -41,9 +43,17 @@ public partial class ProfilesViewModel : ViewModelBase
         GameTitle = game.Title;
         store = new ProfileStore(appDataRoot);
         history = new ProfileHistoryStore(appDataRoot);
+        // Removed by Dispose: the shell builds this view model per navigation and disposes the one it replaces.
+        LocalizationService.Instance.PropertyChanged += localizationChanged = (_, _) =>
+        {
+            OnPropertyChanged(nameof(SelectedProfileSummary));
+            foreach (var profile in Profiles) profile.RefreshSummary();
+        };
         EnsureCleanProfile();
         Reload();
     }
+
+    public void Dispose() => LocalizationService.Instance.PropertyChanged -= localizationChanged;
 
     public string GameTitle { get; }
     public ObservableCollection<ProfileItem> Profiles { get; } = [];
@@ -100,7 +110,9 @@ public partial class ProfilesViewModel : ViewModelBase
     public string ActiveProfileName => SelectedProfile?.Name ?? "";
     public string SelectedProfileSummary => SelectedProfile is null ? "" : SelectedProfile.IsClean
         ? LocalizationService.Instance["Profiles.CleanHint"]
-        : $"{SelectedProfile.ModCount} {LocalizationService.Instance["Profiles.Mods"]} · {LocalizationService.Instance["Profiles.Installed"]}";
+        : $"{ModsLabel(SelectedProfile.ModCount)} · {LocalizationService.Instance["Profiles.Installed"]}";
+    // Same counted noun as PluralCountConverter in XAML, shared with ProfileItem below.
+    internal static string ModsLabel(int count) => PluralCountConverter.Label(count);
     public string HistoryEmptyText => LocalizationService.Instance["Profiles.History.Empty"];
     public bool HasInstallations => Installations.Count > 0;
     public bool HasDiff => Diff.Count > 0;
@@ -619,7 +631,8 @@ public partial class ProfileItem : ViewModelBase
     public bool IsClean { get; }
     [ObservableProperty] private bool isActive;
     public string Summary => IsClean ? LocalizationService.Instance["Profiles.CleanHint"]
-        : $"{ModCount} {LocalizationService.Instance["Profiles.Mods"]}";
+        : ProfilesViewModel.ModsLabel(ModCount);
+    public void RefreshSummary() => OnPropertyChanged(nameof(Summary));
 }
 
 public sealed class ProfileModItem

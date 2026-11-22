@@ -129,7 +129,7 @@
             <TextBlock Classes="muted" Text="{Binding [Settings.Secrets.FallbackHint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
             <CheckBox IsChecked="{Binding FallbackConsent}" Content="{Binding [Settings.Secrets.FallbackConsent], Source={x:Static services:LocalizationService.Instance}}" />
             <StackPanel Spacing="6" IsVisible="{Binding FallbackConsent}">
-              <TextBox Text="{Binding FallbackPassword}" PasswordChar="●" MaxWidth="320" HorizontalAlignment="Left"
+              <TextBox Text="{Binding FallbackPassword}" PasswordChar="•" MaxWidth="320" HorizontalAlignment="Left"
                        PlaceholderText="{Binding [Settings.Secrets.FallbackPassword], Source={x:Static services:LocalizationService.Instance}}"
                        AutomationProperties.Name="{Binding [Settings.Secrets.FallbackPassword], Source={x:Static services:LocalizationService.Instance}}" />
               <Button Classes="secondary" HorizontalAlignment="Left" Command="{Binding UnlockFallbackCommand}"

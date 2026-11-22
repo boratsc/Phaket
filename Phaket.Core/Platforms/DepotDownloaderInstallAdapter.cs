@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Phaket.Core.Omrl;
 using Phaket.Core.Tools;
@@ -102,43 +100,28 @@ public sealed class DepotDownloaderInstallAdapter
             if (plan.DepotId is not null) args.AddRange(["-depot", plan.DepotId]);
             if (plan.ManifestId is not null) args.AddRange(["-manifest", plan.ManifestId]);
             var secrets = new List<string>();
-            var lines = new Queue<string>();
-            var buffers = new[] { new StringBuilder(), new StringBuilder() };
-            var discardLine = new bool[2];
+            var prompts = new DepotPromptReader();
             async Task Output(bool stderr, string chunk, Func<string, Task> send)
             {
-                var index = stderr ? 1 : 0;
-                var b = buffers[index];
                 foreach (char ch in chunk)
                 {
-                    if (discardLine[index]) { if (ch == '\n') discardLine[index] = false; continue; }
-                    b.Append(ch);
-                    string current = b.ToString();
-                    DepotPrompt? prompt = !stderr && current.StartsWith("Enter account password for ", StringComparison.Ordinal) && current.EndsWith(": ", StringComparison.Ordinal) ? DepotPrompt.Password :
-                        stderr && current.StartsWith("STEAM GUARD! Please enter ", StringComparison.Ordinal) && current.EndsWith(": ", StringComparison.Ordinal) ? DepotPrompt.SteamGuard : null;
+                    var prompt = prompts.Append(stderr, ch, out var line);
                     if (prompt is not null)
                     {
                         string secret = await credentials(prompt.Value, ct);
                         if (string.IsNullOrEmpty(secret) || secret.Any(c => c is '\r' or '\n')) throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "invalid credential"));
                         secrets.Add(secret);
                         await send(secret);
-                        b.Clear();
                     }
-                    else if (ch == '\n')
-                    {
-                        if (stderr && b.ToString().Contains("STEAM GUARD! Use the Steam Mobile App to confirm your sign in...", StringComparison.Ordinal))
-                            progress?.Report("STEAM GUARD! Use the Steam Mobile App to confirm your sign in...");
-                        lines.Enqueue(b.ToString()); b.Clear();
-                        while (lines.Count > 100) lines.Dequeue();
-                    }
-                    else if (b.Length >= 8192) { b.Clear(); discardLine[index] = true; }
+                    else if (stderr && line?.Contains(DepotPromptReader.MobileConfirmation, StringComparison.Ordinal) == true)
+                        progress?.Report(DepotPromptReader.MobileConfirmation);
                 }
             }
             Directory.CreateDirectory(plan.BasePath);
             int exit = await runner.RunAsync(processHost ?? toolPath, args, env, Output, ct);
-            foreach (var buffer in buffers) if (buffer.Length > 0) lines.Enqueue(buffer.ToString());
+            prompts.Flush();
             string Redact(string s) { foreach (var secret in secrets.OrderByDescending(s => s.Length)) s = s.Replace(secret, "[REDACTED]", StringComparison.Ordinal); return s; }
-            var safe = Redact(string.Concat(lines.TakeLast(100)));
+            var safe = Redact(string.Concat(prompts.Lines));
             progress?.Report(safe);
             if (exit != 0) throw new PhaketException("DEPOTDOWNLOADER_INSTALL_FAILED", ("tail", safe));
             string exe = Path.GetFullPath(Path.Combine(plan.TargetPath, plan.Executable));
@@ -235,39 +218,4 @@ public sealed class DepotDownloaderInstallAdapter
         if (Directory.Exists(full)) Directory.Delete(full, true);
     }
 
-    private sealed class DepotProcessRunner : IDepotProcessRunner
-    {
-        public async Task<int> RunAsync(string executable, IReadOnlyList<string> arguments, IDictionary<string, string?> environment, Func<bool, string, Func<string, Task>, Task> output, CancellationToken ct)
-        {
-            var start = new ProcessStartInfo(executable) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-            foreach (var arg in arguments) start.ArgumentList.Add(arg);
-            foreach (var pair in environment) start.Environment[pair.Key] = pair.Value;
-            using var process = Process.Start(start) ?? throw new PhaketException("DEPOTDOWNLOADER_INSTALL_FAILED");
-            using var gate = new SemaphoreSlim(1);
-            async Task Read(StreamReader stream, bool stderr)
-            {
-                try
-                {
-                    var buffer = new char[1024];
-                    while (await stream.ReadAsync(buffer.AsMemory(), ct) is var n && n > 0)
-                    {
-                        await gate.WaitAsync(ct);
-                        try { await output(stderr, new string(buffer, 0, n), s => process.StandardInput.WriteLineAsync(s)); }
-                        finally { gate.Release(); }
-                    }
-                }
-                catch { try { process.Kill(true); } catch (InvalidOperationException) { } throw; }
-            }
-            var reads = Task.WhenAll(Read(process.StandardOutput, false), Read(process.StandardError, true));
-            try
-            {
-                var wait = process.WaitForExitAsync(ct);
-                var first = await Task.WhenAny(reads, wait);
-                if (first == reads) await reads;
-                await wait; await reads;
-                return process.ExitCode;
-            }
-            catch { try { process.Kill(true); await process.WaitForExitAsync(); } catch (InvalidOperationException) { } throw; }
-        }
-    }
 }

@@ -3,6 +3,7 @@
              xmlns:vm="using:Phaket.ViewModels"
              xmlns:core="using:Phaket.Core.Omrl"
              xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
              xmlns:sys="using:System"
              x:Class="Phaket.Views.RecipeStudioView"
              x:DataType="vm:RecipeStudioViewModel">
@@ -20,14 +21,18 @@
                                        IsVisible="{Binding HasOpaqueCondition}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                            <Button Content="↑" Classes="icon" IsEnabled="{Binding CanMoveUp}"
+                            <Button Classes="icon" IsEnabled="{Binding CanMoveUp}"
                                     Command="{Binding $parent[ItemsControl].((vm:RecipeStudioViewModel)DataContext).MoveStepUpCommand}"
                                     CommandParameter="{Binding}"
-                                    AutomationProperties.Name="{Binding [Studio.MoveUp], Source={x:Static services:LocalizationService.Instance}}" />
-                            <Button Content="↓" Classes="icon" IsEnabled="{Binding CanMoveDown}"
+                                    AutomationProperties.Name="{Binding [Studio.MoveUp], Source={x:Static services:LocalizationService.Instance}}">
+                              <mi:MaterialIcon Kind="ArrowUpward" Width="16" Height="16" />
+                            </Button>
+                            <Button Classes="icon" IsEnabled="{Binding CanMoveDown}"
                                     Command="{Binding $parent[ItemsControl].((vm:RecipeStudioViewModel)DataContext).MoveStepDownCommand}"
                                     CommandParameter="{Binding}"
-                                    AutomationProperties.Name="{Binding [Studio.MoveDown], Source={x:Static services:LocalizationService.Instance}}" />
+                                    AutomationProperties.Name="{Binding [Studio.MoveDown], Source={x:Static services:LocalizationService.Instance}}">
+                              <mi:MaterialIcon Kind="ArrowDownward" Width="16" Height="16" />
+                            </Button>
                             <Button Content="{Binding [Studio.RemoveStep], Source={x:Static services:LocalizationService.Instance}}"
                                     Command="{Binding $parent[ItemsControl].((vm:RecipeStudioViewModel)DataContext).RemoveStepCommand}"
                                     CommandParameter="{Binding}"

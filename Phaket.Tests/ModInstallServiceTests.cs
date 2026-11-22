@@ -99,8 +99,63 @@ public sealed class ModInstallServiceTests
             new ProfileStore(Path.Combine(root, "profiles"))), receipts);
     }
 
+// N3: the version gate belongs to the service, so every caller (catalog button,
+    // profile update, direct service use) refuses an unavailable version before a plan.
+    [Fact]
+    public async Task PrepareRefusesAVersionTheSourceMarkedUnavailable()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-unavailable-version-").FullName;
+        try
+        {
+            var version = new ThunderstoreVersion("2.0", $"{RootName}-2.0", "", null, DateTimeOffset.UnixEpoch, [],
+                true, Availability: "unavailable");
+            var (service, _) = await CreateService(root, new Dictionary<string, byte[]>(), (RootName, [version]));
+
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName,
+                "2.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.ModArtifactUnavailable, error.Error.Code);
+            Assert.Equal($"{RootName} 2.0", error.Error.Parameters["artifact"]);
+            Assert.Equal("x86", error.Error.Parameters["arch"]);
+            Assert.Equal("steam", error.Error.Parameters["store"]);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    // N9: a version is matched character for character (as the server publishes it); the
+    // full name stays case-insensitive like a Thunderstore package name.
+    [Fact]
+    public async Task VersionMatchIsExactWhileTheFullNameIsCaseInsensitive()
+    {
+        var root = Directory.CreateTempSubdirectory("phaket-version-identity-").FullName;
+        try
+        {
+            var zip = Zip(("plugins/Mod.dll", "plugin"));
+            var version = Version(RootName, "1.0.0", RootUrl, zip);
+            var (service, _) = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip },
+                (RootName, [version]));
+
+            var preparation = await service.PrepareAsync("among-us", "test-mod", "1.0.0", "",
+                new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
+            Assert.Equal("1.0.0", preparation.Version);
+
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName,
+                "1.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
+            Assert.Equal("DEPENDENCY_VERSION_MISSING", error.Error.Code);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+// CI has no research artifacts: a test that needs a real archive skips instead of failing.
+    private static byte[] FixtureBytes(string name)
+    {
+        var path = Path.Combine("/tmp/opencode/phaket-research/artifacts", name);
+        if (!File.Exists(path)) Assert.Skip($"Real artifact {name} is not available locally.");
+        return File.ReadAllBytes(path);
+    }
+
     private static (byte[] Root, byte[] Loader) TestPackages() =>
-        (Zip(("plugins/Mod.dll", "plugin")), File.ReadAllBytes("/tmp/opencode/phaket-research/artifacts/amongus-loader-6.0.700.zip"));
+        (Zip(("plugins/Mod.dll", "plugin")), FixtureBytes("amongus-loader-6.0.700.zip"));
 
     [Fact]
     public async Task SandboxLoaderWithoutOverrideUsesTheDefinitionDefaultArchitecture()
@@ -112,7 +167,7 @@ public sealed class ModInstallServiceTests
             var x64 = new Dictionary<string, byte[]>
             {
                 ["https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip"] =
-                    File.ReadAllBytes("/tmp/opencode/phaket-research/artifacts/bepinex-il2cpp-x64-be793.zip")
+                    FixtureBytes("bepinex-il2cpp-x64-be793.zip")
             };
             var (service, _) = await CreateService(root, x64, (LoaderName, [loader]));
             // PAK-65: a sandbox has nothing to probe, so the current retail architecture from the

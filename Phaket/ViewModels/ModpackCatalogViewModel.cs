@@ -56,6 +56,7 @@ public partial class ModpackCatalogViewModel : ViewModelBase, IDisposable
         {
             OnPropertyChanged(nameof(GameName));
             OnPropertyChanged(nameof(Subtitle));
+            OnPropertyChanged(nameof(ContentsLabel));
             OnPropertyChanged(nameof(MyPackCount));
             OnPropertyChanged(nameof(InstallActionLabel));
             OnPropertyChanged(nameof(ReadyTitle));
@@ -143,7 +144,9 @@ public partial class ModpackCatalogViewModel : ViewModelBase, IDisposable
     public string GameName => Game?.Title ?? LocalizationService.Instance["Shell.NoGame"];
     public string Subtitle => string.Format(LocalizationService.Instance["Catalog.Subtitle"], GameName);
     public string SelectedMeta => SelectedPack is null ? "" : string.Format(LocalizationService.Instance["Catalog.AuthorVersionFormat"], SelectedPack.Author, SelectedPack.Version);
-    public string ContentsLabel => SelectedPack is null ? "" : string.Format(LocalizationService.Instance["Catalog.Contents"], SelectedPack.Items.Count);
+    public string ContentsLabel => SelectedPack is null ? "" : string.Format(LocalizationService.Instance["Catalog.Contents"], ModsLabel(SelectedPack.Items.Count));
+    // Same counted noun as PluralCountConverter in XAML, without a converter call.
+    private static string ModsLabel(int count) => PluralCountConverter.Label(count);
     public bool HasGame => Game is not null;
     public bool ShowCatalog => Editor is null;
     public bool HasEditor => Editor is not null;

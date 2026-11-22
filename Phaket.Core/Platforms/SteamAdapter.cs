@@ -9,7 +9,10 @@ public enum GameAvailability { InLibrary, Installed, Moddable, VersionSupported 
 
 public sealed record SteamAppManifest(
     string AppId, string Name, string BuildId, string Branch,
-    string ManifestId, string InstallDir, long SizeOnDisk);
+    string ManifestId, string InstallDir, long SizeOnDisk,
+    // W1/PAK-14 probe: depot id -> manifest id actually installed. Lets a build
+    // without a known build id still resolve to a game version label.
+    IReadOnlyDictionary<string, string>? DepotManifests = null);
 
 public sealed record SteamLibrary(string Path, bool IsFlatpak);
 
@@ -76,6 +79,11 @@ public sealed class SteamAdapter
         if (state is null) return null;
         var appId = state.Get("appid");
         if (appId is null) return null;
+        var depots = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (state.Child("InstalledDepots") is { } installed)
+            foreach (var (depotId, entry) in installed.Children)
+                if (entry.Get("manifest") is { Length: > 0 } manifest)
+                    depots[depotId] = manifest;
         return new SteamAppManifest(
             appId,
             state.Get("name") ?? "",
@@ -83,7 +91,8 @@ public sealed class SteamAdapter
             state.Get("branch") ?? "public",
             state.Get("manifest") ?? "",
             state.Get("installdir") ?? "",
-            long.TryParse(state.Get("SizeOnDisk"), out var size) ? size : 0);
+            long.TryParse(state.Get("SizeOnDisk"), out var size) ? size : 0,
+            depots);
     }
 
     public IReadOnlyList<SteamInstallation> DetectInstallations(string os, string home)

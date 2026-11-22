@@ -149,6 +149,19 @@ public static class SourcePolicy
         lock (GitHubGate) GitHubRepos.Add(ownerAndRepo);
     }
 
+    // Catalog artifacts come from the trusted server and are pinned by sha256.
+    // Registering the GitHub release repository makes the URL pass the same
+    // allowlist the Thunderstore/GitHub modpack paths use.
+    public static void AllowModArtifact(string source, string? sha256)
+    {
+        if (sha256 is null || !Uri.TryCreate(source, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps) return;
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)) return;
+        var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, "^/([^/]+/[^/]+)/releases/download/");
+        if (match.Success && IsValidGitHubRepository(match.Groups[1].Value))
+            AllowGitHubRepository(match.Groups[1].Value);
+    }
+
     public static bool IsValidGitHubRepository(string? ownerAndRepo) => ownerAndRepo is not null
         && System.Text.RegularExpressions.Regex.IsMatch(ownerAndRepo,
             @"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
@@ -187,6 +200,14 @@ public static class SourcePolicy
         }
         if (uri.Host.Equals("objects.githubusercontent.com", StringComparison.OrdinalIgnoreCase)
             || uri.Host.Equals("release-assets.githubusercontent.com", StringComparison.OrdinalIgnoreCase)) return true;
+        // SusModder CDN hosts (SUSModder 3.x API/CDN). Accepted only with a declared
+        // sha256: the checksum, not the host, is the integrity anchor.
+        if (uri.Host.Equals("susmodder-cdn.ovh", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.Equals("api.susmodder-cdn.ovh", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.Equals("susmodder.app", StringComparison.OrdinalIgnoreCase)
+            // susmodder-cdn.ovh redirects large artifacts to this CDN host.
+            || uri.Host.Equals("cdn.susmodder.app", StringComparison.OrdinalIgnoreCase))
+            return sha256 is not null;
         if (uri.Host.Equals("thunderstore.io", StringComparison.OrdinalIgnoreCase))
             return System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath, "^/package/download/[^/]+/[^/]+/[^/]+/$");
         if (uri.Host.Equals("ccdn.thunderstore.io", StringComparison.OrdinalIgnoreCase))
@@ -197,5 +218,10 @@ public static class SourcePolicy
     public static bool IsAllowedTransportSource(string source) => IsAllowedHttpsSource(source)
         || Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
             && uri.IsDefaultPort && uri.UserInfo.Length == 0 && uri.Fragment.Length == 0
-            && uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase);
+            && (uri.Host.Equals("builds.bepinex.dev", StringComparison.OrdinalIgnoreCase)
+                // Integrity is enforced by the declared sha256 in PackageDownloader.
+                || uri.Host.Equals("susmodder-cdn.ovh", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals("api.susmodder-cdn.ovh", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals("susmodder.app", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals("cdn.susmodder.app", StringComparison.OrdinalIgnoreCase));
 }

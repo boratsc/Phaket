@@ -61,7 +61,8 @@ public partial class ModPackViewModel : ViewModelBase, IDisposable
     public ObservableCollection<ModpackSourceFilter> SourceFilters { get; } =
     [
         new("all", "Catalog.SourceAll"), new("thunderstore", "Catalog.Source.thunderstore"),
-        new("github", "Catalog.Source.github"), new("nexus", "Catalog.Source.nexus")
+        new("susmodder", "Catalog.Source.susmodder"), new("github", "Catalog.Source.github"),
+        new("nexus", "Catalog.Source.nexus")
     ];
     [ObservableProperty] private ModpackSourceFilter? selectedSourceFilter;
     public int EnabledCount => Mods.Count(mod => mod.Enabled);
@@ -212,13 +213,16 @@ public partial class ModPackViewModel : ViewModelBase, IDisposable
     private void AddThunderstoreMod(ThunderstoreMod? mod)
     {
         if (mod is null || string.IsNullOrWhiteSpace(mod.FullName) || string.IsNullOrWhiteSpace(mod.Latest.VersionNumber)) return;
+        // PAK-101/PAK-103: a SusModder row keeps its own source; the server resolves the
+        // artifact from its catalog and matches the item by full name or external id.
+        var susmodder = string.Equals(mod.Source, "susmodder", StringComparison.OrdinalIgnoreCase);
         AddMod(new ModpackMod
         {
             Name = mod.FullName,
             Version = mod.Latest.VersionNumber,
-            Source = "thunderstore",
-            ModId = mod.Id,
-            Link = mod.PackageUrl,
+            Source = susmodder ? "susmodder" : "thunderstore",
+            ModId = susmodder ? mod.ExternalId : mod.Id,
+            Link = susmodder ? null : mod.PackageUrl,
             Dependencies = [.. mod.Latest.Dependencies],
         });
     }
@@ -410,7 +414,8 @@ public partial class ModpackModItemViewModel : ViewModelBase
     public string EnabledLabel => LocalizationService.Instance[model.Enabled ? "Catalog.EnabledState" : "Catalog.Disabled"];
     public string StateAutomationName => Name + " · " + EnabledLabel;
     public string SelectionAutomationName => Name + " · " + (Required ? ProtectedReason : LocalizationService.Instance["Catalog.SelectMod"]);
-    public string ProtectedReason => Required ? LocalizationService.Instance["Catalog.RequiredDependencyProtected"] : "";
+    // null (nie pusty tekst) dla modów niezależnych: pusty ToolTip.Tip otwiera pustą ramkę.
+    public string? ProtectedReason => Required ? LocalizationService.Instance["Catalog.RequiredDependencyProtected"] : null;
     public bool Enabled
     {
         get => model.Enabled;

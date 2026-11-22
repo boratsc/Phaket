@@ -3,6 +3,7 @@
              xmlns:vm="using:Phaket.ViewModels"
              xmlns:services="using:Phaket.Services"
              xmlns:views="using:Phaket.Views"
+             xmlns:mi="using:Material.Icons.Avalonia"
              x:Class="Phaket.Views.ModpackCatalogView"
              x:DataType="vm:ModpackCatalogViewModel">
   <UserControl.Styles>
@@ -72,7 +73,8 @@
       <Setter Property="Padding" Value="20" />
     </Style>
   </UserControl.Styles>
-  <Grid>
+  <!-- Wysokość widoku, nie treści: dialogi katalogu centrują się w oknie, a nie w przewijanej stronie. -->
+  <Grid Height="{Binding $parent[ScrollViewer].Bounds.Height}">
     <views:ModPackView DataContext="{Binding Editor}" IsVisible="{Binding $parent[UserControl].((vm:ModpackCatalogViewModel)DataContext).HasEditor}" />
     <Grid RowDefinitions="Auto,*" Margin="0,0,0,4" IsVisible="{Binding ShowCatalog}">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
@@ -122,15 +124,23 @@
                       <Button Classes="packRow" Command="{Binding $parent[ItemsControl].((vm:ModpackCatalogViewModel)DataContext).SelectPackCommand}"
                               CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
-                          <Border Classes="packIcon" Grid.Column="0"><TextBlock Text="▧" Foreground="{DynamicResource GoldTextBrush}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                          <Border Classes="packIcon" Grid.Column="0"><mi:MaterialIcon Kind="PackageVariant" Width="20" Height="20" Foreground="{DynamicResource GoldTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
                           <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                             <TextBlock Classes="muted" FontSize="12">
                                <Run Text="{Binding Author}" /><Run Text=" · " /><Run Text="{Binding Version}" />
                              </TextBlock>
                           </StackPanel>
-                          <TextBlock Grid.Column="2" Classes="muted" FontSize="11" VerticalAlignment="Center"
-                                     Text="{Binding Items.Count, StringFormat='{}{0} modów'}" />
+                          <TextBlock Grid.Column="2" Classes="muted" FontSize="11" VerticalAlignment="Center">
+                            <TextBlock.Text>
+                              <MultiBinding Converter="{x:Static services:PluralCountConverter.Instance}">
+                                <Binding Path="Items.Count" />
+                                <Binding Path="[Catalog.ModsCount.One]" Source="{x:Static services:LocalizationService.Instance}" />
+                                <Binding Path="[Catalog.ModsCount.Few]" Source="{x:Static services:LocalizationService.Instance}" />
+                                <Binding Path="[Catalog.ModsCount.Many]" Source="{x:Static services:LocalizationService.Instance}" />
+                              </MultiBinding>
+                            </TextBlock.Text>
+                          </TextBlock>
                           <TextBlock Grid.Column="3" Text="›" Foreground="{DynamicResource QuietBrush}" FontSize="20" VerticalAlignment="Center" />
                         </Grid>
                       </Button>
@@ -261,7 +271,9 @@
             <TextBlock Classes="muted" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"
                        Text="{Binding [Catalog.InstallNexusLocalArchiveRequired], Source={x:Static services:LocalizationService.Instance}}" />
           </StackPanel>
-          <views:NexusManualView Grid.Row="1" DataContext="{Binding NexusPicker}" />
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <views:NexusManualView DataContext="{Binding NexusPicker}" Margin="0,0,12,0" />
+          </ScrollViewer>
           <Button Grid.Row="2" Classes="secondary" HorizontalAlignment="Right" Command="{Binding CancelNexusPickerCommand}"
                   Content="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}"
                   AutomationProperties.Name="{Binding [Catalog.Cancel], Source={x:Static services:LocalizationService.Instance}}" />

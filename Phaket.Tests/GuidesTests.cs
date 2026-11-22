@@ -113,7 +113,7 @@ public class GuidesTests
             trigger.RaiseEvent(pointerEntered);
             Assert.True(popup.IsOpen);
             var popupKey = new KeyEventArgs { Key = Key.Escape, RoutedEvent = InputElement.KeyDownEvent };
-            tip.FindControl<Border>("TipContent")!.RaiseEvent(popupKey);
+            trigger.RaiseEvent(popupKey);
             Dispatcher.UIThread.RunJobs();
             Assert.False(popup.IsOpen);
         }

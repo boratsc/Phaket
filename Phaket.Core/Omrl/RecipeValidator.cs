@@ -34,7 +34,7 @@ public static class RecipeValidator
             Add(ErrorCodes.ValidationFailed, ("detail", $"target game '{recipe.Target.Game}' does not match definition '{game.Slug}'"));
 
         if (recipe.Target.Constraints?.GameVersion is { } gameVersion
-            && !VersionRange.TryParse([gameVersion], out _))
+            && !VersionRange.TryParse([GameVersionLabel.NormalizeRange(gameVersion)], out _))
             Add(ErrorCodes.InvalidVersionRange, ("range", gameVersion));
 
         if (recipe.When is { } condition) ValidateCondition(condition, 1, Add);
@@ -129,6 +129,8 @@ public static class RecipeValidator
             && !artifactIds.Contains(artifactRef.GetString() ?? ""))
             add(ErrorCodes.ValidationFailed, [("detail", $"step '{stepId}': undeclared artifact '{artifactRef.GetString()}'")]);
 
+        if (use == "archive.extract") ValidateInclude(stepId, with, game, add);
+
         if (!PathRules.TryGetValue(use, out var rules)) return;
 
         if (rules.FromSchemes.Length > 0 && with.TryGetValue("from", out var from))
@@ -141,6 +143,29 @@ public static class RecipeValidator
                 // target and every extracted entry is still checked against
                 // writableAreas at write time.
                 allowGameRoot: use == "archive.extract");
+    }
+
+    private static void ValidateInclude(
+        string stepId, IReadOnlyDictionary<string, JsonElement> with, GameDefinition game,
+        Action<string, (string, string)[]> add)
+    {
+        if (!with.TryGetValue("include", out var include) || include.ValueKind != JsonValueKind.Array) return;
+        var target = with.TryGetValue("to", out var to) ? to.GetString() ?? "" : "";
+        var parsed = VirtualUri.TryParse(target, out var scheme, out var targetPath);
+        foreach (var item in include.EnumerateArray())
+        {
+            var pattern = item.GetString() ?? "";
+            if (!WriteScope.IsSafePattern(pattern))
+            {
+                add(ErrorCodes.PathOutOfBounds, [("path", $"step '{stepId}': {pattern}")]);
+                continue;
+            }
+            // Only game writes are bounded by writableAreas; staging is a scratch area.
+            if (!parsed || scheme != "game") continue;
+            var relative = targetPath == "." ? pattern : targetPath + "/" + pattern;
+            if (!WriteScope.Covers(game, relative))
+                add(ErrorCodes.PathOutOfBounds, [("path", $"step '{stepId}': {pattern}")]);
+        }
     }
 
     private static void ValidatePathUri(

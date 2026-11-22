@@ -106,9 +106,15 @@
             </Border>
           </Button>
           <StackPanel Orientation="Horizontal" Spacing="0" Margin="6,0,0,0" x:Name="WindowControls" IsVisible="False">
-            <Button Classes="windowControl" Content="—" Click="OnMinimizeClick" AutomationProperties.Name="{Binding [Shell.Minimize], Source={x:Static services:LocalizationService.Instance}}" />
-            <Button Classes="windowControl" Content="□" Click="OnToggleMaximizeClick" AutomationProperties.Name="{Binding [Shell.Maximize], Source={x:Static services:LocalizationService.Instance}}" />
-            <Button Classes="windowControl closeControl" Content="×" Click="OnCloseClick" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="windowControl" Click="OnMinimizeClick" AutomationProperties.Name="{Binding [Shell.Minimize], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="WindowMinimize" Width="14" Height="14" />
+            </Button>
+            <Button Classes="windowControl" Click="OnToggleMaximizeClick" AutomationProperties.Name="{Binding [Shell.Maximize], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="WindowMaximize" Width="14" Height="14" />
+            </Button>
+            <Button Classes="windowControl closeControl" Click="OnCloseClick" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}">
+              <mi:MaterialIcon Kind="WindowClose" Width="14" Height="14" />
+            </Button>
           </StackPanel>
         </StackPanel>
       </Grid>
@@ -221,16 +227,29 @@
 
     <!-- Main content -->
     <Grid Grid.Row="1" Grid.Column="1">
-      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <ContentControl Content="{Binding CurrentPage}" Margin="30,24,30,26" />
-      </ScrollViewer>
+      <!-- Pionowe marginesy poza ScrollViewerem: strony poznają realną wysokość widoku (modal centruje się w oknie). -->
+      <Grid Margin="0,24,0,26">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <ContentControl Content="{Binding CurrentPage}" Margin="30,0,30,0" />
+        </ScrollViewer>
+      </Grid>
       <Border IsVisible="{Binding IsTopbarPanelOpen}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,20,0"
               Width="300" Padding="16" CornerRadius="10" Background="{DynamicResource RaisedBrush}"
               BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" BoxShadow="0 12 30 0 #44000000">
         <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding TopbarPanelTitle}" FontSize="18" FontWeight="SemiBold"/><Button Grid.Column="1" Classes="icon" Content="×" Command="{Binding CloseTopbarPanelCommand}" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}"/></Grid>
+          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding TopbarPanelTitle}" FontSize="18" FontWeight="SemiBold"/><Button Grid.Column="1" Classes="icon" Command="{Binding CloseTopbarPanelCommand}" AutomationProperties.Name="{Binding [Common.Close], Source={x:Static services:LocalizationService.Instance}}"><mi:MaterialIcon Kind="Close" Width="16" Height="16" /></Button></Grid>
           <TextBlock Text="{Binding TopbarPanelMessage}" Classes="muted" TextWrapping="Wrap" />
         </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- Steam password / Guard prompt for installs started deeper in the app (PAK-102). -->
+    <Grid Grid.RowSpan="3" Grid.ColumnSpan="2" ZIndex="20" IsVisible="{Binding SteamPrompt.HasDialog}"
+          Background="#99000000">
+      <Border Classes="card" Width="420" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="{DynamicResource RaisedBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+              BoxShadow="0 12 30 0 #44000000">
+        <views:SteamPromptDialog DataContext="{Binding SteamPrompt}" />
       </Border>
     </Grid>
 

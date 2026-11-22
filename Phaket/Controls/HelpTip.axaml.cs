@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Phaket.Controls;
 
@@ -15,7 +17,8 @@ public partial class HelpTip : UserControl
     private readonly DispatcherTimer hoverCloseTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
     private bool pointerOverTrigger;
     private bool pointerOverPopup;
-    private bool dismissedWhileFocused;
+    private bool pinnedByClick;
+    private TopLevel? topLevel;
 
     public string Label { get => GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
     public string Message { get => GetValue(MessageProperty); set => SetValue(MessageProperty, value); }
@@ -26,56 +29,73 @@ public partial class HelpTip : UserControl
         hoverCloseTimer.Tick += OnHoverCloseTimerTick;
     }
 
-    private void OnTriggerClick(object? sender, RoutedEventArgs e)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        dismissedWhileFocused = false;
-        TipPopup.IsOpen = true;
+        base.OnAttachedToVisualTree(e);
+        topLevel = TopLevel.GetTopLevel(this);
+        topLevel?.AddHandler(PointerPressedEvent, OnTopLevelPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        topLevel?.AddHandler(KeyDownEvent, OnTopLevelKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        topLevel?.RemoveHandler(PointerPressedEvent, OnTopLevelPointerPressed);
+        topLevel?.RemoveHandler(KeyDownEvent, OnTopLevelKeyDown);
+        topLevel = null;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    // A click pins the tip open; a second click, Escape or any click outside closes it.
+    private void OnTriggerClick(object? sender, RoutedEventArgs e)
+    {
+        hoverCloseTimer.Stop();
+        pinnedByClick = !pinnedByClick;
+        TipPopup.IsOpen = pinnedByClick;
+    }
+
+    private void CloseTip()
+    {
+        hoverCloseTimer.Stop();
+        pinnedByClick = false;
+        TipPopup.IsOpen = false;
+    }
+
+    private void OnTopLevelPointerPressed(object? sender, PointerEventArgs e)
+    {
+        if (!TipPopup.IsOpen || IsInsideTip(e.Source as Visual)) return;
+        CloseTip();
+    }
+
+    private bool IsInsideTip(Visual? source)
+    {
+        for (var visual = source; visual is not null; visual = visual.GetVisualParent())
+            if (ReferenceEquals(visual, Trigger) || ReferenceEquals(visual, TipContent)) return true;
+        return false;
+    }
+
+    private void OnTopLevelKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape || !TipPopup.IsOpen) return;
         CloseTip();
         e.Handled = true;
     }
 
-    private void OnPopupKeyDown(object? sender, KeyEventArgs e)
+    private void OnTriggerGotFocus(object? sender, FocusChangedEventArgs e)
     {
-        if (e.Key != Key.Escape) return;
-        CloseTip();
-        e.Handled = true;
-    }
-
-    private void CloseTip()
-    {
-        hoverCloseTimer.Stop();
-        dismissedWhileFocused = true;
-        TipPopup.IsOpen = false;
-        Trigger.Focus(NavigationMethod.Unspecified);
-    }
-
-    private void OnTriggerGotFocus(object? sender, RoutedEventArgs e)
-    {
-        if (!dismissedWhileFocused) TipPopup.IsOpen = true;
+        // Only keyboard focus opens the tip: pointer focus arrives together with Click,
+        // so opening here too would flip the first click back to closed.
+        if (e.NavigationMethod == NavigationMethod.Tab) TipPopup.IsOpen = true;
     }
 
     private void OnTriggerLostFocus(object? sender, RoutedEventArgs e)
     {
-        dismissedWhileFocused = false;
-        ScheduleHoverClose();
+        if (!pinnedByClick) ScheduleHoverClose();
     }
 
     private void OnPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (ReferenceEquals(sender, Trigger))
-        {
-            pointerOverTrigger = true;
-            dismissedWhileFocused = false;
-        }
-        else
-        {
-            pointerOverPopup = true;
-        }
+        if (ReferenceEquals(sender, Trigger)) pointerOverTrigger = true;
+        else pointerOverPopup = true;
 
         hoverCloseTimer.Stop();
         TipPopup.IsOpen = true;
@@ -97,7 +117,7 @@ public partial class HelpTip : UserControl
     private void OnHoverCloseTimerTick(object? sender, EventArgs e)
     {
         hoverCloseTimer.Stop();
-        if (!Trigger.IsFocused && !pointerOverTrigger && !pointerOverPopup)
+        if (!pinnedByClick && !pointerOverTrigger && !pointerOverPopup)
             TipPopup.IsOpen = false;
     }
 
@@ -106,6 +126,6 @@ public partial class HelpTip : UserControl
         hoverCloseTimer.Stop();
         pointerOverTrigger = false;
         pointerOverPopup = false;
-        TipPopup.IsOpen = false;
+        pinnedByClick = false;
     }
 }

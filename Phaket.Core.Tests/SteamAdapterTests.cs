@@ -27,6 +27,14 @@ public class SteamAdapterTests
                 "manifest"		"987654321"
                 "installdir"		"Among Us"
                 "SizeOnDisk"		"1000000"
+                "InstalledDepots"
+                {
+                    "945361"
+                    {
+                        "manifest"		"1298083356997541927"
+                        "size"			"999"
+                    }
+                }
             }
             """);
         // Extra library on another "disk".
@@ -72,6 +80,9 @@ public class SteamAdapterTests
             Assert.True(Directory.Exists(amongUs.Installation.RootPath));
             Assert.Equal(GameAvailability.Moddable, amongUs.Availability);
             Assert.Equal(["12345678"], adapter.ProbeVersion(amongUs));
+            // W1: the installed depot manifest is version evidence for builds whose
+            // registry row carries no build id.
+            Assert.Equal("1298083356997541927", amongUs.Manifest.DepotManifests!["945361"]);
         }
         finally { Directory.Delete(home, recursive: true); }
     }

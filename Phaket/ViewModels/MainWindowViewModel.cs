@@ -20,6 +20,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string topbarPanelMessage = "";
 
     public LibraryViewModel Library { get; }
+    // Window-level auth dialog: the mod provision starts several pages deep, so its
+    // Steam password / Guard prompt is shown by the shell (PAK-102).
+    public SteamPromptViewModel SteamPrompt => SteamPromptViewModel.Shared;
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
     public HelpViewModel Help { get; } = new();
@@ -107,6 +110,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         LocalizationService.Instance.PropertyChanged -= localizationChanged;
         Accounts.DeviceIdentity.PropertyChanged -= nickChanged;
         ModpackCatalog?.Dispose();
+        Profiles?.Dispose();
     }
 
     public string GameName => currentGame?.Title ?? LocalizationService.Instance["Shell.NoGame"];
@@ -252,6 +256,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         switch (tab)
         {
             case "profiles" when currentGame is not null:
+                Profiles?.Dispose();
                 Profiles = new ProfilesViewModel(currentGame, () => OpenGame(currentGame), Accounts.ProfilePublisher);
                 CurrentPage = Profiles;
                 ActiveNav = "profiles";

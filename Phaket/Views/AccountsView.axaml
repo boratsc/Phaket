@@ -125,7 +125,7 @@
                         <TextBox Text="{Binding SteamSignin.Username}" PlaceholderText="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}"
                                  AutomationProperties.Name="{Binding [Account.SteamCred.Username], Source={x:Static services:LocalizationService.Instance}}" />
                         <TextBlock Text="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
-                        <TextBox PasswordChar="●" Text="{Binding SteamSignin.Password}"
+                        <TextBox PasswordChar="•" Text="{Binding SteamSignin.Password}"
                                  AutomationProperties.Name="{Binding [Account.SteamCred.Password], Source={x:Static services:LocalizationService.Instance}}" />
                         <CheckBox IsChecked="{Binding SteamSignin.Remember}"
                                   Content="{Binding [Account.SteamCred.Remember], Source={x:Static services:LocalizationService.Instance}}" />

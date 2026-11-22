@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Security.Cryptography;
+using Phaket.Core.Accounts;
 using Phaket.Core.Catalog;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
@@ -35,20 +36,31 @@ public sealed class ModpackInstallService : IModpackInstallService
     private readonly ICatalogTransport? catalogTransport;
     private readonly IPackageTransport? packageTransport;
     private readonly GitHubReleaseService? githubService;
+    private readonly SteamCredentialStore steamCredentials;
+    private readonly Func<DepotPrompt, CancellationToken, Task<string>>? steamPrompt;
 
     public ModpackInstallService() : this(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket")) { }
 
     internal ModpackInstallService(string appDataRoot, ModpackSourceInstaller? sourceInstaller = null,
         ICatalogTransport? catalogTransport = null, IPackageTransport? packageTransport = null,
-        GitHubReleaseService? githubService = null)
+        GitHubReleaseService? githubService = null, SteamCredentialStore? steamCredentials = null,
+        Func<DepotPrompt, CancellationToken, Task<string>>? steamPrompt = null)
     {
         this.appDataRoot = Path.GetFullPath(appDataRoot);
         this.sourceInstaller = sourceInstaller ?? new ModpackSourceInstaller(packageTransport);
         this.catalogTransport = catalogTransport;
         this.packageTransport = packageTransport;
         this.githubService = githubService;
+        this.steamCredentials = steamCredentials ?? new SteamCredentialStore();
+        this.steamPrompt = steamPrompt;
     }
+
+    // PAK-105: the catalog installer is built on the install worker. A test needs to see
+    // the Steam prompt and credential store that actually reach it (and may swap the
+    // base-game source), so construction goes through this seam.
+    internal Func<ModCatalogClient, ProfileStore, SteamCredentialStore,
+        Func<DepotPrompt, CancellationToken, Task<string>>, ModInstallService>? InstallServiceFactory;
 
     public async Task<ModpackInstallPlan> PrepareAsync(GameCatalogItem game, ModpackDefinition pack,
         CancellationToken cancellationToken = default)
@@ -73,25 +85,43 @@ public sealed class ModpackInstallService : IModpackInstallService
         ModpackSourceInstallContext? sourceContext = null;
         try
         {
-            var thunderstoreItems = enabledItems.Where(item => item.Source == "thunderstore").ToArray();
-            if (thunderstoreItems.Length > 0)
+            // SusModder compositions go through the same catalog pipeline as Thunderstore
+            // (PAK-105): the server stores name/version only, so the mod is resolved from
+            // the synced catalog by full name or, for SusModder, by its external id.
+            var catalogItems = enabledItems.Where(item => item.Source is "thunderstore" or "susmodder").ToArray();
+            if (catalogItems.Length > 0)
             {
                 var endpoint = CatalogSettings.Load(CatalogSettings.SettingsFile(appDataRoot));
                 using var http = new HttpClient { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(15) };
                 using var db = new ModCatalogStore(Path.Combine(appDataRoot, "catalog.db"));
                 var client = new ModCatalogClient(catalogTransport ?? new HttpCatalogTransport(http), db);
                 await client.SyncAsync(pack.GameId, cancellationToken);
-                var byId = db.GetMods(pack.GameId).ToDictionary(mod => mod.Id, StringComparer.OrdinalIgnoreCase);
-                var install = new ModInstallService(appDataRoot, client, packageTransport ?? new HttpPackageTransport());
-                for (int i = 0; i < thunderstoreItems.Length; i++)
+                var mods = db.GetMods(pack.GameId);
+                var byId = mods.ToDictionary(mod => mod.Id, StringComparer.OrdinalIgnoreCase);
+                // A Thunderstore package may share the SusModder namespace/name, so a
+                // SusModder item only ever resolves inside the SusModder catalog rows.
+                var susModder = mods.Where(mod => string.Equals(mod.Source, "susmodder", StringComparison.OrdinalIgnoreCase)).ToArray();
+                var install = new ModInstallService(appDataRoot, client, packageTransport ?? new HttpPackageTransport(),
+                    catalogTransport: catalogTransport);
+                for (int i = 0; i < catalogItems.Length; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var item = thunderstoreItems[i];
-                    if (item.ModId is null || !byId.TryGetValue(item.ModId, out var found))
-                        return Block("Catalog.InstallPlanFailed");
+                    var item = catalogItems[i];
+                    ThunderstoreMod? found = null;
+                    if (item.Source == "susmodder")
+                        // The external id is authoritative when the server sent one; the full
+                        // name is only the fallback for an item that pins no id.
+                        found = item.ModId is { Length: > 0 } externalId
+                            ? susModder.FirstOrDefault(mod => string.Equals(mod.ExternalId, externalId, StringComparison.Ordinal))
+                            : susModder.FirstOrDefault(mod => string.Equals(mod.FullName, item.Name, StringComparison.OrdinalIgnoreCase));
+                    else if (item.ModId is not null && byId.TryGetValue(item.ModId, out var byIdFound))
+                        found = byIdFound;
+                    if (found is null)
+                        return Block(item.Source == "susmodder" ? "Catalog.InstallSusModderUnavailable" : "Catalog.InstallPlanFailed");
                     var preparation = await install.PrepareAsync(pack.GameId, found.FullName, item.Version,
                         endpoint, new(selected.RootPath, selected.Store, false), ct: cancellationToken,
-                        profileRootOverride: Path.Combine(profileBase, "thunderstore", i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)));
+                        profileRootOverride: Path.Combine(profileBase, item.Source, i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)),
+                        modId: found.Id);
                     if (preparation.Conflicts.Count > 0) return Block("Catalog.InstallVersionConflict");
                     if (preparation.Plans.Count == 0 || preparation.Plans.Any(p => p.Operations.Count == 0))
                         return Block("Catalog.InstallPlanEmpty");
@@ -153,10 +183,27 @@ public sealed class ModpackInstallService : IModpackInstallService
         ModpackInstallPlan plan, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         if (!plan.CanInstall || plan.ProfileId is null) return new(false, "", plan.BlockReason ?? "Catalog.InstallPlanFailed");
+        // PAK-105: a full package may provision its vanilla through DepotDownloader, which
+        // asks for a Steam Guard code or a mobile confirmation. The dialog lives on the UI
+        // thread, so the context is captured before the worker starts (as in the catalog
+        // install); the shared view model keeps the same dialog as the library install.
+        var ui = SynchronizationContext.Current;
+        var prompt = steamPrompt ?? ((p, ct) => SteamPromptViewModel.Shared.RequestAsync(p, ct, ui));
+        // The mobile notice has no answer; it opens on the tool's output line and closes
+        // when the run ends. The sink is created here so Progress is marshalled to the UI.
+        var mobile = SteamPromptViewModel.MobileConfirmationSink();
+        var profileId = plan.ProfileId;
+        // The executor is synchronous and can wait on the user, so it must not run on the UI thread.
+        return await Task.Run(() => InstallCoreAsync(game, pack, plan, profileId, prompt, mobile, progress, cancellationToken), cancellationToken);
+    }
+
+    private async Task<ModpackInstallResult> InstallCoreAsync(GameCatalogItem game, ModpackDefinition pack,
+        ModpackInstallPlan plan, string profileId, Func<DepotPrompt, CancellationToken, Task<string>> prompt,
+        IProgress<string?> mobile, IProgress<double>? progress, CancellationToken cancellationToken)
+    {
         var profiles = new ProfileStore(appDataRoot);
         var profileData = profiles.For(pack.GameId);
         var previousProfile = profileData.ActiveProfileId;
-        string profileId = plan.ProfileId;
         string root = game.SelectedInstallation?.RootPath ?? plan.Target;
         var registry = new InstallRegistry(Path.Combine(appDataRoot, "installs.json"));
         var registered = new List<(string RecipeId, string GameRoot, PlanExecutionContext Context)>();
@@ -182,7 +229,10 @@ public sealed class ModpackInstallService : IModpackInstallService
                 var endpoint = CatalogSettings.Load(CatalogSettings.SettingsFile(appDataRoot));
                 using var http = new HttpClient { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(15) };
                 using var db = new ModCatalogStore(Path.Combine(appDataRoot, "catalog.db"));
-                var service = new ModInstallService(appDataRoot, new ModCatalogClient(catalogTransport ?? new HttpCatalogTransport(http), db), packageTransport ?? new HttpPackageTransport(), profiles: profiles);
+                var client = new ModCatalogClient(catalogTransport ?? new HttpCatalogTransport(http), db);
+                var service = InstallServiceFactory?.Invoke(client, profiles, steamCredentials, prompt)
+                    ?? new ModInstallService(appDataRoot, client, packageTransport ?? new HttpPackageTransport(), profiles: profiles,
+                        steamCredentials: steamCredentials, steamPrompt: prompt, steamMobileConfirmation: mobile);
                 foreach (var preparation in plan.Preparations)
                 {
                     cancellationToken.ThrowIfCancellationRequested();

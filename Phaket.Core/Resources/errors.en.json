@@ -17,6 +17,8 @@
   "ARTIFACT_SIZE_MISMATCH": "Artifact {artifact} has size {actual}, but {expected} bytes were expected. The download was discarded.",
   "MOD_SOURCE_INVALID": "The selected {source} mod source is incomplete or invalid: {detail}.",
   "MOD_SOURCE_HOST_NOT_ALLOWED": "The download host {host} is not approved for this mod source.",
+  "MOD_ARTIFACT_UNAVAILABLE": "No downloadable variant of {artifact} matches this installation (architecture: {arch}, store: {store}). Choose another mod version or installation.",
+  "MOD_ARTIFACT_HASH_UNDECLARED": "The mod artifact {artifact} has no declared SHA-256, so it cannot be verified. Installation halted — report it in the mod catalog.",
   "ARCHIVE_INVALID": "Archive {artifact} cannot be read as a valid ZIP file.",
   "ARCHIVE_FORMAT_UNSUPPORTED": "Archive {artifact} uses the unsupported format {format}. Choose a ZIP archive.",
   "PLAN_NOT_ACCEPTED": "The installation plan must be reviewed and approved before files can be changed.",
@@ -33,5 +35,12 @@
   "TOOL_OFFLINE": "No network connection is available to download the tool.",
   "TOOL_DOWNLOAD_FAILED": "The tool download failed.",
   "TOOL_VERIFICATION_FAILED": "Tool or archive verification failed.",
-  "TOOL_UNVERIFIED_VERSION": "This version has no trusted SHA-256 hash."
+  "TOOL_UNVERIFIED_VERSION": "This version has no trusted SHA-256 hash.",
+  "BASE_GAME_MANIFEST_MISSING": "No Steam manifest for game version {version} in the build registry. Sync the build registry (Builds view) or configure GITHUB_TOKEN on the server, then try again.",
+  "BASE_GAME_SIGN_IN_REQUIRED": "This game version needs a Steam sign-in. Sign in to Steam in the Library, then try installing the mod again.",
+  "BASE_GAME_AUTH_CANCELLED": "The Steam sign-in was cancelled. Start the install again and finish signing in (password or Steam Guard code).",
+  "BASE_GAME_TIMEOUT": "Downloading the game version timed out. Check the connection and try again.",
+  "BASE_GAME_TOOL_FAILED": "The game version download tool failed. External tool output: {detail}",
+  "EPIC_SIGN_IN_REQUIRED": "This game version needs an Epic sign-in. Sign in to Epic in the Library, then try installing the mod again.",
+  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "The .NET runtime required to run DepotDownloader was not found. Install the .NET runtime and try again."
 }

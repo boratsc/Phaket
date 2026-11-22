@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Avalonia.Threading;
@@ -292,5 +293,317 @@ public class RenderTests
         Save(window, "37-settings.png");
 
         window.Close();
+    }
+
+    // PAK-88: panel dodawania moda w każdym z trzech źródeł i w obu motywach.
+    private static ModPackViewModel RenderModPack(string root)
+    {
+        var store = new ModpackStore(root);
+        var pack = new ModpackDefinition
+        {
+            Id = "render-pack", Name = "Skład Renderowy", Author = "Phaket", Version = "1.2.0", GameId = "among-us",
+            Items = [.. Enumerable.Range(1, 24).Select(i => new ModpackMod
+            {
+                Name = $"Mod {i:00}", Version = $"1.{i}.0", Required = i == 1,
+                Source = i % 4 == 0 ? "github" : "thunderstore"
+            })]
+        };
+        store.Save(pack);
+        return new ModPackViewModel(pack, store, () => { }, root);
+    }
+
+    // Ten sam układ co shell: pionowe marginesy poza ScrollViewerem, strona w ScrollViewerze.
+    private static Window ModPackRenderWindow(ModPackViewModel vm) => new()
+    {
+        Width = 1280, Height = 800,
+        Content = new Grid
+        {
+            Margin = new Thickness(0, 24, 0, 26),
+            Children =
+            {
+                new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                    Content = new Border
+                    {
+                        Margin = new Thickness(30, 0, 30, 0),
+                        Child = new Phaket.Views.ModPackView { DataContext = vm }
+                    }
+                }
+            }
+        }
+    };
+
+    private static Border ModalCard(Window window) =>
+        window.GetVisualDescendants().OfType<Border>()
+            .Single(b => b.Classes.Contains("modalCard") && b.IsEffectivelyVisible);
+
+    [AvaloniaTheory]
+    [InlineData("thunderstore", "dark", "40-modpack-add-thunderstore-dark.png")]
+    [InlineData("github", "dark", "41-modpack-add-github-dark.png")]
+    [InlineData("nexus", "dark", "42-modpack-add-nexus-dark.png")]
+    [InlineData("thunderstore", "light", "40-modpack-add-thunderstore-light.png")]
+    [InlineData("github", "light", "41-modpack-add-github-light.png")]
+    [InlineData("nexus", "light", "42-modpack-add-nexus-light.png")]
+    public void Render_modpack_add_panel(string source, string theme, string filename)
+    {
+        var language = LocalizationService.Instance.CurrentLanguage;
+        var variant = Application.Current!.RequestedThemeVariant;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        Application.Current.RequestedThemeVariant = theme == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        var root = TestAccounts.TempPath();
+        Window? window = null;
+        try
+        {
+            var vm = RenderModPack(root);
+            window = ModPackRenderWindow(vm);
+            window.Show();
+            vm.OpenAddModsCommand.Execute(null);
+            vm.SelectAddSourceCommand.Execute(source);
+            Dispatcher.UIThread.RunJobs();
+            Dispatcher.UIThread.RunJobs();
+            var card = ModalCard(window);
+            var origin = card.TranslatePoint(new Point(0, 0), window)!.Value;
+            var center = origin.Y + card.Bounds.Height / 2;
+            Save(window, filename);
+            Assert.Equal(760, card.Bounds.Width, 1);
+            Assert.True(origin.Y >= 0 && origin.Y + card.Bounds.Height <= window.ClientSize.Height,
+                $"{filename}: dialog poza oknem (y={origin.Y}, wysokość={card.Bounds.Height})");
+            Assert.True(Math.Abs(center - window.ClientSize.Height / 2) <= 2,
+                $"{filename}: dialog nie wyśrodkowany (środek={center}, okno={window.ClientSize.Height})");
+        }
+        finally
+        {
+            window?.Close();
+            Application.Current.RequestedThemeVariant = variant;
+            LocalizationService.Instance.CurrentLanguage = language;
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Modpack_add_panel_card_and_fields_share_one_width_across_sources()
+    {
+        var root = TestAccounts.TempPath();
+        try
+        {
+            var vm = RenderModPack(root);
+            var window = ModPackRenderWindow(vm);
+            window.Show();
+            try
+            {
+                vm.OpenAddModsCommand.Execute(null);
+                var cardWidths = new List<double>();
+                var fieldWidths = new List<double>();
+                foreach (var source in new[] { "thunderstore", "github", "nexus" })
+                {
+                    vm.SelectAddSourceCommand.Execute(source);
+                    Dispatcher.UIThread.RunJobs();
+                    Dispatcher.UIThread.RunJobs();
+                    var card = ModalCard(window);
+                    cardWidths.Add(card.Bounds.Width);
+                    fieldWidths.Add(card.GetVisualDescendants().OfType<TextBox>().First(t => t.IsEffectivelyVisible).Bounds.Width);
+                }
+                Assert.Equal(760, cardWidths[0], 1);
+                Assert.All(cardWidths, width => Assert.Equal(cardWidths[0], width, 1));
+                Assert.All(fieldWidths, width => Assert.Equal(fieldWidths[0], width, 1));
+            }
+            finally { window.Close(); }
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [AvaloniaFact]
+    public void Render_modpack_add_panel_in_shell()
+    {
+        // Prawdziwy shell: pasek górny i statusu poza obszarem strony — dialog musi się zmieścić w całości.
+        var language = LocalizationService.Instance.CurrentLanguage;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        var window = new MainWindow(TestAccounts.ViewModel()) { Width = 1280, Height = 800 };
+        window.Show();
+        try
+        {
+            var vm = (MainWindowViewModel)window.DataContext!;
+            vm.NavigateCommand.Execute("catalog");
+            Dispatcher.UIThread.RunJobs();
+            vm.ModpackCatalog!.CreatePackCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Dispatcher.UIThread.RunJobs();
+            var card = ModalCard(window);
+            var origin = card.TranslatePoint(new Point(0, 0), window)!.Value;
+            Save(window, "44-modpack-add-shell.png");
+            Assert.True(origin.Y >= 62 && origin.Y + card.Bounds.Height <= 767,
+                $"dialog poza obszarem strony (y={origin.Y}, wysokość={card.Bounds.Height})");
+        }
+        finally
+        {
+            LocalizationService.Instance.CurrentLanguage = language;
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Modpack_rows_expose_tooltip_only_for_required_mods()
+    {
+        // PAK-87: pusty ToolTip.Tip otwierał pustą ramkę — mody niezależne nie mają podpowiedzi.
+        var root = TestAccounts.TempPath();
+        try
+        {
+            var vm = RenderModPack(root);
+            var window = ModPackRenderWindow(vm);
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                var tips = window.GetVisualDescendants().OfType<Border>()
+                    .Where(row => row.Classes.Contains("modRow"))
+                    .Select(ToolTip.GetTip).ToList();
+                Assert.Equal(24, tips.Count);
+                var tip = Assert.Single(tips, t => t is not null);
+                Assert.Equal(LocalizationService.Instance["Catalog.RequiredDependencyProtected"], tip);
+            }
+            finally { window.Close(); }
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [AvaloniaFact]
+    public void Render_modpack_add_panel_help_tip_open()
+    {
+        var language = LocalizationService.Instance.CurrentLanguage;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        var root = TestAccounts.TempPath();
+        try
+        {
+            var vm = RenderModPack(root);
+            var window = ModPackRenderWindow(vm);
+            window.Show();
+            try
+            {
+                vm.OpenAddModsCommand.Execute(null);
+                vm.SelectAddSourceCommand.Execute("github");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                var tip = window.GetVisualDescendants().OfType<Phaket.Controls.HelpTip>().Single();
+                tip.FindControl<Button>("Trigger")!.Focus(NavigationMethod.Tab);
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(tip.FindControl<Avalonia.Controls.Primitives.Popup>("TipPopup")!.IsOpen);
+                Save(window, "43-modpack-help-tip.png");
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            LocalizationService.Instance.CurrentLanguage = language;
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(900, 700, "50-modpack-add-narrow-900.png")]
+    [InlineData(640, 520, "51-modpack-add-narrow-640.png")]
+    public void Modpack_add_panel_fits_the_minimum_window(double width, double height, string filename)
+    {
+        // PAK-89: MinWidth okna to 640 — karta dialogu musi się kurczyć, a przyciski zostać w oknie.
+        var language = LocalizationService.Instance.CurrentLanguage;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        var window = new MainWindow(TestAccounts.ViewModel()) { Width = width, Height = height };
+        window.Show();
+        try
+        {
+            var vm = (MainWindowViewModel)window.DataContext!;
+            vm.NavigateCommand.Execute("catalog");
+            Dispatcher.UIThread.RunJobs();
+            vm.ModpackCatalog!.CreatePackCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Dispatcher.UIThread.RunJobs();
+            var card = ModalCard(window);
+            var origin = card.TranslatePoint(new Point(0, 0), window)!.Value;
+            Assert.True(origin.X >= 0 && origin.X + card.Bounds.Width <= window.ClientSize.Width,
+                $"{filename}: karta poza oknem (x={origin.X}, szerokość={card.Bounds.Width}, okno={window.ClientSize.Width})");
+            foreach (var key in new[] { "Catalog.Cancel", "Catalog.SavePack" })
+            {
+                var label = LocalizationService.Instance[key];
+                var button = window.GetVisualDescendants().OfType<Button>()
+                    .Last(b => b.IsEffectivelyVisible && b.Content as string == label);
+                var buttonOrigin = button.TranslatePoint(new Point(0, 0), window)!.Value;
+                Assert.True(buttonOrigin.X >= 0 && buttonOrigin.X + button.Bounds.Width <= window.ClientSize.Width
+                    && buttonOrigin.Y + button.Bounds.Height <= window.ClientSize.Height,
+                    $"{filename}: przycisk '{label}' obcięty (x={buttonOrigin.X}, szerokość={button.Bounds.Width}, okno={window.ClientSize.Width})");
+            }
+            Save(window, filename);
+        }
+        finally
+        {
+            LocalizationService.Instance.CurrentLanguage = language;
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Catalog_nexus_dialog_centers_in_the_viewport_with_a_long_pack_list()
+    {
+        // Dialogi katalogu są w przewijanej stronie: cień i karta mają wysokość widoku, nie listy.
+        var language = LocalizationService.Instance.CurrentLanguage;
+        LocalizationService.Instance.CurrentLanguage = "pl-PL";
+        var root = TestAccounts.TempPath();
+        try
+        {
+            var store = new ModpackStore(root);
+            for (var i = 1; i <= 30; i++)
+                store.Save(new ModpackDefinition
+                {
+                    Id = $"pack-{i:00}", Name = $"Pakiet {i:00}", Author = "Test", Version = "1.0.0", GameId = "among-us",
+                    Items = [new ModpackMod { Name = $"Mod {i:00}", Version = "1.0.0", Source = "thunderstore" }]
+                });
+            var game = new GameCatalogItem(GameDefinitions.LoadAll().First(g => g.Slug == "among-us"), "", "");
+            using var vm = new ModpackCatalogViewModel(game, root, autoLoad: false);
+            var view = new Phaket.Views.ModpackCatalogView { DataContext = vm };
+            var window = new Window
+            {
+                Width = 1280, Height = 800,
+                Content = new Grid
+                {
+                    Margin = new Thickness(0, 24, 0, 26),
+                    Children =
+                    {
+                        new ScrollViewer
+                        {
+                            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                            Content = new Border { Margin = new Thickness(30, 0, 30, 0), Child = view }
+                        }
+                    }
+                }
+            };
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                vm.NexusPicker = new NexusManualViewModel { Name = "Mod", PinnedVersion = "1.0.0" };
+                vm.IsNexusPickerOpen = true;
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                var card = ModalCard(window);
+                var scroll = view.GetVisualAncestors().OfType<ScrollViewer>().First();
+                var origin = card.TranslatePoint(new Point(0, 0), window)!.Value;
+                var scrollOrigin = scroll.TranslatePoint(new Point(0, 0), window)!.Value;
+                var center = origin.Y + card.Bounds.Height / 2;
+                var viewportCenter = scrollOrigin.Y + scroll.Bounds.Height / 2;
+                Save(window, "52-catalog-nexus-dialog-long-list.png");
+                Assert.True(Math.Abs(center - viewportCenter) <= 2,
+                    $"dialog nie wyśrodkowany w widoku (środek={center}, widok={viewportCenter})");
+                Assert.True(origin.Y >= 0 && origin.Y + card.Bounds.Height <= window.ClientSize.Height,
+                    $"dialog poza oknem (y={origin.Y}, wysokość={card.Bounds.Height})");
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            LocalizationService.Instance.CurrentLanguage = language;
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 }

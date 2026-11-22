@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Phaket.ViewModels"
              xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
              x:Class="Phaket.Views.DownloadsView"
              x:DataType="vm:DownloadsViewModel">
   <StackPanel Spacing="18">
@@ -12,7 +13,7 @@
 
     <Border Classes="card" IsVisible="{Binding IsEmpty}" Padding="0">
       <StackPanel Spacing="10" HorizontalAlignment="Center" Margin="30,48" MaxWidth="520">
-        <TextBlock Text="⇩" FontSize="34" Foreground="{DynamicResource GoldTextBrush}" HorizontalAlignment="Center"
+        <mi:MaterialIcon Kind="TrayArrowDown" Width="34" Height="34" Foreground="{DynamicResource GoldTextBrush}" HorizontalAlignment="Center"
                    AutomationProperties.AccessibilityView="Raw" />
         <TextBlock Text="{Binding EmptyTitle}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
         <TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" />

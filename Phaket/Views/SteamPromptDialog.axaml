@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.SteamPromptDialog"
+             x:DataType="vm:SteamPromptViewModel">
+  <StackPanel Spacing="6" KeyboardNavigation.TabNavigation="Cycle">
+    <StackPanel IsVisible="{Binding CredentialOpen}" Spacing="6"
+                AutomationProperties.Name="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}">
+      <TextBlock Text="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}" />
+      <TextBox x:Name="PasswordBox" PasswordChar="•" Text="{Binding Password}"
+               AutomationProperties.Name="{Binding [SteamInstall.Password], Source={x:Static services:LocalizationService.Instance}}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="primary" Command="{Binding ConfirmCredentialCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+    </StackPanel>
+    <StackPanel IsVisible="{Binding MobileConfirmationOpen}" Spacing="6"
+                AutomationProperties.Name="{Binding [SteamInstall.MobileConfirmation], Source={x:Static services:LocalizationService.Instance}}">
+      <TextBlock TextWrapping="Wrap"
+                 Text="{Binding [SteamInstall.MobileConfirmation], Source={x:Static services:LocalizationService.Instance}}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button x:Name="MobileCancelButton" Command="{Binding CancelDialogCommand}"
+                Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+    </StackPanel>
+    <StackPanel IsVisible="{Binding TwoFactorOpen}" Spacing="6"
+                AutomationProperties.Name="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}">
+      <TextBlock Text="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}" />
+      <TextBox x:Name="TwoFactorBox" Text="{Binding TwoFactorCode}"
+               AutomationProperties.Name="{Binding [SteamInstall.TwoFactor], Source={x:Static services:LocalizationService.Instance}}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="primary" Command="{Binding ConfirmTwoFactorCommand}" Content="{Binding [SteamInstall.Confirm], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Command="{Binding CancelDialogCommand}" Content="{Binding [Library.InstallCancel], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

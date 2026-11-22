@@ -155,7 +155,9 @@ public static class PackageDownloader
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!artifact.Source.StartsWith("https://", StringComparison.Ordinal)) continue;
-            var target = Path.Combine(packageRoot, artifact.Id + ".zip");
+            // Remote artifacts land in the package root under their artifact id; a
+            // bare-file artifact (single plugin .dll) keeps that name without ".zip".
+            var target = Path.Combine(packageRoot, artifact.Id + (artifact.Format == "zip" ? ".zip" : ""));
             var githubAsset = SourcePolicy.IsGitHubAssetUrl(artifact.Source);
             if (!SourcePolicy.IsAllowedHttpsSource(artifact.Source, artifact.Sha256))
                 throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable,

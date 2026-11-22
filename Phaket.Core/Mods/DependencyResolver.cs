@@ -8,8 +8,10 @@ public interface IModVersionSource
     Task<ThunderstoreModDetails?> GetDetailsAsync(string fullName, CancellationToken cancellationToken);
 }
 
-public sealed record PinnedMod(string FullName, string Version, string DownloadUrl, long FileSize,
-    IReadOnlyList<string> Dependencies);
+public sealed record PinnedMod(string FullName, string Version, string DownloadUrl, long? FileSize,
+    IReadOnlyList<string> Dependencies,
+    IReadOnlyList<ModArtifact>? Artifacts = null, string? Packaging = null, string? AmongVersion = null,
+    string? Arch = null, string? Sha256 = null, string? Source = null, string? Availability = null);
 
 public sealed record ResolutionResult(IReadOnlyList<PinnedMod> Pinned, IReadOnlyList<ConflictProposal> Conflicts);
 public sealed record ConflictProposal(string Package, IReadOnlyList<string> Versions,
@@ -55,7 +57,8 @@ public sealed class DependencyResolver(IModVersionSource source)
             foreach (var dependency in dependencies) await Visit(dependency.FullName, dependency.Version, $"{name}@{version}");
             stack.RemoveAt(stack.Count - 1);
             states[name] = 2;
-            ordered.Add(new(name, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray()));
+            ordered.Add(new(name, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray(),
+                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability));
         }
 
         await Visit(rootFullName, rootVersion, "ROOT");
@@ -122,7 +125,8 @@ public sealed class DependencyResolver(IModVersionSource source)
                 await Visit(dependency.FullName, dependency.Version, $"{fullName}@{version}");
             stack.RemoveAt(stack.Count - 1);
             states[fullName] = 2;
-            ordered.Add(new(fullName, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray()));
+            ordered.Add(new(fullName, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray(),
+                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability));
         }
 
         await Visit(rootFullName, rootVersion, "ROOT");

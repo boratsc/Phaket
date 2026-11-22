@@ -24,18 +24,17 @@ public class TownOfUsMiraTests
         public string? LastStore;
         public string? LastVersion;
 
-        public bool TryPrepare(string store, string version, string? manifestId, string targetDirectory, out string? error)
+        public Task<BaseGamePrepareResult> TryPrepareAsync(string store, string version, string? manifestId, string targetDirectory, CancellationToken ct = default)
         {
             Calls++;
             LastStore = store;
             LastVersion = version;
-            error = null;
-            if (Fail) { error = "tool unavailable"; return false; }
+            if (Fail) return Task.FromResult(BaseGamePrepareResult.Fail("BASE_GAME_TOOL_FAILED", ("detail", "tool unavailable")));
             Directory.CreateDirectory(Path.Combine(targetDirectory, "Among Us_Data"));
             File.WriteAllText(Path.Combine(targetDirectory, "Among Us.exe"), $"vanilla-{store}-{version}");
             File.WriteAllText(Path.Combine(targetDirectory, "Among Us_Data", "globalgamemanagers"), "ggm");
             File.WriteAllText(Path.Combine(targetDirectory, "UnityPlayer.dll"), "unity");
-            return true;
+            return Task.FromResult(BaseGamePrepareResult.Ok);
         }
     }
 
@@ -256,8 +255,8 @@ public class TownOfUsMiraTests
                     new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054)));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state, source));
             var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken));
-            Assert.Equal(ErrorCodes.ArtifactMissing, ex.Error.Code);
-            Assert.Contains("tool unavailable", ex.Error.Parameters["artifact"]);
+            Assert.Equal(ErrorCodes.BaseGameToolFailed, ex.Error.Code);
+            Assert.Contains("tool unavailable", ex.Error.Parameters["detail"]);
 
             var journal = PlanExecutor.LoadJournal(profile)!;
             executor.Rollback(journal);

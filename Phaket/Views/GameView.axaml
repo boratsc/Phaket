@@ -85,8 +85,16 @@
               <Border Classes="pill" HorizontalAlignment="Right" Margin="10,0,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <mi:MaterialIcon Kind="Puzzle" Width="15" Height="15" Foreground="{DynamicResource GoldTextBrush}" />
-                  <TextBlock Text="{Binding Game.ModCount}" FontWeight="SemiBold" />
-                  <TextBlock Classes="muted" Text="{Binding [Game.ActiveMods], Source={x:Static services:LocalizationService.Instance}}" />
+                  <TextBlock>
+                    <TextBlock.Text>
+                      <MultiBinding Converter="{x:Static services:PluralCountConverter.Instance}">
+                        <Binding Path="Game.ModCount" />
+                        <Binding Path="[Game.ActiveModsCount.One]" Source="{x:Static services:LocalizationService.Instance}" />
+                        <Binding Path="[Game.ActiveModsCount.Few]" Source="{x:Static services:LocalizationService.Instance}" />
+                        <Binding Path="[Game.ActiveModsCount.Many]" Source="{x:Static services:LocalizationService.Instance}" />
+                      </MultiBinding>
+                    </TextBlock.Text>
+                  </TextBlock>
                 </StackPanel>
               </Border>
             </StackPanel>

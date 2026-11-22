@@ -166,7 +166,7 @@ public partial class ToolSettingsSection : ObservableObject
         {
             string root = Path.Combine(toolsRoot, Tool);
             if (!Directory.Exists(root)) return "";
-            string binary = Tool == "legendary" ? "" : "DepotDownloader.dll";
+            string binary = Tool == "legendary" ? "" : OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader";
             string? newest = Directory.GetDirectories(root).Select(Path.GetFileName)
                 .Where(v => v is not null && !v!.StartsWith('.') &&
                             (binary.Length == 0 || File.Exists(Path.Combine(root, v!, binary))))

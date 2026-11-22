@@ -99,11 +99,9 @@
                       <TextBlock Classes="muted" Text="{Binding SelectedMod.Version}" />
                     </StackPanel>
                   </StackPanel>
-                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-                    <TextBlock Classes="muted" Text="{Binding [Catalog.Source], Source={x:Static services:LocalizationService.Instance}}" />
-                    <TextBlock Grid.Column="1" Text="Thunderstore" />
-                    <TextBlock Grid.Row="1" Classes="muted" Text="{Binding [Compat.Rating], Source={x:Static services:LocalizationService.Instance}}" />
-                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="5">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <TextBlock Classes="muted" Text="{Binding [Compat.Rating], Source={x:Static services:LocalizationService.Instance}}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5">
                       <mi:MaterialIcon Kind="CheckCircle" Width="15" Height="15" Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding SelectedMod.Compatible}" />
                       <TextBlock Text="{Binding SelectedMod.CompatibilityKey, Converter={x:Static services:LocKeyConverter.Instance}}" />
                     </StackPanel>
@@ -167,6 +165,13 @@
           </StackPanel>
           <TextBox Classes="search" Text="{Binding SearchText}" PlaceholderText="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}"
                    AutomationProperties.Name="{Binding [ModCatalog.Search], Source={x:Static services:LocalizationService.Instance}}" />
+          <Border Classes="segmentGroup" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="3">
+              <Button Classes="segment" Classes.active="{Binding IsAllSource}" Command="{Binding SetSourceFilterCommand}" CommandParameter="all" Content="{Binding [Catalog.SourceAll], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Classes="segment" Classes.active="{Binding IsThunderstoreSource}" Command="{Binding SetSourceFilterCommand}" CommandParameter="thunderstore" Content="{Binding [Catalog.Source.thunderstore], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Classes="segment" Classes.active="{Binding IsSusmodderSource}" Command="{Binding SetSourceFilterCommand}" CommandParameter="susmodder" Content="{Binding [Catalog.Source.susmodder], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+          </Border>
           <TextBlock IsVisible="{Binding IsEmpty}" Text="{Binding [ModCatalog.Empty], Source={x:Static services:LocalizationService.Instance}}" Classes="muted" />
         </StackPanel>
         <Grid ColumnDefinitions="*,4,*" ColumnSpacing="4">
@@ -180,6 +185,15 @@
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Owner}" Classes="muted" />
                     <TextBlock Text="{Binding Latest.VersionNumber}" Classes="muted" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Border Classes="pill" Padding="6,1" IsVisible="{Binding HasPackaging}">
+                        <TextBlock Text="{Binding PackagingKey, Converter={x:Static services:LocKeyConverter.Instance}}" FontSize="11" />
+                      </Border>
+                      <TextBlock IsVisible="{Binding FollowsToU}" Classes="muted" FontSize="11" Text="{Binding [AmongVersion.ToU], Source={x:Static services:LocalizationService.Instance}}" />
+                      <TextBlock IsVisible="{Binding HasPinnedAmongVersion}" Classes="muted" FontSize="11">
+                        <Run Text="{Binding [AmongVersion.Game], Source={x:Static services:LocalizationService.Instance}}" /><Run Text=": " /><Run Text="{Binding AmongVersion}" />
+                      </TextBlock>
+                    </StackPanel>
                     <TextBlock IsVisible="{Binding IsDeprecated}" Text="{Binding [ModCatalog.Deprecated], Source={x:Static services:LocalizationService.Instance}}" />
                   </StackPanel>
                 </Grid>
@@ -253,24 +267,61 @@
                 <Button IsEnabled="{Binding !IsPreparing}" Command="{Binding CancelInstallCommand}" Content="{Binding [ModInstall.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
               </StackPanel>
               <TextBlock Text="{Binding [ModCatalog.Warning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding [ModCatalog.Source], Source={x:Static services:LocalizationService.Instance}}" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="muted" Text="{Binding [Catalog.Source], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding SelectedMod.SourceKey, Converter={x:Static services:LocKeyConverter.Instance}}" />
+              </StackPanel>
               <TextBlock Text="{Binding SelectedMod.Name}" FontSize="18" FontWeight="Bold" />
               <TextBlock Text="{Binding SelectedMod.Owner}" />
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SelectedMod.HasPackaging}">
+                <TextBlock Classes="muted" Text="{Binding [Packaging.Label], Source={x:Static services:LocalizationService.Instance}}" />
+                <Border Classes="pill" Padding="6,1">
+                  <TextBlock Text="{Binding SelectedMod.PackagingKey, Converter={x:Static services:LocKeyConverter.Instance}}" FontSize="11" />
+                </Border>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SelectedMod.HasPinnedAmongVersion}">
+                <TextBlock Classes="muted">
+                  <Run Text="{Binding [AmongVersion.Game], Source={x:Static services:LocalizationService.Instance}}" /><Run Text=": " /><Run Text="{Binding SelectedMod.AmongVersion}" />
+                </TextBlock>
+              </StackPanel>
+              <TextBlock IsVisible="{Binding SelectedMod.FollowsToU}" Classes="muted" Text="{Binding [AmongVersion.ToU], Source={x:Static services:LocalizationService.Instance}}" />
+              <Border IsVisible="{Binding SelectedMod.IsFullPackage}" Padding="8" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource WarningBrush}">
+                <TextBlock Text="{Binding [Packaging.FullWarning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+              </Border>
               <TextBlock Text="{Binding SelectedMod.Description}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="muted" Text="{Binding [License.Label], Source={x:Static services:LocalizationService.Instance}}" />
+                <TextBlock Text="{Binding SelectedMod.License}" IsVisible="{Binding SelectedMod.HasLicense}" />
+              </StackPanel>
+              <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding SelectedMod.HasNoLicense}"
+                         Text="{Binding [License.Unknown], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" IsVisible="{Binding SelectedMod.RepoUnavailable}"
+                         Text="{Binding [RepoUnavailable], Source={x:Static services:LocalizationService.Instance}}" />
               <SelectableTextBlock Text="{Binding SelectedMod.PackageUrl}" TextWrapping="Wrap" />
               <Button IsVisible="{Binding HasDetails}" Command="{Binding OpenPackageCommand}" Content="{Binding [ModCatalog.Open], Source={x:Static services:LocalizationService.Instance}}" />
               <TextBlock Text="{Binding DetailsStatus}" TextWrapping="Wrap" />
               <TextBlock IsVisible="{Binding HasDetails}" Text="{Binding [ModCatalog.Versions], Source={x:Static services:LocalizationService.Instance}}" FontWeight="Bold" />
-              <ItemsControl ItemsSource="{Binding Details.Versions}">
+              <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !SandboxSelected}"
+                         Text="{Binding [Catalog.VariantProbed], Source={x:Static services:LocalizationService.Instance}}" />
+              <ItemsControl ItemsSource="{Binding Versions}">
                 <ItemsControl.ItemTemplate>
-                  <DataTemplate DataType="{x:Type catalog:ThunderstoreVersion}">
+                  <DataTemplate x:DataType="vm:CatalogVersionItem">
                     <StackPanel Spacing="3" Margin="0,0,0,12">
-                      <TextBlock Text="{Binding VersionNumber}" FontWeight="SemiBold" />
-                      <Button Command="{Binding $parent[UserControl].DataContext.Catalog.InstallVersionCommand}" CommandParameter="{Binding}"
+                      <TextBlock Text="{Binding Version.VersionNumber}" FontWeight="SemiBold" />
+                      <Button Command="{Binding $parent[UserControl].DataContext.Catalog.InstallVersionCommand}" CommandParameter="{Binding Version}"
+                              IsEnabled="{Binding IsAvailable}"
                               Content="{Binding [ModInstall.Install], Source={x:Static services:LocalizationService.Instance}}" />
-                      <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Size], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding FileSize}" /></StackPanel>
-                      <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Date], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding DateCreated, StringFormat='{}{0:g}'}" /></StackPanel>
-                      <TextBlock Text="{Binding [ModCatalog.Dependencies], Source={x:Static services:LocalizationService.Instance}}" /><ItemsControl ItemsSource="{Binding Dependencies}" />
+                      <TextBlock IsVisible="{Binding !IsAvailable}" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}"
+                                 Text="{Binding [ModInstall.VersionUnavailable], Source={x:Static services:LocalizationService.Instance}}" />
+                      <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasVariant}">
+                        <TextBlock Classes="muted" Text="{Binding [Catalog.Variant], Source={x:Static services:LocalizationService.Instance}}" />
+                        <TextBlock Text="{Binding VariantText}" />
+                      </StackPanel>
+                      <TextBlock IsVisible="{Binding VariantMissing}" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}"
+                                 Text="{Binding [Catalog.VariantMissing], Source={x:Static services:LocalizationService.Instance}}" />
+                      <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Size], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding Version.FileSize}" /></StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="5"><TextBlock Text="{Binding [ModCatalog.Date], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding Version.DateCreated, StringFormat='{}{0:g}'}" /></StackPanel>
+                      <TextBlock Text="{Binding [ModCatalog.Dependencies], Source={x:Static services:LocalizationService.Instance}}" /><ItemsControl ItemsSource="{Binding Version.Dependencies}" />
                     </StackPanel>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

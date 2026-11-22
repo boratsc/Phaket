@@ -16,5 +16,10 @@
     <mi:MaterialIconStyles />
     <StyleInclude Source="avares://Phaket/Styles/Components.axaml" />
     <StyleInclude Source="avares://Phaket/Styles/LegacyStyles.axaml" />
+    <!-- Inter wczytuje WithInterFont() w Program.cs; URI avares wskazuje tę wbudowaną kolekcję,
+         a lista po przecinku daje fallback systemowy dla glifów, których Inter nie zawiera. -->
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="avares://Avalonia.Fonts.Inter/Assets#Inter, system-ui, sans-serif" />
+    </Style>
   </Application.Styles>
 </Application>

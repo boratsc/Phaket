@@ -139,6 +139,11 @@ identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
 - `Phaket.Tests`: headless UI (nawigacja, lokalizacja, dostępność, round-trip Studio)
   + `RenderTests` (zrzuty Skia 1280×800 do `/tmp/opencode/phaket-render`).
 - CI (GitHub Actions): build + testy na `ubuntu-26.04` i `windows-latest`.
+- Realne artefakty testów integracyjnych (sandbox install/verify, loadery, TOU x64):
+  `./scripts/fetch-test-fixtures.sh` pobiera je do `/tmp/opencode/phaket-research/artifacts`
+  — idempotentnie, z weryfikacją SHA-256 i `unzip -t`; poprawne istniejące pliki są pomijane,
+  a niezgodny plik nie jest kasowany. Bez nich część testów kończy się `Assert.Skip`.
+  Run `./scripts/fetch-test-fixtures.sh` before the integration tests; it is idempotent and checks pinned digests.
 - E2E: install→verify→uninstall (sandbox), katalog desktop→backend, share round-trip.
 - **Pierwszy realny przepis** (`Phaket.Core.Tests/fixtures/recipes/among-us-betterpolus.yaml`):
   BetterPolus 1.2.2 + loader BepInEx 6.0.700 z Thunderstore — prawdziwe URL-e pobierania

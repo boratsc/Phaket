@@ -133,7 +133,7 @@ public sealed class ModpackStore
             || !Text(pack.Version, 100) || !Text(pack.GameId, 80) || !Text(pack.Description, 4000, true)
             || pack.Items is null || pack.Items.Count > 500
             || pack.Items.Any(m => m is null || !Text(m.Name, 160) || !Text(m.Version, 100)
-                || m.Source is not ("thunderstore" or "github" or "nexus") || m.Dependencies is null || m.Dependencies.Count > 100
+                || m.Source is not ("thunderstore" or "github" or "nexus" or "susmodder") || m.Dependencies is null || m.Dependencies.Count > 100
                 || m.Sha256 is not null && (m.Sha256.Length != 64 || m.Sha256.Any(c => !Uri.IsHexDigit(c))))
             || pack.Items.Select(m => m.Name).Distinct(StringComparer.Ordinal).Count() != pack.Items.Count)
             throw new ArgumentException("The modpack data is invalid.", nameof(pack));

@@ -231,7 +231,7 @@
                       <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
                         <TextBlock Text="{Binding FromVersion}" Classes="muted" />
-                        <TextBlock Text="→" Classes="muted" />
+                        <mi:MaterialIcon Kind="ArrowRight" Width="14" Height="14" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding ToVersion}" />
                         <TextBlock Text="{Binding StateText}" Foreground="{DynamicResource GoldTextBrush}" />
                       </StackPanel>

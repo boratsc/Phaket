@@ -61,14 +61,20 @@ public static class OperationPlanner
             && !editions.Any(e => e.Store == facts.Store && (e.Os is null || e.Os.Contains(facts.Os))))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"store '{facts.Store}' not in target editions"));
 
-        if (recipe.Target.Constraints?.GameVersion is { } range)
+        if (recipe.Target.Constraints?.GameVersion is { } declaredRange)
         {
             if (facts.GameVersion is null)
                 throw new PhaketException(ErrorCodes.GameBuildUnavailable);
-            if (!NumericVersion.TryParse(facts.GameVersion, out var version))
+            // PAK-96: compare labels like the server does, so a recipe written with the
+            // SusModder dbValue ("=2026-8-18") matches the canonical fact ("2026.8.18").
+            // A date-shaped but impossible label is a bad fact, not text to compare.
+            var gameVersion = GameVersionLabel.Normalize(facts.GameVersion)
+                ?? throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
+            if (!NumericVersion.TryParse(gameVersion, out var version))
                 throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
+            var range = GameVersionLabel.NormalizeRange(declaredRange);
             if (!VersionRange.TryParse([range], out var parsed) || !parsed!.Contains(version!))
-                throw new PhaketException(ErrorCodes.UnsupportedGameVersion, ("gameVersion", facts.GameVersion), ("range", range));
+                throw new PhaketException(ErrorCodes.UnsupportedGameVersion, ("gameVersion", gameVersion), ("range", declaredRange));
         }
 
         foreach (var loader in recipe.Requires?.Loaders ?? [])
@@ -239,7 +245,7 @@ public static class OperationPlanner
         {
             if (facts.GameVersion is null)
                 throw new PhaketException(ErrorCodes.GameBuildUnavailable);
-            if (!NumericVersion.TryParse(facts.GameVersion, out _))
+            if (GameVersionLabel.Normalize(facts.GameVersion) is not { } label || !NumericVersion.TryParse(label, out _))
                 throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
         }
         if (condition.Arch is not null && facts.Arch is null)
@@ -341,7 +347,7 @@ public static class OperationPlanner
             // artifacts keep their declared file name.
             var baseName = artifact.Source.StartsWith("package://", StringComparison.Ordinal)
                 ? artifact.Source["package://".Length..]
-                : artifact.Id + ".zip";
+                : artifact.Id + (artifact.Format == "zip" ? ".zip" : "");
             var filePath = relative.Length == 0
                 ? Path.Combine(context.PackageRoot, baseName)
                 : PathBoundary.Resolve(context.PackageRoot, Path.Combine(baseName, relative));

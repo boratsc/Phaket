@@ -12,9 +12,19 @@ namespace Phaket.Core.Execution;
 public interface IBaseGameSource
 {
     // Store id ("steam" | "epic"), game version label (e.g. "2026.8.18"),
-    // optional pinned manifest id. Returns false when the source cannot serve
-    // this version (the executor then fails with ARTIFACT_MISSING).
-    bool TryPrepare(string store, string version, string? manifestId, string targetDirectory, out string? error);
+    // optional pinned manifest id. A failure carries a readable, localized error code
+    // (the executor then fails with it) instead of a raw tool string. The call may be
+    // interactive (Steam sign-in), so it is async and must not run on the UI thread.
+    Task<BaseGamePrepareResult> TryPrepareAsync(string store, string version, string? manifestId,
+        string targetDirectory, CancellationToken ct = default);
+}
+
+public sealed record BaseGamePrepareResult(bool Success, string? ErrorCode = null, IReadOnlyDictionary<string, string>? Parameters = null)
+{
+    public static BaseGamePrepareResult Ok { get; } = new(true);
+
+    public static BaseGamePrepareResult Fail(string code, params (string Key, string Value)[] parameters) =>
+        new(false, code, parameters.ToDictionary(p => p.Key, p => p.Value));
 }
 
 // Per-version vanilla cache marker. A cache directory without a matching marker
@@ -66,9 +76,12 @@ public static class BaseGameToolArguments
     public const string SteamDepotId = "945361";
     public const string EpicManifestMirror = "https://github.com/whichtwix/Data/raw/master/epic/manifests/";
 
-    public static IReadOnlyList<string> DepotDownloader(string targetDirectory, string? manifestId)
+    public static IReadOnlyList<string> DepotDownloader(string targetDirectory, string? manifestId, string? username = null)
     {
         var args = new List<string> { "-app", SteamAppId, "-depot", SteamDepotId, "-dir", targetDirectory };
+        // The account name is an argument (the tool never prompts for it); the password
+        // still goes to standard input only.
+        if (!string.IsNullOrWhiteSpace(username)) { args.Add("-username"); args.Add(username); }
         if (!string.IsNullOrWhiteSpace(manifestId)) { args.Add("-manifest"); args.Add(manifestId); }
         return args;
     }

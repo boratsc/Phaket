@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using Phaket.Core.Catalog;
+using Phaket.Core.Accounts;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
@@ -14,8 +17,13 @@ public sealed record InstallPreview(string FullName, string Version, IReadOnlyLi
 public sealed record InstallPreparation(string GameId, string ModFullName, string Version, string Endpoint,
     InstallTarget Target, IReadOnlyList<OperationPlan> Plans, IReadOnlyList<string> PackageRoots, IReadOnlyList<ConflictProposal> Conflicts,
     IReadOnlyList<InstallPreview> Preview, string SandboxRoot, string ProfileRoot, string StagingRoot,
-    string StateRoot, string PackageRoot, IReadOnlyList<string>? PlanProfileRoots = null);
-public sealed record InstallOutcome(bool Success, string? ErrorCode, IReadOnlyList<ExecutionJournal> Journals);
+    string StateRoot, string PackageRoot, IReadOnlyList<string>? PlanProfileRoots = null,
+    // "registry" (build id) or "probe" (installed depot manifest); null when unknown.
+    string? GameVersionSource = null);
+// ErrorParameters carries the message placeholders (e.g. the tool tail) so the host
+// can show the localized reason instead of a bare code.
+public sealed record InstallOutcome(bool Success, string? ErrorCode, IReadOnlyList<ExecutionJournal> Journals,
+    IReadOnlyDictionary<string, string>? ErrorParameters = null);
 
 public sealed class ModInstallService
 {
@@ -24,20 +32,45 @@ public sealed class ModInstallService
     private readonly IPackageTransport packageTransport;
     private readonly IReceiptTransport? receiptTransport;
     private readonly ProfileStore profiles;
+    private readonly IBaseGameSource? baseGameSource;
+    private readonly ICatalogTransport? catalogTransport;
+    // PAK-102: a full-package install provisions the pinned vanilla through DepotDownloader.
+    // Steam auth comes from the same store and dialog as the library install; without them
+    // the provision refuses with an actionable message instead of blocking on a prompt.
+    private readonly SteamCredentialStore? steamCredentials;
+    private readonly Func<DepotPrompt, CancellationToken, Task<string>>? steamPrompt;
+    private readonly IProgress<string?>? steamMobileConfirmation;
+    private readonly Func<CancellationToken, Task<LegendaryTokens>>? epicTokens;
+    // W1: a build id the registry cannot resolve must not trigger a full registry sync
+    // on every PrepareAsync. The install service is constructed per action, so the
+    // negative cache is process-wide and expires, allowing a retry after a real sync.
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> UnresolvedBuilds = new(StringComparer.Ordinal);
+    private static readonly TimeSpan UnresolvedBuildsTtl = TimeSpan.FromMinutes(10);
 
     public ModInstallService(string appDataRoot, ModCatalogClient catalog,
-        IPackageTransport? packageTransport = null, IReceiptTransport? receiptTransport = null, ProfileStore? profiles = null)
+        IPackageTransport? packageTransport = null, IReceiptTransport? receiptTransport = null, ProfileStore? profiles = null,
+        IBaseGameSource? baseGameSource = null, ICatalogTransport? catalogTransport = null,
+        SteamCredentialStore? steamCredentials = null,
+        Func<DepotPrompt, CancellationToken, Task<string>>? steamPrompt = null,
+        Func<CancellationToken, Task<LegendaryTokens>>? epicTokens = null,
+        IProgress<string?>? steamMobileConfirmation = null)
     {
         this.appDataRoot = appDataRoot;
         this.catalog = catalog;
         this.packageTransport = packageTransport ?? new HttpPackageTransport();
         this.receiptTransport = receiptTransport;
         this.profiles = profiles ?? new ProfileStore(Path.Combine(appDataRoot, "profiles"));
+        this.baseGameSource = baseGameSource;
+        this.catalogTransport = catalogTransport;
+        this.steamCredentials = steamCredentials;
+        this.steamPrompt = steamPrompt;
+        this.epicTokens = epicTokens;
+        this.steamMobileConfirmation = steamMobileConfirmation;
     }
 
     public async Task<InstallPreparation> PrepareAsync(string gameId, string modFullName, string version,
         string endpoint, InstallTarget target, IReadOnlyDictionary<string, string>? versionOverrides = null,
-        CancellationToken ct = default, string? profileRootOverride = null)
+        CancellationToken ct = default, string? profileRootOverride = null, string? modId = null)
     {
         if (gameId is not ("among-us" or "valheim")) throw new ArgumentException("Unsupported game id.", nameof(gameId));
         if (target.Arch is not (null or "x86" or "x64")) throw new ArgumentException("Unsupported target architecture.", nameof(target));
@@ -48,11 +81,23 @@ public sealed class ModInstallService
         using var db = new ModCatalogStore(Path.Combine(appDataRoot, "catalog.db"));
         await catalog.SyncAsync(gameId, ct);
         var mods = db.GetMods(gameId);
-        var byName = mods.ToDictionary(m => m.FullName, StringComparer.OrdinalIgnoreCase);
-        var source = new CatalogVersionSource(catalog, byName);
+        // Two catalog sources may publish the same full name (a Thunderstore package and a
+        // SusModder mod); a caller that knows the catalog id resolves through it instead.
+        var byName = mods.GroupBy(m => m.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var byId = mods.ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
+        var source = new CatalogVersionSource(catalog, byName, byId, modId);
         var resolution = await new DependencyResolver(source).ResolveWithProposalsAsync(modFullName, version, versionOverrides, ct);
         if (resolution.Conflicts.Count > 0)
             return new(gameId, modFullName, version, endpoint, target, [], [], resolution.Conflicts, [], "", "", "", "", "");
+
+        // PAK-101 follow-up: a version the source marks unavailable must not reach a plan,
+        // whichever caller asked (catalog button, profile update, direct service use). The
+        // view model keeps its own gate for the button label; this one is the contract.
+        if (resolution.Pinned.FirstOrDefault(IsUnavailable) is { } unavailable)
+            throw new PhaketException(ErrorCodes.ModArtifactUnavailable,
+                ("artifact", $"{unavailable.FullName} {unavailable.Version}"),
+                ("arch", target.Arch ?? "unknown"), ("store", target.Store));
 
         var root = target.Sandbox ? Directory.CreateTempSubdirectory("phaket-install-").FullName : "";
         var gameRoot = target.Sandbox ? Path.Combine(root, "game") : Path.GetFullPath(target.GameRoot);
@@ -79,6 +124,10 @@ public sealed class ModInstallService
         var arch = target.Arch ?? InstallationArchProbe.Probe(gameRoot, definition)
             ?? (target.Sandbox ? definition.DefaultArch : null);
         long? buildId = null;
+        // W1/PAK-14 probe: the appmanifest is the installation's own version evidence.
+        // It carries the build id and, when that is not enough, the installed depot
+        // manifest ids that the registry publishes even for rows without a build id.
+        string[] depotManifests = [];
         if (!target.Sandbox && target.Store == "steam" && definition.StoreIds?.TryGetValue("steam", out var appId) == true
             && appId.All(char.IsAsciiDigit))
         {
@@ -92,10 +141,13 @@ public sealed class ModInstallService
                     if (File.Exists(manifestPath))
                     {
                         var manifest = SteamAdapter.ParseAppManifest(manifestPath);
-                        if (manifest?.AppId == appId && manifest.InstallDir == gameDirectory.Name
-                            && long.TryParse(manifest.BuildId, System.Globalization.NumberStyles.None,
+                        if (manifest?.AppId == appId && manifest.InstallDir == gameDirectory.Name)
+                        {
+                            if (long.TryParse(manifest.BuildId, System.Globalization.NumberStyles.None,
                                 System.Globalization.CultureInfo.InvariantCulture, out var parsedBuild))
-                            buildId = parsedBuild;
+                                buildId = parsedBuild;
+                            depotManifests = manifest.DepotManifests?.Values.Distinct(StringComparer.Ordinal).ToArray() ?? [];
+                        }
                     }
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException) { }
@@ -105,6 +157,18 @@ public sealed class ModInstallService
         var packageRoots = new List<string>();
         var previews = new List<InstallPreview>();
         var planProfileRoots = new List<string>();
+        // PAK-96: buildId -> version label comes from the cached build registry. When the
+        // registry does not know the build id, the installation's own depot manifest
+        // identifies the version (W1 fallback); neither fact means unknown, and the
+        // planner refuses instead of guessing.
+        var builds = await LoadBuildsAsync(gameId, target.Store, buildId, depotManifests, endpoint, ct);
+        var installedVersion = GameBuildRegistry.VersionForBuildId(builds, target.Store, buildId);
+        var versionSource = installedVersion is null ? null : "registry";
+        if (installedVersion is null)
+        {
+            installedVersion = GameBuildRegistry.VersionForManifests(builds, target.Store, depotManifests);
+            if (installedVersion is not null) versionSource = "probe";
+        }
         foreach (var mod in resolution.Pinned)
         {
             ct.ThrowIfCancellationRequested();
@@ -114,31 +178,104 @@ public sealed class ModInstallService
             var hash = new string('0', 64);
             string[] entries = [];
             byte[]? packageBytes = null;
-            if (!loader)
+            GeneratedRecipe generated;
+            // A full package pins a concrete vanilla build; when the registry publishes a
+            // manifest for that build and store, the provision step uses it verbatim.
+            var pinnedVersion = mod.Packaging == "full" ? RecipeGenerator.NormalizeGameVersion(mod.AmongVersion) : null;
+            var provisionManifests = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (pinnedVersion is not null)
+                foreach (var store in new[] { "steam", "epic" })
+                    if (GameBuildRegistry.ForLabel(builds, store, pinnedVersion)?.ManifestIds.FirstOrDefault() is { Length: > 0 } manifestId)
+                        provisionManifests[store] = manifestId;
+            if (mod.Packaging is "full" or "dll")
             {
-                await using var sourceStream = await packageTransport.OpenReadAsync(mod.DownloadUrl, ct);
-                using var buffer = new MemoryStream();
-                var chunk = new byte[81920];
-                int count;
-                while ((count = await sourceStream.ReadAsync(chunk, ct)) > 0)
+                // Catalog artifact chosen for this installation's arch/store; refusal
+                // (MOD_ARTIFACT_UNAVAILABLE) is clearer than planning a wrong variant.
+                var selected = ModArtifactSelector.Select(mod.Artifacts, mod.DownloadUrl, mod.Sha256, mod.FileSize,
+                    mod.Arch, mod.FullName, mod.Version, arch, target.Store);
+                // CDN/GitHub is only trusted with a server-declared hash. Promoting the hash
+                // observed after the download would pin whatever an attacker served (TOFU).
+                if (selected.Sha256 is null)
+                    throw new PhaketException(ErrorCodes.ModArtifactHashUndeclared,
+                        ("artifact", $"{mod.FullName} {mod.Version}"));
+                // The catalog is the trusted source for the artifact, but the GitHub
+                // host allowlist is registered by the recipe generator. Register it
+                // before the download, or a GitHub-hosted artifact is refused first.
+                SourcePolicy.AllowModArtifact(selected.Url, selected.Sha256);
+                // A bare .dll artifact is cached under its artifact id, not as a ZIP;
+                // this matches where PackageDownloader looks for it below.
+                var singleDll = RecipeGenerator.IsSingleDllArtifact(mod.Packaging, selected.Url, selected.AssetName);
+                var staged = Path.Combine(modPackages, singleDll ? "package" : "package.zip");
+                var (observed, length) = await DownloadAsync(packageTransport, selected.Url, staged, selected.SizeBytes, ct);
+                if (!string.Equals(selected.Sha256, observed, StringComparison.OrdinalIgnoreCase))
+                    throw new PhaketException(ErrorCodes.ArtifactHashMismatch, ("artifact", mod.FullName));
+                hash = selected.Sha256;
+                if (!singleDll)
                 {
-                    if (buffer.Length + count > 512L * 1024 * 1024) throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable, ("detail", "download too large"));
-                    await buffer.WriteAsync(chunk.AsMemory(0, count), ct);
+                    using var stagedZip = ZipFile.OpenRead(staged);
+                    entries = stagedZip.Entries.Select(e => e.FullName).ToArray();
                 }
-                packageBytes = buffer.ToArray();
-                hash = Convert.ToHexStringLower(SHA256.HashData(packageBytes));
-                buffer.Position = 0;
-                using var sourceZip = new ZipArchive(buffer, ZipArchiveMode.Read);
-                entries = sourceZip.Entries.Select(e => e.FullName).ToArray();
+                generated = RecipeGenerator.GenerateCatalogPackage(mod.FullName, mod.Version, mod.Packaging,
+                    selected.Url, hash, selected.SizeBytes ?? length, selected.Arch ?? arch, mod.AmongVersion, entries, definition,
+                    selected.AssetName, provisionManifests.Count == 0 ? null : provisionManifests, selected.Stores);
             }
-            var generated = RecipeGenerator.Generate(mod.FullName, mod.Version, mod.DownloadUrl, hash,
-                entries, definition, arch);
+            else
+            {
+                if (!loader)
+                {
+                    await using var sourceStream = await packageTransport.OpenReadAsync(mod.DownloadUrl, ct);
+                    using var buffer = new MemoryStream();
+                    var chunk = new byte[81920];
+                    int count;
+                    while ((count = await sourceStream.ReadAsync(chunk, ct)) > 0)
+                    {
+                        if (buffer.Length + count > 512L * 1024 * 1024) throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable, ("detail", "download too large"));
+                        await buffer.WriteAsync(chunk.AsMemory(0, count), ct);
+                    }
+                    packageBytes = buffer.ToArray();
+                    hash = Convert.ToHexStringLower(SHA256.HashData(packageBytes));
+                    buffer.Position = 0;
+                    using var sourceZip = new ZipArchive(buffer, ZipArchiveMode.Read);
+                    entries = sourceZip.Entries.Select(e => e.FullName).ToArray();
+                }
+                generated = RecipeGenerator.Generate(mod.FullName, mod.Version, mod.DownloadUrl, hash,
+                    entries, definition, arch);
+            }
             var recipe = generated.Recipe;
             if (loader && arch is null) throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", "unknown"));
             await PackageDownloader.EnsureArtifactsAsync(recipe, modPackages,
                 packageBytes is null ? packageTransport : new BufferedPackageTransport(mod.DownloadUrl, packageBytes, packageTransport), cancellationToken: ct);
-            using var zip = ZipFile.OpenRead(Path.Combine(modPackages, recipe.Artifacts[0].Id + ".zip"));
-            var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", target.Store, null,
+            var artifact = recipe.Artifacts[0];
+            var artifactPath = Path.Combine(modPackages, artifact.Id + (artifact.Format == "zip" ? ".zip" : ""));
+            string[] previewFiles;
+            long previewSize;
+            if (artifact.Format == "zip")
+            {
+                using var zip = ZipFile.OpenRead(artifactPath);
+                // The preview must show what the plan will actually extract: a full package
+                // is filtered by the recipe's include list, not by "every archive entry".
+                var filters = ArchiveFilters(recipe);
+                var previewEntries = zip.Entries.Where(e => !e.FullName.EndsWith('/'))
+                    .Where(e => filters.Count == 0 || filters.Any(f => SafeArchive.MatchesInclude(e.FullName, f.Strip, f.Include)))
+                    .ToArray();
+                previewFiles = previewEntries.Select(e => e.FullName).ToArray();
+                previewSize = previewEntries.Sum(e => e.Length);
+            }
+            else
+            {
+                previewFiles = DllPreviewFiles(recipe);
+                previewSize = new FileInfo(artifactPath).Length;
+            }
+            // A full package provisions the pinned vanilla version itself, so that is
+            // the version fact. A dll addon takes the installation's own build from the
+            // registry; without a known build the version stays unknown (PAK-96).
+            var gameVersion = mod.Packaging switch
+            {
+                "full" => installedVersion ?? pinnedVersion,
+                "dll" => installedVersion,
+                _ => null,
+            };
+            var facts = new PlanFacts(OperatingSystem.IsWindows() ? "windows" : "linux", target.Store, gameVersion,
                 OperationCatalog.Capabilities, uri => VirtualUri.TryParse(uri, out var scheme, out var path)
                     && scheme == "game" && File.Exists(Path.Combine(gameRoot, path)),
                 mod.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase)
@@ -150,11 +287,65 @@ public sealed class ModInstallService
             plans.Add(OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership)));
             planProfileRoots.Add(planProfileRoot);
             packageRoots.Add(modPackages);
-            previews.Add(new(mod.FullName, mod.Version,
-                zip.Entries.Where(e => !e.FullName.EndsWith('/')).Select(e => e.FullName).ToArray(), zip.Entries.Sum(e => e.Length)));
+            previews.Add(new(mod.FullName, mod.Version, previewFiles, previewSize));
         }
         return new(gameId, modFullName, version, endpoint, target, plans, packageRoots, [], previews, root, profileRoot, stagingRoot,
-            stateRoot, packages, planProfileRoots);
+            stateRoot, packages, planProfileRoots, versionSource);
+    }
+
+    // A dll artifact preview lists the plan's file.copy targets. A malformed step
+    // without a "to" must not crash the preview with a raw KeyNotFoundException.
+    internal static string[] DllPreviewFiles(Recipe recipe) => recipe.Steps
+        .Where(s => s.Use == "file.copy" && s.With.TryGetValue("to", out var to)
+            && to.ValueKind == System.Text.Json.JsonValueKind.String
+            && to.GetString() is { } target && target.StartsWith("game://", StringComparison.Ordinal))
+        .Select(s => s.With["to"].GetString()!["game://".Length..]).ToArray();
+
+    // PAK-96 follow-up: a dll addon with a numeric amongVersion needs the build registry, but
+    // only the Builds screen synced it. An empty cache, or a build id the cache does not know,
+    // triggers one registry sync here. Offline with an existing cache keeps the cache; without
+    // one the version stays unknown and the planner refuses with GAME_BUILD_UNAVAILABLE.
+    private async Task<IReadOnlyList<CatalogBuild>> LoadBuildsAsync(string gameId, string store, long? buildId,
+        IReadOnlyCollection<string> depotManifests, string endpoint, CancellationToken ct)
+    {
+        var key = $"{gameId}|{store}|{buildId}|{string.Join(',', depotManifests.Order(StringComparer.Ordinal))}";
+        bool Known(IReadOnlyList<CatalogBuild> builds) =>
+            GameBuildRegistry.VersionForBuildId(builds, store, buildId) is not null
+            || GameBuildRegistry.VersionForManifests(builds, store, depotManifests) is not null;
+        try
+        {
+            using var cache = new CatalogStore(Path.Combine(appDataRoot, "catalog.db"));
+            var builds = cache.GetBuilds(gameId);
+            if (builds.Count > 0 && Known(builds)) return builds;
+            // One sync attempt per installation fact until the TTL expires; a concurrent
+            // screen writing the same database must not turn into a raw SqliteException.
+            var cachedKey = appDataRoot + "|" + key;
+            var now = DateTimeOffset.UtcNow;
+            if (UnresolvedBuilds.TryGetValue(cachedKey, out var retryAt) && retryAt > now) return builds;
+            UnresolvedBuilds[cachedKey] = now + UnresolvedBuildsTtl;
+            if (catalogTransport is { } provided)
+            {
+                if (!await TrySyncAsync(provided, cache, ct)) return builds;
+            }
+            else if (CatalogSettings.IsValid(endpoint))
+            {
+                using var http = new HttpClient { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(15) };
+                if (!await TrySyncAsync(new HttpCatalogTransport(http), cache, ct)) return builds;
+            }
+            return cache.GetBuilds(gameId);
+        }
+        // Fail-safe: keep whatever the cache could give; an empty cache becomes the
+        // planner's readable GAME_BUILD_UNAVAILABLE refusal, never a raw SQLite error.
+        catch (Microsoft.Data.Sqlite.SqliteException) { return []; }
+    }
+
+    // False when the snapshot could not be written (locked database): the caller then
+    // keeps the rows it already read instead of failing the whole preparation.
+    internal static async Task<bool> TrySyncAsync(ICatalogTransport transport, CatalogStore cache, CancellationToken ct)
+    {
+        try { await new CatalogClient(transport, cache).FullSyncAsync(ct); return true; }
+        catch (Exception ex) when (ex is HttpRequestException or SocketException or TaskCanceledException
+            or Microsoft.Data.Sqlite.SqliteException) { return false; }
     }
 
     public async Task<InstallOutcome> ExecuteAsync(InstallPreparation preparation, bool planAccepted,
@@ -179,7 +370,10 @@ public sealed class ModInstallService
                 var planProfileRoot = preparation.PlanProfileRoots is { Count: > 0 } roots ? roots[i] : preparation.ProfileRoot;
                 var ctx = new PlanExecutionContext(preparation.Target.Sandbox ? Path.Combine(preparation.SandboxRoot, "game") : Path.GetFullPath(preparation.Target.GameRoot),
                     planProfileRoot, preparation.StagingRoot, preparation.PackageRoots[i], definition,
-                    plan.RecipeRef.Id, "mod-profile", preparation.StateRoot);
+                    plan.RecipeRef.Id, "mod-profile", preparation.StateRoot,
+                    baseGameSource ?? new ToolBaseGameSource(steamCredentials: steamCredentials,
+                        steamPrompt: steamPrompt, epicTokens: epicTokens,
+                        mobileConfirmation: steamMobileConfirmation));
                 activeAttempt = (plan, ctx, i);
                 activeAttemptCompleted = false;
                 var journal = new InstallOrchestrator(new PlanExecutor(ctx)).Run(plan, progress, ct,
@@ -219,7 +413,7 @@ public sealed class ModInstallService
                 RollbackFailedAttempt(activeAttempt, activeAttemptCompleted, executed, profiles, preparation, appDataRoot);
                 await new ReceiptSender(receiptTransport).SendAsync(preparation.GameId, preparation.ModFullName,
                     preparation.Version, preparation.Target.Store, "failed", code, CancellationToken.None);
-                return new(false, code, journals);
+                return new(false, code, journals, (ex as PhaketException)?.Error.Parameters);
             }
         }
         await new ReceiptSender(receiptTransport).SendAsync(preparation.GameId, preparation.ModFullName,
@@ -272,7 +466,63 @@ public sealed class ModInstallService
         }
     }
 
+    // archive.extract steps that read the downloaded package: their include/strip pair is
+    // what the plan applies, so the preview applies the same one.
+    private static IReadOnlyList<(IReadOnlyList<string>? Include, int Strip)> ArchiveFilters(Recipe recipe) =>
+        recipe.Steps.Where(step => step.Use == "archive.extract"
+                && step.With.TryGetValue("from", out var from) && from.GetString() == "package://package")
+            .Select(step =>
+            {
+                var include = step.With.TryGetValue("include", out var element) && element.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? (IReadOnlyList<string>)element.EnumerateArray().Select(e => e.GetString() ?? "").ToArray()
+                    : null;
+                var strip = step.With.TryGetValue("stripComponents", out var raw) && raw.TryGetInt32(out var value) ? value : 0;
+                return (include, strip);
+            }).ToArray();
+
+    // A source row can say the version is gone; a row with neither a URL nor artifacts has
+    // nothing to download either. Both are refused before any plan or download is made.
+    private static bool IsUnavailable(PinnedMod mod) =>
+        string.Equals(mod.Availability, "unavailable", StringComparison.OrdinalIgnoreCase)
+        || (string.IsNullOrWhiteSpace(mod.DownloadUrl) && mod.Artifacts is not { Count: > 0 });
+
     private static string SafeFile(string value) => string.Concat(value.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_'));
+
+    // Streams directly to disk: full-game ZIPs are hundreds of MB and must not be
+    // buffered in memory. The returned hash is of the bytes actually received.
+    private static async Task<(string Sha256, long Length)> DownloadAsync(IPackageTransport transport, string url,
+        string path, long? expectedSize, CancellationToken ct)
+    {
+        var limit = expectedSize ?? 2L * 1024 * 1024 * 1024;
+        var temp = path + ".phaket-tmp";
+        try
+        {
+            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            long received = 0;
+            await using (var source = await transport.OpenReadAsync(url, ct))
+            await using (var destination = File.Create(temp))
+            {
+                var buffer = new byte[81920];
+                int read;
+                while ((read = await source.ReadAsync(buffer, ct)) > 0)
+                {
+                    received += read;
+                    if (received > limit)
+                        throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable,
+                            ("artifact", url), ("detail", "download exceeds declared size"));
+                    hasher.AppendData(buffer, 0, read);
+                    await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+                }
+            }
+            File.Move(temp, path, overwrite: true);
+            return (Convert.ToHexStringLower(hasher.GetHashAndReset()), received);
+        }
+        catch
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort temp cleanup */ }
+            throw;
+        }
+    }
 
     private sealed class BufferedPackageTransport(string url, byte[] bytes, IPackageTransport fallback) : IPackageTransport
     {
@@ -281,11 +531,17 @@ public sealed class ModInstallService
             : fallback.OpenReadAsync(source, cancellationToken);
     }
 
-    private sealed class CatalogVersionSource(ModCatalogClient client, IReadOnlyDictionary<string, ThunderstoreMod> mods) : IModVersionSource
+    private sealed class CatalogVersionSource(ModCatalogClient client, IReadOnlyDictionary<string, ThunderstoreMod> mods,
+        IReadOnlyDictionary<string, ThunderstoreMod> byId, string? modId) : IModVersionSource
     {
         public async Task<ThunderstoreModDetails?> GetDetailsAsync(string fullName, CancellationToken cancellationToken)
         {
-            if (!mods.TryGetValue(fullName, out var mod)) return null;
+            // The caller can name the exact catalog row (a composition item), which matters
+            // when another source publishes the same full name.
+            var mod = modId is not null && byId.TryGetValue(modId, out var pinned)
+                && string.Equals(pinned.FullName, fullName, StringComparison.OrdinalIgnoreCase) ? pinned
+                : mods.TryGetValue(fullName, out var byName) ? byName : null;
+            if (mod is null) return null;
             try { return await client.GetModAsync(mod.Id, cancellationToken); }
             catch (Exception) when (!cancellationToken.IsCancellationRequested) { return null; }
         }

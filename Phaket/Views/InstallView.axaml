@@ -70,7 +70,7 @@
                                         <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,7">
                                             <mi:MaterialIcon Kind="CheckCircle" IsVisible="{Binding IsComplete}" Foreground="{StaticResource SuccessBrush}" Width="22" Height="22" />
                                             <Panel Width="22" Height="22" IsVisible="{Binding !IsComplete}">
-                                                <TextBlock Text="○" IsVisible="{Binding !IsActive}" Foreground="{StaticResource MutedBrush}" FontSize="20" />
+                                                <mi:MaterialIcon Kind="CheckboxBlankCircleOutline" Width="20" Height="20" IsVisible="{Binding !IsActive}" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 <ProgressBar IsVisible="{Binding IsActive}" IsIndeterminate="True" Foreground="{StaticResource AmberBrush}" Width="22" Height="6" VerticalAlignment="Center" />
                                             </Panel>
                                             <TextBlock Text="{Binding Key, Converter={x:Static services:LocKeyConverter.Instance}}" VerticalAlignment="Center" TextWrapping="Wrap" />

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Phaket.Core.Accounts;
 using Phaket.Core.Catalog;
 using Phaket.Core.Execution;
 using Phaket.Core.Domain;
@@ -167,6 +168,9 @@ public partial class InstallViewModel : ViewModelBase
         // a checkbox the user toggled after Start was pressed.
         var installation = UseDetectedInstall ? game.SelectedInstallation : null;
         var detectedRoot = installation?.RootPath;
+        // PAK-102/105: the provision asks for Steam Guard on the shared dialog. The context
+        // is captured here (UI thread) because the tool runs on a worker.
+        var promptContext = SynchronizationContext.Current;
         try
         {
             var token = cancellation.Token;
@@ -255,7 +259,10 @@ public partial class InstallViewModel : ViewModelBase
                         new Progress<ArtifactDownloadProgress>(p => Dispatcher.UIThread.Post(() =>
                         { if (IsRunning) StatusMessage = LocalizationService.Instance["Install.Downloading"] + " " + p.ArtifactId; })), token);
                 executor = new PlanExecutor(new PlanExecutionContext(gameRoot, profileRoot, staging, packages,
-                    definition, recipe.Id, "install-profile", state, new ToolBaseGameSource()));
+                    definition, recipe.Id, "install-profile", state,
+                    new ToolBaseGameSource(steamCredentials: new SteamCredentialStore(),
+                        steamPrompt: (p, ct) => SteamPromptViewModel.Shared.RequestAsync(p, ct, promptContext),
+                        mobileConfirmation: SteamPromptViewModel.MobileConfirmationSink())));
                 var reporter = new Progress<InstallProgress>(p => Dispatcher.UIThread.Post(() =>
                 {
                     if (!IsRunning) return;

@@ -78,7 +78,7 @@
           "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
           "arch": { "enum": ["x86", "x64"] },
           "sizeBytes": { "type": "integer", "minimum": 1 },
-          "format": { "enum": ["zip"] }
+          "format": { "enum": ["zip", "dll"] }
         }
       }
     },

@@ -21,6 +21,11 @@ public static class ErrorCodes
     public const string ArtifactSizeMismatch = "ARTIFACT_SIZE_MISMATCH";
     public const string ModSourceInvalid = "MOD_SOURCE_INVALID";
     public const string ModSourceHostNotAllowed = "MOD_SOURCE_HOST_NOT_ALLOWED";
+    // No catalog artifact of this mod version serves the installation's arch/store.
+    public const string ModArtifactUnavailable = "MOD_ARTIFACT_UNAVAILABLE";
+    // The catalog artifact carries no declared SHA-256. The observed hash is never promoted
+    // to a pin: without a server-declared hash there is nothing to trust (no TOFU).
+    public const string ModArtifactHashUndeclared = "MOD_ARTIFACT_HASH_UNDECLARED";
     public const string ArchiveInvalid = "ARCHIVE_INVALID";
     public const string ArchiveFormatUnsupported = "ARCHIVE_FORMAT_UNSUPPORTED";
     public const string PlanNotAccepted = "PLAN_NOT_ACCEPTED";
@@ -38,6 +43,17 @@ public static class ErrorCodes
     // A session folder or token file could not be made private: the secret is never written
     // where other accounts could read it (PAK-66, fail closed instead of fail open).
     public const string SessionPrivacyFailed = "SESSION_PRIVACY_FAILED";
+    // Mod provision needs a pinned vanilla build; without the manifest the tool would fetch
+    // the current depot and silently break the mod's version pin (PAK-102).
+    public const string BaseGameManifestMissing = "BASE_GAME_MANIFEST_MISSING";
+    // Steam sign-in lives in Phaket (PAK-60). A provision without it cannot answer the
+    // tool's prompt, so it refuses with the one action that fixes it.
+    public const string BaseGameSignInRequired = "BASE_GAME_SIGN_IN_REQUIRED";
+    public const string BaseGameAuthCancelled = "BASE_GAME_AUTH_CANCELLED";
+    public const string BaseGameTimeout = "BASE_GAME_TIMEOUT";
+    public const string BaseGameToolFailed = "BASE_GAME_TOOL_FAILED";
+    public const string EpicSignInRequired = "EPIC_SIGN_IN_REQUIRED";
+    public const string DepotDownloaderDotnetMissing = "DEPOTDOWNLOADER_DOTNET_NOT_FOUND";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)

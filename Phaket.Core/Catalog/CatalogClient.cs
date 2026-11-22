@@ -10,7 +10,9 @@ public sealed record CatalogBuild(
     IReadOnlyList<string> DepotIds, IReadOnlyList<string> ManifestIds, string Branch,
     string AvailabilityStatus, string Source, string SourceReference,
     DateTimeOffset? ObservedAt, DateTimeOffset? VerifiedAt, double Confidence, string Provenance,
-    DateTimeOffset? ReleasedAt = null, string? Arch = null)
+    DateTimeOffset? ReleasedAt = null, string? Arch = null,
+    // Other spellings the source publishes for the same build (SusModder dbValue "2026-8-18").
+    IReadOnlyList<string>? Aliases = null)
 {
     // Display-only: publisher's release date when the backend knows it.
     [System.Text.Json.Serialization.JsonIgnore]
@@ -44,10 +46,13 @@ public sealed class CatalogStore : IDisposable
 {
     private readonly SqliteConnection connection;
 
-    public CatalogStore(string databasePath)
+    public CatalogStore(string databasePath, int busyTimeoutSeconds = 5)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
-        connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        // The Builds screen and an install preparation open separate connections to
+        // the same file. "Default Timeout" is SQLite's busy wait: without it a
+        // concurrent writer blocks for 30 s and then fails with "database is locked".
+        connection = new SqliteConnection($"Data Source={databasePath};Pooling=False;Default Timeout={busyTimeoutSeconds}");
         connection.Open();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
@@ -56,7 +61,7 @@ public sealed class CatalogStore : IDisposable
                 build_id TEXT NOT NULL, depot_ids TEXT NOT NULL, manifest_ids TEXT NOT NULL, branch TEXT NOT NULL,
                 availability_status TEXT NOT NULL, source TEXT NOT NULL, source_reference TEXT NOT NULL,
                 observed_at TEXT, verified_at TEXT, confidence REAL NOT NULL, provenance TEXT NOT NULL,
-                released_at TEXT, arch TEXT);
+                released_at TEXT, arch TEXT, aliases TEXT);
             CREATE TABLE IF NOT EXISTS catalog_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """;
         cmd.ExecuteNonQuery();
@@ -76,6 +81,12 @@ public sealed class CatalogStore : IDisposable
         {
             using var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE catalog_builds ADD COLUMN arch TEXT";
+            alter.ExecuteNonQuery();
+        }
+        if (!names.Contains("aliases"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE catalog_builds ADD COLUMN aliases TEXT";
             alter.ExecuteNonQuery();
         }
     }
@@ -167,9 +178,9 @@ public sealed class CatalogStore : IDisposable
         using var cmd = connection.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
-            INSERT INTO catalog_builds(id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at,arch)
-            VALUES($id,$game,$store,$version,$build,$depot,$manifest,$branch,$status,$source,$ref,$observed,$verified,$confidence,$provenance,$released,$arch)
-            ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id,store=excluded.store,version_label=excluded.version_label,build_id=excluded.build_id,depot_ids=excluded.depot_ids,manifest_ids=excluded.manifest_ids,branch=excluded.branch,availability_status=excluded.availability_status,source=excluded.source,source_reference=excluded.source_reference,observed_at=excluded.observed_at,verified_at=excluded.verified_at,confidence=excluded.confidence,provenance=excluded.provenance,released_at=excluded.released_at,arch=excluded.arch
+            INSERT INTO catalog_builds(id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at,arch,aliases)
+            VALUES($id,$game,$store,$version,$build,$depot,$manifest,$branch,$status,$source,$ref,$observed,$verified,$confidence,$provenance,$released,$arch,$aliases)
+            ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id,store=excluded.store,version_label=excluded.version_label,build_id=excluded.build_id,depot_ids=excluded.depot_ids,manifest_ids=excluded.manifest_ids,branch=excluded.branch,availability_status=excluded.availability_status,source=excluded.source,source_reference=excluded.source_reference,observed_at=excluded.observed_at,verified_at=excluded.verified_at,confidence=excluded.confidence,provenance=excluded.provenance,released_at=excluded.released_at,arch=excluded.arch,aliases=excluded.aliases
             """;
         cmd.Parameters.AddWithValue("$id", payload.GetProperty("id").GetString()!);
         cmd.Parameters.AddWithValue("$game", payload.GetProperty("gameId").GetString()!);
@@ -192,13 +203,16 @@ public sealed class CatalogStore : IDisposable
         var arch = payload.TryGetProperty("arch", out var archValue) && archValue.ValueKind == JsonValueKind.String
             ? archValue.GetString() : null;
         cmd.Parameters.AddWithValue("$arch", arch is "x64" or "x86" ? arch : DBNull.Value);
+        // Older catalog payloads carry no aliases; the column stays NULL and reads as empty.
+        cmd.Parameters.AddWithValue("$aliases", payload.TryGetProperty("aliases", out var aliasesValue)
+            && aliasesValue.ValueKind == JsonValueKind.Array ? aliasesValue.GetRawText() : (object)DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
     public IReadOnlyList<CatalogBuild> GetBuilds(string gameId, string? store = null)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at,arch FROM catalog_builds WHERE game_id=$game AND ($store IS NULL OR store=$store) ORDER BY id";
+        cmd.CommandText = "SELECT id,game_id,store,version_label,build_id,depot_ids,manifest_ids,branch,availability_status,source,source_reference,observed_at,verified_at,confidence,provenance,released_at,arch,aliases FROM catalog_builds WHERE game_id=$game AND ($store IS NULL OR store=$store) ORDER BY id";
         cmd.Parameters.AddWithValue("$game", gameId);
         cmd.Parameters.AddWithValue("$store", (object?)store ?? DBNull.Value);
         var results = new List<CatalogBuild>();
@@ -213,7 +227,8 @@ public sealed class CatalogStore : IDisposable
                 reader.IsDBNull(12) ? null : DateTimeOffset.Parse(reader.GetString(12)),
                 reader.GetDouble(13), reader.GetString(14),
                 reader.IsDBNull(15) ? null : DateTimeOffset.Parse(reader.GetString(15)),
-                reader.IsDBNull(16) ? null : reader.GetString(16)));
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.IsDBNull(17) ? null : JsonSerializer.Deserialize<string[]>(reader.GetString(17))));
         }
         return results;
     }

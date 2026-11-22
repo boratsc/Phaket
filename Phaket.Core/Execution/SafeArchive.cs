@@ -13,8 +13,12 @@ public static class SafeArchive
     public const int MaxEntries = 100_000;
     public const int MaxRatio = 100;
 
-    // Pass 1: validate every entry and compute resolved destinations.
-    public static IReadOnlyList<string> PlanWrites(string archivePath, string targetRoot, string artifactId, int stripComponents = 0)
+    // Pass 1: validate every entry and compute resolved destinations. Every entry is
+    // validated even when `include` filters it out, so an archive with a traversal
+    // entry is rejected regardless of what the recipe asks to extract.
+    // `include` holds path globs matched against the path AFTER stripComponents.
+    public static IReadOnlyList<string> PlanWrites(string archivePath, string targetRoot, string artifactId,
+        int stripComponents = 0, IReadOnlyList<string>? include = null)
     {
         using var zip = ZipFile.OpenRead(archivePath);
         var root = Path.GetFullPath(targetRoot);
@@ -26,6 +30,7 @@ public static class SafeArchive
         {
             var destination = ValidateEntry(entry, root, artifactId, stripComponents);
             if (destination is null) continue; // directory entry
+            if (!Included(entry.FullName, stripComponents, include)) continue;
             total += entry.Length;
             compressed += entry.CompressedLength;
             if (total > MaxTotalBytes) throw Unsafe(artifactId, "uncompressed size limit exceeded");
@@ -37,7 +42,8 @@ public static class SafeArchive
 
     // Directories the extract would create that do NOT exist yet, deepest last.
     // Recorded in the journal BEFORE any write so a partial failure can be cleaned.
-    public static IReadOnlyList<string> PlanDirectories(string archivePath, string targetRoot, string artifactId, int stripComponents = 0)
+    public static IReadOnlyList<string> PlanDirectories(string archivePath, string targetRoot, string artifactId,
+        int stripComponents = 0, IReadOnlyList<string>? include = null)
     {
         using var zip = ZipFile.OpenRead(archivePath);
         var root = Path.GetFullPath(targetRoot);
@@ -46,6 +52,14 @@ public static class SafeArchive
         {
             var name = NormalizeName(entry.FullName, stripComponents);
             if (name is null || name.Length == 0) continue;
+            // With an include list, directories are exactly the parents of included
+            // files; the archive's own directory entries are not extracted. An empty
+            // list (not null) includes nothing, so no directories are planned.
+            if (include is not null)
+            {
+                if (name.EndsWith('/')) continue;
+                if (!Included(entry.FullName, stripComponents, include)) continue;
+            }
             var trimmed = name.TrimEnd('/');
             if (trimmed.Length == 0) continue;
             // Every ancestor directory of each entry, resolved to its real path.
@@ -67,9 +81,9 @@ public static class SafeArchive
     // Pass 2: write the pre-validated entries. beforeOverwrite runs immediately
     // before each file write (base-state capture).
     public static IReadOnlyList<string> Extract(string archivePath, string targetRoot, string artifactId,
-        int stripComponents = 0, Action<string>? beforeOverwrite = null)
+        int stripComponents = 0, Action<string>? beforeOverwrite = null, IReadOnlyList<string>? include = null)
     {
-        var planned = PlanWrites(archivePath, targetRoot, artifactId, stripComponents);
+        var planned = PlanWrites(archivePath, targetRoot, artifactId, stripComponents, include);
         using var zip = ZipFile.OpenRead(archivePath);
         var root = Path.GetFullPath(targetRoot);
         Directory.CreateDirectory(root);
@@ -79,6 +93,12 @@ public static class SafeArchive
         {
             var name = NormalizeName(entry.FullName, stripComponents);
             if (name is null) continue;
+            if (include is not null)
+            {
+                // Parent directories appear on demand when included files are written.
+                if (name.EndsWith('/')) continue;
+                if (!Included(entry.FullName, stripComponents, include)) continue;
+            }
             if (name.Length == 0 || entry.FullName.Replace('\\', '/').EndsWith('/'))
             {
                 var dirName = name.TrimEnd('/');
@@ -112,6 +132,21 @@ public static class SafeArchive
             name = string.Join('/', parts.Skip(stripComponents));
         }
         return name.Length == 0 ? null : name;
+    }
+
+    // stripComponents is applied first, then the stripped path is matched: an
+    // archive that wraps everything in one folder still matches `BepInEx/**`.
+    // Null means "no filter" (the whole archive); an empty list is a filter that
+    // matches nothing and must not silently fail open.
+    public static bool MatchesInclude(string fullName, int stripComponents, IReadOnlyList<string>? include) =>
+        Included(fullName, stripComponents, include);
+
+    private static bool Included(string fullName, int stripComponents, IReadOnlyList<string>? include)
+    {
+        if (include is null) return true;
+        if (include.Count == 0) return false;
+        var name = NormalizeName(fullName, stripComponents)?.TrimEnd('/');
+        return name is { Length: > 0 } && include.Any(pattern => Glob.IsMatch(pattern, name));
     }
 
     // Returns the resolved file destination, or null for directory entries.

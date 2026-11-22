@@ -7,11 +7,13 @@ using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Phaket.Core.Accounts;
 using Phaket.Core.Catalog;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
 using Phaket.Core.Mods;
 using Phaket.Core.Omrl;
+using Phaket.Core.Platforms;
 using Phaket.Services;
 
 namespace Phaket.ViewModels;
@@ -46,6 +48,13 @@ public partial class ModCatalogViewModel : ViewModelBase
         if (autoSync) _ = RefreshCommand.ExecuteAsync(null);
     }
     public ObservableCollection<ThunderstoreMod> Mods { get; } = [];
+    // PAK-101: the browser shows both catalog sources; filtering never hides the source fact.
+    [ObservableProperty] private string sourceFilter = "all";
+    public bool IsAllSource => SourceFilter == "all";
+    public bool IsThunderstoreSource => SourceFilter == "thunderstore";
+    public bool IsSusmodderSource => SourceFilter == "susmodder";
+    // The selected mod's versions with the artifact variant the planner would pick (PAK-101).
+    public ObservableCollection<CatalogVersionItem> Versions { get; } = [];
     [ObservableProperty] private string endpoint = CatalogSettings.DefaultEndpoint;
     [ObservableProperty] private string searchText = "";
     [ObservableProperty] private string statusMessage = "";
@@ -56,8 +65,17 @@ public partial class ModCatalogViewModel : ViewModelBase
     [ObservableProperty] private ThunderstoreMod? selectedMod;
     [ObservableProperty] private ThunderstoreModDetails? details;
     public bool HasDetails => Details is not null;
-    partial void OnDetailsChanged(ThunderstoreModDetails? value) => OnPropertyChanged(nameof(HasDetails));
+    partial void OnDetailsChanged(ThunderstoreModDetails? value) { OnPropertyChanged(nameof(HasDetails)); RebuildVersions(); }
     partial void OnSearchTextChanged(string value) => Filter();
+    partial void OnSourceFilterChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsAllSource));
+        OnPropertyChanged(nameof(IsThunderstoreSource));
+        OnPropertyChanged(nameof(IsSusmodderSource));
+        Filter();
+    }
+    [RelayCommand]
+    private void SetSourceFilter(string? source) => SourceFilter = source is "thunderstore" or "susmodder" ? source : "all";
     partial void OnSelectedModChanged(ThunderstoreMod? value)
     {
         var generation = ++selectionGeneration;
@@ -65,16 +83,47 @@ public partial class ModCatalogViewModel : ViewModelBase
         if (value is not null) _ = LoadDetailsAsync(value, generation);
     }
     internal string? LatestVersion(string fullName) =>
-        all.Concat(Mods).FirstOrDefault(m => string.Equals(m.FullName, fullName, StringComparison.OrdinalIgnoreCase))?.Latest.VersionNumber;
+        all.Concat(Mods).FirstOrDefault(m => string.Equals(m.FullName, fullName, StringComparison.OrdinalIgnoreCase))
+            is { Latest.IsAvailable: true } mod ? mod.Latest.VersionNumber : null;
     private void Filter()
     {
         var q = SearchText.Trim();
         var selected = SelectedMod;
         Mods.Clear();
         foreach (var mod in all)
-            if (q.Length == 0 || mod.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || mod.Owner.Contains(q, StringComparison.OrdinalIgnoreCase)) Mods.Add(mod);
+            if ((q.Length == 0 || mod.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || mod.Owner.Contains(q, StringComparison.OrdinalIgnoreCase))
+                && (SourceFilter == "all" || string.Equals(mod.Source ?? "thunderstore", SourceFilter, StringComparison.OrdinalIgnoreCase))) Mods.Add(mod);
         IsEmpty = Mods.Count == 0;
         if (selected is not null && Mods.Contains(selected)) SelectedMod = selected;
+    }
+    // The artifact the planner will use for a chosen sandbox arch/store; a real installation's
+    // arch is probed at plan time, so there is no variant to name before the plan exists.
+    private void RebuildVersions()
+    {
+        Versions.Clear();
+        if (Details is null || SelectedMod is null) return;
+        var arch = SelectedTarget?.Target.Sandbox == true ? SelectedArch : null;
+        var store = SelectedTarget?.Target.Store ?? "steam";
+        foreach (var version in Details.Versions)
+            Versions.Add(arch is null
+                ? new(version, null, false)
+                : DescribeVariant(version, SelectedMod.FullName, arch, store));
+    }
+    private static CatalogVersionItem DescribeVariant(ThunderstoreVersion version, string fullName, string arch, string store)
+    {
+        if (version.Artifacts is not { Count: > 0 }) return new(version, null, false);
+        try
+        {
+            var selected = ModArtifactSelector.Select(version, fullName, arch, store);
+            var artifact = version.Artifacts.FirstOrDefault(a => a.Url == selected.Url);
+            var parts = new List<string>();
+            if (selected.Arch is { Length: > 0 } selectedArch) parts.Add(selectedArch);
+            if (selected.Stores is { Count: > 0 } stores) parts.Add(string.Join("/", stores));
+            if (artifact?.Source is { Length: > 0 } source) parts.Add(source);
+            if (selected.SizeBytes is { } size) parts.Add((size / 1024d / 1024d).ToString("0.#", CultureInfo.CurrentCulture) + " MB");
+            return new(version, string.Join(" · ", parts), false);
+        }
+        catch (PhaketException) { return new(version, null, true); }
     }
     private HttpClient CreateHttp() {
         if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) throw new UriFormatException();
@@ -128,7 +177,7 @@ public partial class ModCatalogViewModel : ViewModelBase
     [ObservableProperty] private bool isSandboxTarget;
     public ObservableCollection<InstallTargetChoice> Targets { get; } = [];
     [ObservableProperty] private InstallTargetChoice? selectedTarget;
-    partial void OnSelectedTargetChanged(InstallTargetChoice? value) { OnPropertyChanged(nameof(SandboxSelected)); if (!IsPreparing) ClearInstall(); }
+    partial void OnSelectedTargetChanged(InstallTargetChoice? value) { OnPropertyChanged(nameof(SandboxSelected)); if (!IsPreparing) ClearInstall(); RebuildVersions(); }
 
     [RelayCommand]
     private async Task ChooseFolderAsync()
@@ -155,7 +204,7 @@ public partial class ModCatalogViewModel : ViewModelBase
     [ObservableProperty] private string? selectedArch;
     // Only a sandbox needs a declared architecture; a real install is probed from its binary.
     public bool SandboxSelected => SelectedTarget?.Target.Sandbox == true;
-    partial void OnSelectedArchChanged(string? value) { if (!IsPreparing) ClearInstall(); }
+    partial void OnSelectedArchChanged(string? value) { if (!IsPreparing) ClearInstall(); RebuildVersions(); }
 
     public ObservableCollection<InstallPreview> Preview { get; } = [];
     public ObservableCollection<PlannedOperation> Operations { get; } = [];
@@ -171,6 +220,13 @@ public partial class ModCatalogViewModel : ViewModelBase
     {
         if (version is null || SelectedMod is null) return;
         if (SelectedTarget is null) return;
+        // PAK-101: an unavailable version stays listed, but must not start a plan that cannot
+        // download anything; the reason is shown next to the disabled button.
+        if (!version.IsAvailable)
+        {
+            InstallStatus = LocalizationService.Instance["ModInstall.VersionUnavailable"];
+            return;
+        }
         await BeginInstallAsync(SelectedMod.FullName, version.VersionNumber, SelectedTarget.Target);
     }
     internal async Task BeginInstallAsync(string name, string version, InstallTarget installTarget)
@@ -231,6 +287,10 @@ public partial class ModCatalogViewModel : ViewModelBase
             }
         }
         catch (PhaketException ex) when (ex.Error.Code == "LOADER_ARCH_UNAVAILABLE") { InstallStatus = LocalizationService.Instance["ModInstall.LoaderArchUnavailable"]; }
+        // The install service refuses a version the source marked unavailable; say why
+        // instead of a generic prepare failure (the catalog button has its own gate).
+        catch (PhaketException ex) when (ex.Error.Code == ErrorCodes.ModArtifactUnavailable)
+        { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
         // The planner refused because a needed fact (arch/build) is unknown: say which one.
         catch (PhaketException ex) when (ex.Error.Code == ErrorCodes.InstallFactsMissing)
         { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
@@ -267,12 +327,26 @@ public partial class ModCatalogViewModel : ViewModelBase
             if (ExecuteOverride is not null) result = await ExecuteOverride(acceptedPlan, true, progress);
             else
             {
+                // PAK-102: a full package provisions the pinned vanilla; Steam auth uses the
+                // same store and window-level dialog as the library install. The context is
+                // captured here (UI thread) because the executor runs on a worker thread.
+                var context = SynchronizationContext.Current;
+                var prompt = SteamPromptViewModel.Shared;
                 using var http = transport is null ? CreateHttp() : null;
                 using var db = new ModCatalogStore(Path.Combine(appDataRoot, "catalog.db"));
-                var service = new ModInstallService(appDataRoot, new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), db));
+                // Epic provisions reuse the PAK-58 token file in a private legendary config;
+                // an unsigned account is refused with the sign-in instruction.
+                var epicTokens = LegendaryTokenProvider.From(new EpicAccountService());
+                var service = new ModInstallService(appDataRoot, new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), db),
+                    steamCredentials: new SteamCredentialStore(), steamPrompt: (p, ct) => prompt.RequestAsync(p, ct, context),
+                    epicTokens: epicTokens, steamMobileConfirmation: SteamPromptViewModel.MobileConfirmationSink());
                 result = await Task.Run(() => service.ExecuteAsync(acceptedPlan, true, progress));
             }
-            InstallStatus = LocalizationService.Instance[result.Success ? "ModInstall.Success" : "ModInstall.Failed"];
+            var loc = LocalizationService.Instance;
+            InstallStatus = result.Success ? loc["ModInstall.Success"]
+                : result.ErrorCode is { } code && ErrorMessages.TryGetTemplate(code, loc.CurrentLanguage, out _)
+                    ? ErrorMessages.Format(code, loc.CurrentLanguage, result.ErrorParameters)
+                    : loc["ModInstall.Failed"];
             ClearInstall(); installedChanged?.Invoke();
         }
         catch (Exception) { ClearInstall(); installedChanged?.Invoke(); InstallStatus = LocalizationService.Instance["ModInstall.Failed"]; }
@@ -288,3 +362,12 @@ public partial class ModCatalogViewModel : ViewModelBase
 }
 
 public sealed record InstallTargetChoice(string Label, InstallTarget Target);
+
+// One version row in the catalog details: the server's availability plus the artifact
+// variant the planner would pick for the current sandbox target (null when not determined,
+// VariantMissing when the version has artifacts but none matches).
+public sealed record CatalogVersionItem(ThunderstoreVersion Version, string? VariantText, bool VariantMissing)
+{
+    public bool IsAvailable => Version.IsAvailable;
+    public bool HasVariant => VariantText is not null;
+}

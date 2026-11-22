@@ -4,10 +4,56 @@ using Microsoft.Data.Sqlite;
 namespace Phaket.Core.Catalog;
 
 public sealed record ThunderstoreVersion(string VersionNumber, string FullName, string DownloadUrl,
-    long FileSize, DateTimeOffset DateCreated, IReadOnlyList<string> Dependencies, bool IsActive = true);
+    long? FileSize, DateTimeOffset DateCreated, IReadOnlyList<string> Dependencies, bool IsActive = true,
+    // SusModder catalog fields (PAK-95); all optional so Thunderstore records and
+    // older caches deserialize unchanged.
+    IReadOnlyList<ModArtifact>? Artifacts = null,
+    string? Packaging = null,
+    string? AmongVersion = null,
+    string? Arch = null,
+    string? Source = null,
+    string? Sha256 = null,
+    // Server-reported availability (PAK-101). Thunderstore and older caches carry none.
+    string? Availability = null)
+{
+    // A version the source no longer serves: no usable download target. A version with an
+    // artifacts list is usable only when one artifact has a non-empty https URL and the
+    // declared sha256 the installer verifies; a placeholder row must not look installable.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsUnavailable => string.Equals(Availability, "unavailable", StringComparison.OrdinalIgnoreCase)
+        || (Artifacts is { Count: > 0 } ? !Artifacts.Any(IsUsableArtifact) : string.IsNullOrWhiteSpace(DownloadUrl));
+
+    private static bool IsUsableArtifact(ModArtifact artifact) =>
+        !string.IsNullOrWhiteSpace(artifact.Url)
+        && Uri.TryCreate(artifact.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+        && !string.IsNullOrWhiteSpace(artifact.Sha256);
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsAvailable => !IsUnavailable;
+}
 public sealed record ThunderstoreMod(string Id, string GameId, string Namespace, string Name, string FullName,
     string Description, string Owner, string PackageUrl, string? IconUrl, bool IsDeprecated,
-    DateTimeOffset DateUpdated, ThunderstoreVersion Latest);
+    DateTimeOffset DateUpdated, ThunderstoreVersion Latest,
+    string? License = null, bool? RepoAvailable = null,
+    // SusModder catalog fields sent at mod level (PAK-101); Thunderstore records leave them null.
+    string? Packaging = null, string? AmongVersion = null, string? Source = null, string? ExternalId = null)
+{
+    // Catalog badges and details (PAK-101): display keys stay language-independent.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string SourceKey => string.IsNullOrWhiteSpace(Source) ? "Catalog.Source.thunderstore" : "Catalog.Source." + Source;
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasLicense => !string.IsNullOrWhiteSpace(License);
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasNoLicense => !HasLicense;
+    [System.Text.Json.Serialization.JsonIgnore] public bool RepoUnavailable => RepoAvailable == false;
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsFullPackage => Packaging == "full";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string PackagingKey => Packaging switch { "full" => "Packaging.Full", "dll" => "Packaging.Dll", _ => "" };
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasPackaging => PackagingKey.Length > 0;
+    [System.Text.Json.Serialization.JsonIgnore] public bool FollowsToU => string.Equals(AmongVersion, "ToU", StringComparison.OrdinalIgnoreCase);
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasPinnedAmongVersion => !string.IsNullOrWhiteSpace(AmongVersion) && !FollowsToU;
+}
+
+// One downloadable variant of a mod version. Stores/arch narrow which
+// installation facts the artifact may serve; null/empty means "any".
+public sealed record ModArtifact(string Url, string? Arch = null, IReadOnlyList<string>? Stores = null,
+    string? Sha256 = null, long? SizeBytes = null, string? Source = null, string? AssetName = null);
 public sealed record ModIndexPage(long Revision, DateTimeOffset GeneratedAt,
     IReadOnlyList<ThunderstoreMod> Mods, string? NextCursor);
 public sealed record ThunderstoreModDetails(ThunderstoreMod Mod, IReadOnlyList<ThunderstoreVersion> Versions,
@@ -21,7 +67,12 @@ public sealed class ModCatalogStore : IDisposable
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(dir);
-        db = new SqliteConnection($"Data Source={path};Pooling=False"); db.Open();
+        // Same busy wait as CatalogStore: the mod cache and the build registry share one
+// file, and a concurrent writer must not surface as a raw "database is locked".
+        db = new SqliteConnection($"Data Source={path};Pooling=False;Default Timeout=5"); db.Open();
+        // The `data` JSON is the row schema: optional catalog fields (PAK-95:
+        // packaging, amongVersion, arch, artifacts, license) need no ALTER TABLE,
+        // and caches written before them deserialize with nulls.
         using var cmd = db.CreateCommand();
         cmd.CommandText = "CREATE TABLE IF NOT EXISTS mods(id TEXT PRIMARY KEY, game_id TEXT NOT NULL, full_name TEXT NOT NULL, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_details(id TEXT PRIMARY KEY,data TEXT NOT NULL,fetched_at TEXT NOT NULL);";
         cmd.ExecuteNonQuery();

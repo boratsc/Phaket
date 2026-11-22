@@ -42,14 +42,19 @@ public partial class SteamInstallFlowViewModel : ObservableObject
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ExecuteCommand))] private bool acceptPlan;
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ExecuteCommand))] private bool installing;
     [ObservableProperty] private string username = "";
-    [ObservableProperty] private string password = "";
-    [ObservableProperty] private string twoFactorCode = "";
     [ObservableProperty] private string status = "";
     [ObservableProperty] private string logTail = "";
     [ObservableProperty] private bool success;
-    [ObservableProperty] private bool dialogCredentialOpen;
-    [ObservableProperty] private bool dialogTwoFactorOpen;
-    private TaskCompletionSource<string>? pendingCredential;
+
+    // Password / Steam Guard dialog, extracted so the mod provision shows the same UI.
+    public SteamPromptViewModel Prompt { get; } = new();
+    public bool DialogCredentialOpen => Prompt.CredentialOpen;
+    public bool DialogTwoFactorOpen => Prompt.TwoFactorOpen;
+    public string Password { get => Prompt.Password; set => Prompt.Password = value; }
+    public string TwoFactorCode { get => Prompt.TwoFactorCode; set => Prompt.TwoFactorCode = value; }
+    public IRelayCommand ConfirmCredentialCommand => Prompt.ConfirmCredentialCommand;
+    public IRelayCommand ConfirmTwoFactorCommand => Prompt.ConfirmTwoFactorCommand;
+    public IRelayCommand CancelDialogCommand => Prompt.CancelDialogCommand;
 
     public SteamSigninDialogViewModel? SigninDialog => signin;
     public Action? OnInstalled { get; set; }
@@ -162,12 +167,18 @@ public partial class SteamInstallFlowViewModel : ObservableObject
         install = null;
         try
         {
-            var progress = new Progress<string>(line => LogTail += line);
+            // Steam Guard through the mobile app prints a notice instead of a prompt; the
+            // tool then only waits, so the shared dialog says what the user has to do.
+            var progress = new Progress<string>(line =>
+            {
+                LogTail += line;
+                if (line.Contains(DepotPromptReader.MobileConfirmation, StringComparison.Ordinal)) Prompt.ShowMobileConfirmation();
+            });
             var context = SynchronizationContext.Current;
             var account = await ResolveAccountAsync(context);
             // No sign-in (cancelled, invalid or an unreachable store): the tool is never started.
             if (account is null) { if (Status.Length == 0) Status = loc["SteamInstall.Error.CredentialCancelled"]; return; }
-            await adapter.ExecuteInstallAsync(plan, account, (prompt, ct) => RequestCredentialAsync(prompt, ct, context),
+            await adapter.ExecuteInstallAsync(plan, account, (prompt, ct) => AnswerPromptAsync(prompt, ct, context),
                 ConsentSession, AcceptPlan, progress, overwriteConsent: ConsentOverwrite, rememberSessionConsent: ConsentSession && OperatingSystem.IsWindows());
             Success = true;
             Status = loc["SteamInstall.Success"];
@@ -179,7 +190,7 @@ public partial class SteamInstallFlowViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status = loc["SteamInstall.Error.Failed"]; }
         catch (Exception ex) when (ex is SecretStoreException or CryptographicException)
         { Status = signin is null ? loc["SteamInstall.Error.Failed"] : signin.StoreErrorMessage(ex); }
-        finally { Password = TwoFactorCode = ""; DialogCredentialOpen = DialogTwoFactorOpen = false; pendingCredential = null; install = null; Installing = false; }
+        finally { Prompt.CredentialOpen = Prompt.TwoFactorOpen = Prompt.MobileConfirmationOpen = false; install = null; Installing = false; }
     }
 
     // Account name the tool runs with. Null means the install must not start.
@@ -199,32 +210,17 @@ public partial class SteamInstallFlowViewModel : ObservableObject
         return answer.Username;
     }
 
-    private async Task<string> RequestCredentialAsync(DepotPrompt prompt, CancellationToken ct, SynchronizationContext? context)
+    // Auto-fill answers the first password prompt from the stored sign-in (the dialog
+    // itself is shared with the mod provision); anything else asks the user.
+    private Task<string> AnswerPromptAsync(DepotPrompt prompt, CancellationToken ct, SynchronizationContext? context)
     {
         if (prompt == DepotPrompt.Password && !passwordAutoFilled && (signin?.Stored ?? install) is { } stored)
         {
             passwordAutoFilled = true;
-            return stored.Password;
+            return Task.FromResult(stored.Password);
         }
-        var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Show()
-        {
-            pendingCredential = pending;
-            if (prompt == DepotPrompt.Password) { Password = ""; DialogCredentialOpen = true; }
-            else { TwoFactorCode = ""; DialogTwoFactorOpen = true; }
-        }
-        if (context is null || SynchronizationContext.Current == context) Show(); else context.Send(_ => Show(), null);
-        return await pending.Task.WaitAsync(TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+        return Prompt.RequestAsync(prompt, ct, context);
     }
-
-    [RelayCommand]
-    private void ConfirmCredential() { if (DialogCredentialOpen && !string.IsNullOrEmpty(Password)) { DialogCredentialOpen = false; pendingCredential?.TrySetResult(Password); Password = ""; } }
-
-    [RelayCommand]
-    private void ConfirmTwoFactor() { if (DialogTwoFactorOpen && !string.IsNullOrEmpty(TwoFactorCode)) { DialogTwoFactorOpen = false; pendingCredential?.TrySetResult(TwoFactorCode); TwoFactorCode = ""; } }
-
-    [RelayCommand]
-    private void CancelDialog() { DialogCredentialOpen = DialogTwoFactorOpen = false; pendingCredential?.TrySetCanceled(); }
 
     private void ShowError(PhaketException ex)
     {

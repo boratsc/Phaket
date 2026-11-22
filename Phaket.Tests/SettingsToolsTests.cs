@@ -204,13 +204,13 @@ public class SettingsToolsTests
         Assert.Equal("", h.Vm.Legendary.InstalledVersion);
         Assert.Equal(loc["Settings.Tools.NotInstalled"], h.Vm.Legendary.InstalledText);
 
-        // ".stage-*" is a Core internal, not a version; Depot counts only when its dll is there.
+        // ".stage-*" is a Core internal, not a version; Depot counts only when its binary is there.
         System.IO.Directory.CreateDirectory(Path.Combine(h.ToolsRoot, "legendary", ".stage-temp"));
         System.IO.Directory.CreateDirectory(Path.Combine(h.ToolsRoot, "depotdownloader", "DepotDownloader_3.5.0"));
         Install(h.ToolsRoot, "legendary", "0.21.1", LegendaryAsset);
         Install(h.ToolsRoot, "legendary", "0.9.0", LegendaryAsset);
-        Install(h.ToolsRoot, "depotdownloader", "DepotDownloader_3.10.0", "DepotDownloader.dll");
-        Install(h.ToolsRoot, "depotdownloader", "DepotDownloader_3.4.0", "DepotDownloader.dll");
+        Install(h.ToolsRoot, "depotdownloader", "DepotDownloader_3.10.0", OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader");
+        Install(h.ToolsRoot, "depotdownloader", "DepotDownloader_3.4.0", OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader");
 
         // The folder scan runs when the section is used, not by watching the file system.
         h.Vm.Legendary.OnDropDownOpened();

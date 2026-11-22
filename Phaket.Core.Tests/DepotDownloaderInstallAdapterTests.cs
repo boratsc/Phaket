@@ -108,7 +108,7 @@ public sealed class DepotDownloaderInstallAdapterTests : IDisposable
         const string pin = "1.2.3";
         var settings = Path.Combine(root, "settings.json");
         File.WriteAllText(settings, "{\"tools\":{\"depotdownloader\":{\"version\":\"1.2.3\"}}}");
-        var installed = Path.Combine(root, "tools", "depotdownloader", pin, "DepotDownloader.dll");
+        var installed = Path.Combine(root, "tools", "depotdownloader", pin, OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader");
         Directory.CreateDirectory(Path.GetDirectoryName(installed)!); File.WriteAllText(installed, "pinned");
         using var client = new HttpClient(new OfflineHandler());
         var provider = new ToolProvider(Path.Combine(root, "tools"), client);

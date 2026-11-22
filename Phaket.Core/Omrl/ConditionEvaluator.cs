@@ -48,8 +48,12 @@ public static class ConditionEvaluator
         if (condition.GameVersion is { } range)
         {
             if (facts.GameVersion is null) return null;
-            if (!NumericVersion.TryParse(facts.GameVersion, out var version)) return false;
-            return VersionRange.TryParse([range], out var parsed) && parsed!.Contains(version!);
+            // PAK-96: the same label normalization the planner and the server use. An
+            // impossible date label is refused, never compared as raw text.
+            var gameVersion = GameVersionLabel.Normalize(facts.GameVersion)
+                ?? throw new PhaketException(ErrorCodes.InvalidVersion, ("version", facts.GameVersion));
+            if (!NumericVersion.TryParse(gameVersion, out var version)) return false;
+            return VersionRange.TryParse([GameVersionLabel.NormalizeRange(range)], out var parsed) && parsed!.Contains(version!);
         }
         return false;
     }

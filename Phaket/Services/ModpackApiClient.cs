@@ -112,7 +112,9 @@ public sealed class ModpackApiClient : IModpackApiClient, IDisposable
                 modName = item.Name,
                 modVersion = item.Version,
                 source = item.Source,
-                modId = item.Source == "thunderstore" ? item.ModId : null,
+                // SusModder items identify the mod by the server's external id; it is optional
+                // because the server also matches the full name ("SusModder-<name>").
+                modId = item.Source is "thunderstore" or "susmodder" ? item.ModId : null,
                 repo = item.Source == "github" ? item.Repository : null,
                 tag = item.Source == "github" ? item.Tag : null,
                 assetId = item.Source == "github" ? item.AssetId : null,
@@ -168,6 +170,10 @@ public sealed class ModpackApiClient : IModpackApiClient, IDisposable
             bool valid = item.Source switch
             {
                 "thunderstore" => Guid.TryParse(item.ModId, out _) && item.Repository is null && item.Tag is null && item.AssetId is null && item.Link is null && item.ManualPath is null,
+                // The server resolves the artifact from its own catalog; the item only pins the
+                // name/version and optionally the external id (PAK-103 contract).
+                "susmodder" => (item.ModId is null || Text(item.ModId, 100)) && item.Repository is null && item.Tag is null
+                    && item.AssetId is null && item.Sha256 is null && item.Link is null && item.ManualPath is null,
                 "github" => item.ModId is null && item.Repository is { Length: <= 200 } repo &&
                     Regex.IsMatch(repo, "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant) &&
                     Text(item.Tag, 100) && Text(item.AssetId, 200) && item.Link is null && item.ManualPath is null,

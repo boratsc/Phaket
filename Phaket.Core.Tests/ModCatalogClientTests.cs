@@ -56,4 +56,42 @@ public class ModCatalogClientTests
         }
         finally { Clean(s, d); }
     }
+
+    [Fact]
+    public async Task NullFileSizeInDetailsIsAccepted()
+    {
+        var (t, s, c, d) = Setup();
+        try
+        {
+            // PAK-96 live gate: SusModder catalog versions may publish fileSize:null.
+            var details = "{\"mod\":" + CamelMod("a") + ",\"versions\":[{\"versionNumber\":\"1.0.0\",\"fullName\":\"ns-a-1.0.0\",\"downloadUrl\":\"https://example.test/mod\",\"fileSize\":null,\"dateCreated\":\"2026-01-01T00:00:00Z\",\"dependencies\":[]}]}";
+            t.Responses.Enqueue(new(200, null, details));
+            var version = Assert.Single((await c.GetModAsync("a")).Versions);
+            Assert.Null(version.FileSize);
+        }
+        finally { Clean(s, d); }
+    }
+
+    [Fact]
+    public void VersionAvailabilityRequiresAUsableHttpsArtifact()
+    {
+        var legacy = new ThunderstoreVersion("1.0.0", "ns-a-1.0.0", "https://example.test/mod", 1, DateTimeOffset.UnixEpoch, []);
+        Assert.True(legacy.IsAvailable);
+
+        // A row may list artifacts that cannot be downloaded: no URL, plain http, or no
+        // declared hash. The placeholder must not look installable.
+        Assert.True((legacy with { Artifacts = [new ModArtifact("", "x86", ["steam"], new string('a', 64))] }).IsUnavailable);
+        Assert.True((legacy with { Artifacts = [new ModArtifact("http://example.test/mod.zip", "x86", ["steam"], new string('a', 64))] }).IsUnavailable);
+        Assert.True((legacy with { Artifacts = [new ModArtifact("https://example.test/mod.zip", "x86", ["steam"], null)] }).IsUnavailable);
+        // One usable artifact among placeholders is enough.
+        Assert.False((legacy with
+        {
+            Artifacts =
+            [
+                new ModArtifact("", "x86", ["steam"], new string('a', 64)),
+                new ModArtifact("https://example.test/mod.zip", "x86", ["steam"], new string('b', 64))
+            ]
+        }).IsUnavailable);
+        Assert.True((legacy with { Availability = "unavailable", DownloadUrl = "" }).IsUnavailable);
+    }
 }

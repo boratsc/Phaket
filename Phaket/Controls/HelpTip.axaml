@@ -1,7 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Phaket.Controls"
-             x:Class="Phaket.Controls.HelpTip" x:DataType="controls:HelpTip"
-             x:Name="Root" KeyDown="OnKeyDown">
+             x:Class="Phaket.Controls.HelpTip" x:DataType="controls:HelpTip" x:Name="Root">
   <UserControl.Styles>
     <Style Selector="Button:pointerover">
       <Setter Property="Foreground" Value="{DynamicResource GoldTextBrush}" />
@@ -14,6 +13,7 @@
   </UserControl.Styles>
   <Grid>
     <Button x:Name="Trigger" Width="36" Height="36" MinWidth="36" MinHeight="36" Padding="0"
+            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
             CornerRadius="10" FontSize="11" FontWeight="SemiBold" Content="?"
             Background="{DynamicResource RaisedBrush}" Foreground="{DynamicResource MutedBrush}"
             BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
@@ -22,10 +22,11 @@
             AutomationProperties.Name="{Binding Label, ElementName=Root}"
             AutomationProperties.HelpText="{Binding Message, ElementName=Root}"
             AutomationProperties.AutomationId="HelpTip.Trigger" />
-    <Popup x:Name="TipPopup" PlacementTarget="{Binding #Trigger}" Placement="Bottom" IsLightDismissEnabled="True"
-           Closed="OnPopupClosed">
+    <!-- Bez light dismiss: popup nie przejmuje fokusu, więc focus i hover nie wchodzą w pętlę zamykania i otwierania.
+         Klik poza i Escape obsługuje tunel zdarzeń na TopLevel (HelpTip.axaml.cs). -->
+    <Popup x:Name="TipPopup" PlacementTarget="{Binding #Trigger}" Placement="Bottom" Closed="OnPopupClosed">
       <Border x:Name="TipContent" MaxWidth="280" Padding="10" CornerRadius="7" Background="{DynamicResource RaisedBrush}"
-              BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" KeyDown="OnPopupKeyDown"
+              BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
               BoxShadow="0 5 17 0 #55000000" PointerEntered="OnPointerEntered" PointerExited="OnPointerExited"
               AutomationProperties.Name="{Binding Label, ElementName=Root}"
               AutomationProperties.HelpText="{Binding Message, ElementName=Root}"

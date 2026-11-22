@@ -17,6 +17,8 @@
   "ARTIFACT_SIZE_MISMATCH": "Artefakt {artifact} ma rozmiar {actual}, a oczekiwano {expected} bajtów. Pobranie zostało odrzucone.",
   "MOD_SOURCE_INVALID": "Wybrane źródło moda ({source}) jest niepełne lub nieprawidłowe: {detail}.",
   "MOD_SOURCE_HOST_NOT_ALLOWED": "Host pobierania {host} nie jest dozwolony dla tego źródła moda.",
+  "MOD_ARTIFACT_UNAVAILABLE": "Żaden wariant moda {artifact} nie pasuje do tej instalacji (architektura: {arch}, sklep: {store}). Wybierz inną wersję moda lub inną instalację.",
+  "MOD_ARTIFACT_HASH_UNDECLARED": "Artefakt moda {artifact} nie ma zadeklarowanej sumy SHA-256, więc nie można go zweryfikować. Instalacja wstrzymana — zgłoś to w katalogu modów.",
   "ARCHIVE_INVALID": "Nie można odczytać archiwum {artifact} jako prawidłowego pliku ZIP.",
   "ARCHIVE_FORMAT_UNSUPPORTED": "Archiwum {artifact} używa nieobsługiwanego formatu {format}. Wybierz plik ZIP.",
   "PLAN_NOT_ACCEPTED": "Przed zmianą plików należy przejrzeć i zatwierdzić plan instalacji.",
@@ -33,5 +35,12 @@
   "TOOL_OFFLINE": "Brak połączenia sieciowego podczas pobierania narzędzia.",
   "TOOL_DOWNLOAD_FAILED": "Pobieranie narzędzia nie powiodło się.",
   "TOOL_VERIFICATION_FAILED": "Weryfikacja narzędzia lub archiwum nie powiodła się.",
-  "TOOL_UNVERIFIED_VERSION": "Wersja nie ma zaufanego skrótu SHA-256."
+  "TOOL_UNVERIFIED_VERSION": "Wersja nie ma zaufanego skrótu SHA-256.",
+  "BASE_GAME_MANIFEST_MISSING": "Brak manifestu Steam dla wersji gry {version} w rejestrze buildów. Zsynchronizuj rejestr buildów (widok Builds) lub skonfiguruj GITHUB_TOKEN na serwerze i spróbuj ponownie.",
+  "BASE_GAME_SIGN_IN_REQUIRED": "Ta wersja gry wymaga zalogowania do Steam. Zaloguj się do Steam w Bibliotece, a następnie spróbuj ponownie zainstalować mod.",
+  "BASE_GAME_AUTH_CANCELLED": "Logowanie Steam zostało przerwane. Uruchom instalację ponownie i dokończ logowanie (hasło lub kod Steam Guard).",
+  "BASE_GAME_TIMEOUT": "Pobieranie wersji gry przekroczyło limit czasu. Sprawdź połączenie i spróbuj ponownie.",
+  "BASE_GAME_TOOL_FAILED": "Narzędzie pobierania wersji gry zakończyło się błędem. Wyjście narzędzia zewnętrznego: {detail}",
+  "EPIC_SIGN_IN_REQUIRED": "Ta wersja gry wymaga zalogowania do Epic. Zaloguj się do Epic w Bibliotece, a następnie spróbuj ponownie zainstalować mod.",
+  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "Nie znaleziono środowiska .NET potrzebnego do uruchomienia DepotDownloader. Zainstaluj .NET Runtime i spróbuj ponownie."
 }

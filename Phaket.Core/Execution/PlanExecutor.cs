@@ -325,7 +325,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
             : ResolveSource(operation.SourceRef!);
         var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
         var strip = operation.Parameters?.TryGetValue("stripComponents", out var s) == true ? int.Parse(s) : 0;
-        return SafeArchive.PlanWrites(source, targetRoot, operation.SourceRef ?? "loader", strip);
+        return SafeArchive.PlanWrites(source, targetRoot, operation.SourceRef ?? "loader", strip, IncludePatterns(operation));
     }
 
     private IReadOnlyList<string>? PlanArchiveDirs(PlannedOperation operation)
@@ -343,7 +343,20 @@ public sealed class PlanExecutor : IPlanExecutorHost
         if (!File.Exists(source)) return null;
         var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
         var strip = operation.Parameters?.TryGetValue("stripComponents", out var s) == true ? int.Parse(s) : 0;
-        return SafeArchive.PlanDirectories(source, targetRoot, operation.SourceRef ?? "loader", strip);
+        return SafeArchive.PlanDirectories(source, targetRoot, operation.SourceRef ?? "loader", strip, IncludePatterns(operation));
+    }
+
+    private static IReadOnlyList<string>? IncludePatterns(PlannedOperation operation)
+    {
+        if (operation.Parameters?.TryGetValue("include", out var raw) != true || raw is null) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(raw);
+        }
+        catch (JsonException)
+        {
+            throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "archive.extract include must be a list of path globs"));
+        }
     }
 
     private IReadOnlyList<string> PlanMissingParentDirs(string path)
@@ -393,9 +406,15 @@ public sealed class PlanExecutor : IPlanExecutorHost
         if (context.BaseGameSource is null)
             throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", $"vanilla {store} {version}"));
         System.IO.Directory.CreateDirectory(cacheDir);
-        if (!context.BaseGameSource.TryPrepare(store, version, manifestId, cacheDir, out var sourceError))
-            throw new PhaketException(ErrorCodes.ArtifactMissing,
-                ("artifact", $"vanilla {store} {version}: {sourceError}"));
+        // The runner downloads the tool and may ask the user for Steam credentials, so it
+        // is async; the executor itself is synchronous and hosts run it off the UI thread
+        // (ModInstallService executes inside Task.Run), which keeps the dialog responsive.
+        var source = context.BaseGameSource;
+        var prepared = Task.Run(() => source.TryPrepareAsync(store, version, manifestId, cacheDir), CancellationToken.None)
+            .GetAwaiter().GetResult();
+        if (!prepared.Success)
+            throw new PhaketException(prepared.ErrorCode ?? ErrorCodes.ArtifactMissing,
+                (prepared.Parameters ?? new Dictionary<string, string>()).Select(p => (p.Key, p.Value)).ToArray());
         VanillaCache.WriteMarker(cacheDir, new VanillaCacheMarker(store, version, manifestId,
             "host-runner", DateTimeOffset.UtcNow));
     }
@@ -500,7 +519,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
                         throw new PhaketException(ErrorCodes.PathOutOfBounds, ("path", relative));
                     CaptureBase(relative, destination, ledger);
                     ledger.Save(ledgerPath);
-                });
+                }, IncludePatterns(operation));
                 foreach (var file in created)
                 {
                     var relative = Relative(file);
