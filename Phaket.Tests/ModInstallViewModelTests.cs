@@ -10,6 +10,7 @@ using Phaket.Core.Mods;
 using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -168,7 +169,7 @@ public class ModInstallViewModelTests
             window.Show(); Dispatcher.UIThread.RunJobs();
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/ui4-plan-preview.png"); window.Close();
+            frame.Save("/tmp/opencode/phaket-render/ui4-plan-preview.png", PngBitmapEncoderOptions.Default); window.Close();
         } finally { Directory.Delete(root, true); }
     }
 }

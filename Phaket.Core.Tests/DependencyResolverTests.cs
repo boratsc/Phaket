@@ -21,9 +21,9 @@ public class DependencyResolverTests
     {
         var source = new Source(("o-A", [V("o-A", "1", "o-B-1")]),
             ("o-B", [V("o-B", "1", "o-C-1")]), ("o-C", [V("o-C", "1")]));
-        var result = await new DependencyResolver(source).ResolveAsync("o-A", "1");
+        var result = await new DependencyResolver(source).ResolveAsync("o-A", "1", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(new[] { "o-C", "o-B", "o-A" }, result.Select(x => x.FullName));
-        Assert.Single(await new DependencyResolver(new Source(("o-A", [V("o-A", "1")]))).ResolveAsync("o-A", "1"));
+        Assert.Single(await new DependencyResolver(new Source(("o-A", [V("o-A", "1")]))).ResolveAsync("o-A", "1", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact] public async Task ReportsMissingVersionInactiveConflictAndCycle()
@@ -32,13 +32,13 @@ public class DependencyResolverTests
         Assert.Equal("DEPENDENCY_MISSING", await Code(new Source(("o-A", [V("o-A", "1", "o-X-1")]))));
         Assert.Equal("DEPENDENCY_VERSION_MISSING", await Code(new Source(("o-A", [V("o-A", "1")])), version: "9"));
         var inactive = new Source(("o-A", [V("o-A", "1", "o-B-1")]), ("o-B", [V("o-B", "1") with { IsActive = false }]));
-        var inactiveError = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(inactive).ResolveAsync("o-A", "1"));
+        var inactiveError = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(inactive).ResolveAsync("o-A", "1", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("DEPENDENCY_INACTIVE", inactiveError.Error.Code);
         Assert.Equal("DEPENDENCY_CYCLE", await Code(new Source(("o-A", [V("o-A", "1", "o-B-1")]), ("o-B", [V("o-B", "1", "o-A-1")]))));
         var conflictSource = new Source(("o-A", [V("o-A", "1", "o-B-1", "o-C-1")]),
             ("o-B", [V("o-B", "1", "o-D-1")]), ("o-C", [V("o-C", "1", "o-D-2")]),
             ("o-D", [V("o-D", "1"), V("o-D", "2")]));
-        var conflict = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(conflictSource).ResolveAsync("o-A", "1"));
+        var conflict = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(conflictSource).ResolveAsync("o-A", "1", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("DEPENDENCY_CONFLICT", conflict.Error.Code);
         Assert.Contains("paths", conflict.Error.Parameters.Keys);
     }
@@ -46,8 +46,8 @@ public class DependencyResolverTests
     [Fact] public async Task DependencyOrderDoesNotAffectResultAndNamesMayContainHyphens()
     {
         Source Make(params string[] deps) => new(("owner-root-pack", [V("owner-root-pack", "1", deps)]), ("owner-child-pack", [V("owner-child-pack", "2")]));
-        var a = await new DependencyResolver(Make("owner-child-pack-2")).ResolveAsync("owner-root-pack", "1");
-        var b = await new DependencyResolver(Make("owner-child-pack-2")).ResolveAsync("owner-root-pack", "1");
+        var a = await new DependencyResolver(Make("owner-child-pack-2")).ResolveAsync("owner-root-pack", "1", cancellationToken: TestContext.Current.CancellationToken);
+        var b = await new DependencyResolver(Make("owner-child-pack-2")).ResolveAsync("owner-root-pack", "1", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(a.Select(x => (x.FullName, x.Version, x.DownloadUrl, x.FileSize, Dependencies: string.Join(",", x.Dependencies))),
             b.Select(x => (x.FullName, x.Version, x.DownloadUrl, x.FileSize, Dependencies: string.Join(",", x.Dependencies))));
         Assert.Equal("owner-child-pack", a[0].FullName);
@@ -59,7 +59,7 @@ public class DependencyResolverTests
             ("denikson-BepInExPack", [V("denikson-BepInExPack", "5.4.2350"), V("denikson-BepInExPack", "5.4.2333")]),
             ("ebkr-Jotunn", [V("ebkr-Jotunn", "2.30.0", "denikson-BepInExPack-5.4.2333")]));
         var resolver = new DependencyResolver(source);
-        var result = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1");
+        var result = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", ct: TestContext.Current.CancellationToken);
         Assert.Empty(result.Pinned);
         var conflict = Assert.Single(result.Conflicts);
         Assert.Equal("denikson-BepInExPack", conflict.Package);
@@ -67,7 +67,7 @@ public class DependencyResolverTests
         Assert.Equal("5.4.2350", conflict.SuggestedVersion);
         Assert.Contains("EasyWork-Root@1", conflict.RequestedBy);
         Assert.Contains("ebkr-Jotunn@2.30.0", conflict.RequestedBy);
-        var resolved = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", new Dictionary<string, string> { ["denikson-BepInExPack"] = "5.4.2350" });
+        var resolved = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", new Dictionary<string, string> { ["denikson-BepInExPack"] = "5.4.2350" }, ct: TestContext.Current.CancellationToken);
         Assert.Empty(resolved.Conflicts);
         Assert.Equal(3, resolved.Pinned.Count);
     }
@@ -77,12 +77,12 @@ public class DependencyResolverTests
         var source = new Source(("o-A", [V("o-A", "1", "o-B-5.4.9", "o-C-1")]),
             ("o-B", [V("o-B", "5.4.9", "o-D-5.4.9")]), ("o-C", [V("o-C", "1", "o-D-5.4.10")]),
             ("o-D", [V("o-D", "5.4.9"), V("o-D", "5.4.10")]));
-        var result = await new DependencyResolver(source).ResolveWithProposalsAsync("o-A", "1");
+        var result = await new DependencyResolver(source).ResolveWithProposalsAsync("o-A", "1", ct: TestContext.Current.CancellationToken);
         Assert.Equal("5.4.10", Assert.Single(result.Conflicts).SuggestedVersion);
         var reordered = new Source(("o-A", [V("o-A", "1", "o-C-1", "o-B-5.4.9")]),
             ("o-B", [V("o-B", "5.4.9", "o-D-5.4.9")]), ("o-C", [V("o-C", "1", "o-D-5.4.10")]),
             ("o-D", [V("o-D", "5.4.10"), V("o-D", "5.4.9")]));
-        var again = await new DependencyResolver(reordered).ResolveWithProposalsAsync("o-A", "1");
+        var again = await new DependencyResolver(reordered).ResolveWithProposalsAsync("o-A", "1", ct: TestContext.Current.CancellationToken);
         Assert.Equal(result.Conflicts[0].Package, again.Conflicts[0].Package);
         Assert.Equal(result.Conflicts[0].Versions, again.Conflicts[0].Versions);
         Assert.Equal(result.Conflicts[0].RequestedBy, again.Conflicts[0].RequestedBy);
@@ -95,7 +95,7 @@ public class DependencyResolverTests
         Assert.Equal("DEPENDENCY_CYCLE", await Code(new Source(("o-A", [V("o-A", "1", "o-B-1")]), ("o-B", [V("o-B", "1", "o-A-1")]))));
         Assert.Equal("DEPENDENCY_MISSING", await Code(new Source(("o-A", [V("o-A", "1", "o-X-1")]))));
         Assert.Equal("DEPENDENCY_INACTIVE", await Code(new Source(("o-A", [V("o-A", "1", "o-B-1")]), ("o-B", [V("o-B", "1") with { IsActive = false }]))));
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(new Source(("o-A", [V("o-A", "1")]))).ResolveWithProposalsAsync("o-A", "1", new Dictionary<string, string> { ["o-A"] = "9" }));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => new DependencyResolver(new Source(("o-A", [V("o-A", "1")]))).ResolveWithProposalsAsync("o-A", "1", new Dictionary<string, string> { ["o-A"] = "9" }, ct: TestContext.Current.CancellationToken));
         Assert.Equal("DEPENDENCY_VERSION_MISSING", ex.Error.Code);
     }
 }

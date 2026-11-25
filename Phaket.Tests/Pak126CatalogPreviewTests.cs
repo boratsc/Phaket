@@ -12,6 +12,7 @@ using Phaket.Core.Mods;
 using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -214,7 +215,7 @@ public sealed class Pak126CatalogPreviewTests
 
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save($"/tmp/opencode/phaket-render/{file}");
+            frame!.Save($"/tmp/opencode/phaket-render/{file}", PngBitmapEncoderOptions.Default);
         }
         finally
         {

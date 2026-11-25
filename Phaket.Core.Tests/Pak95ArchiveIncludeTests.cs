@@ -138,7 +138,7 @@ public sealed class Pak95ArchiveIncludeTests : IDisposable
         Assert.Empty(RecipeValidator.Validate(recipe, AmongUs));
         var executor = new PlanExecutor(new PlanExecutionContext(GameRoot, Path.Combine(root, "profile"),
             Path.Combine(root, "staging"), PackageRoot, AmongUs, recipe.Id, "p", Path.Combine(root, "state")));
-        var journal = executor.Execute(plan, executor.Approve(plan));
+        var journal = executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(JournalState.Completed, journal.State);
         Assert.True(File.Exists(Path.Combine(GameRoot, "BepInEx", "plugins", "Mod.dll")));

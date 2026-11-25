@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
@@ -7,6 +8,7 @@ namespace Phaket.Core.Tests;
 // PAK-66 (review of the secrets wave): a chmod/ACL the filesystem refuses or silently ignores must
 // stop the operation. A token is never written where another account could read it, and the tool
 // is never started.
+[UnsupportedOSPlatform("windows")]
 public sealed class Pak66SessionPrivacyTests : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("phaket-pak66-privacy-").FullName;

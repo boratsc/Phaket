@@ -68,12 +68,12 @@ public class LifecycleCoreTests
         {
             var bytes = "fake zip content"u8.ToArray();
             var transport = new FakeTransport(bytes);
-            var downloaded = await PackageDownloader.EnsureArtifactsAsync(RemoteRecipe(bytes), root, transport);
+            var downloaded = await PackageDownloader.EnsureArtifactsAsync(RemoteRecipe(bytes), root, transport, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Single(downloaded);
             Assert.Equal(Path.Combine(root, "mod-pack.zip"), downloaded[0]);
-            Assert.Equal(bytes, await File.ReadAllBytesAsync(downloaded[0]));
+            Assert.Equal(bytes, await File.ReadAllBytesAsync(downloaded[0], cancellationToken: TestContext.Current.CancellationToken));
             // Second run: cached and hash-valid, no transport call.
-            await PackageDownloader.EnsureArtifactsAsync(RemoteRecipe(bytes), root, transport);
+            await PackageDownloader.EnsureArtifactsAsync(RemoteRecipe(bytes), root, transport, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(1, transport.Calls);
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -87,7 +87,7 @@ public class LifecycleCoreTests
         {
             var transport = new FakeTransport("tampered"u8.ToArray());
             var ex = await Assert.ThrowsAsync<PhaketException>(() =>
-                PackageDownloader.EnsureArtifactsAsync(RemoteRecipe("original"u8.ToArray()), root, transport));
+                PackageDownloader.EnsureArtifactsAsync(RemoteRecipe("original"u8.ToArray()), root, transport, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ArtifactHashMismatch, ex.Error.Code);
             Assert.False(File.Exists(Path.Combine(root, "mod-pack.zip")));
             Assert.False(File.Exists(Path.Combine(root, "mod-pack.zip.phaket-tmp")));
@@ -104,7 +104,7 @@ public class LifecycleCoreTests
             var bytes = "x"u8.ToArray();
             var recipe = RemoteRecipe(bytes, source: "https://evil.example/mod.zip");
             var ex = await Assert.ThrowsAsync<PhaketException>(() =>
-                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes)));
+                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes), cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ArtifactDownloadUnavailable, ex.Error.Code);
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -120,7 +120,7 @@ public class LifecycleCoreTests
             var recipe = RemoteRecipe(bytes);
             recipe = recipe with { Artifacts = [recipe.Artifacts[0] with { Sha256 = null }] };
             var ex = await Assert.ThrowsAsync<PhaketException>(() =>
-                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes)));
+                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes), cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ValidationFailed, ex.Error.Code);
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -135,7 +135,7 @@ public class LifecycleCoreTests
             var bytes = new byte[100];
             var recipe = RemoteRecipe(bytes, size: 10);
             var ex = await Assert.ThrowsAsync<PhaketException>(() =>
-                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes)));
+                PackageDownloader.EnsureArtifactsAsync(recipe, root, new FakeTransport(bytes), cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ArtifactDownloadUnavailable, ex.Error.Code);
             Assert.False(File.Exists(Path.Combine(root, "mod-pack.zip")));
         }
@@ -151,7 +151,7 @@ public class LifecycleCoreTests
             var recipe = RemoteRecipe([]);
             recipe = recipe with { Artifacts = [recipe.Artifacts[0] with { Source = "package://mod-pack.zip", Sha256 = null }] };
             var transport = new FakeTransport([]);
-            var downloaded = await PackageDownloader.EnsureArtifactsAsync(recipe, root, transport);
+            var downloaded = await PackageDownloader.EnsureArtifactsAsync(recipe, root, transport, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Empty(downloaded);
             Assert.Equal(0, transport.Calls);
         }
@@ -250,7 +250,7 @@ public class LifecycleCoreTests
                 new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition, facts));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state));
-            var journal = new InstallOrchestrator(executor).Run(plan);
+            var journal = new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(JournalState.Completed, journal.State);
             Assert.True(Directory.Exists(Path.Combine(game, "dotnet")));
 
@@ -323,7 +323,7 @@ public class LifecycleCoreTests
                 Path.Combine(root, "profile"), Path.Combine(root, "staging"), Path.Combine(root, "packages"),
                 definition, recipe.Id, "p", Path.Combine(root, "state")));
             using var held = executor.LockInstallation();
-            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan));
+            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ValidationFailed, ex.Error.Code);
         }
         finally { Directory.Delete(root, recursive: true); }

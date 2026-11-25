@@ -9,6 +9,7 @@ using Phaket.Core.Tests;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -265,7 +266,7 @@ public class UxFirstRunTests : IDisposable
         Directory.CreateDirectory("/tmp/opencode/phaket-render");
         Dispatcher.UIThread.RunJobs();
         using var frame = window.CaptureRenderedFrame();
-        frame?.Save(Path.Combine("/tmp/opencode/phaket-render", name));
+        frame?.Save(Path.Combine("/tmp/opencode/phaket-render", name), PngBitmapEncoderOptions.Default);
     }
 
     [Fact]
@@ -294,14 +295,14 @@ public class UxFirstRunTests : IDisposable
         try
         {
             File.WriteAllText(settings, """{"deviceNick":"Phaket device"}""");
-            var migrated = await new DeviceKeyStore(secrets, settings).GetPublicIdentityAsync();
+            var migrated = await new DeviceKeyStore(secrets, settings).GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.NotEqual(DeviceKeyStore.DefaultNick, migrated.Nick);
             Assert.Equal($"{LocalizationService.Instance["Identity.NickPrefix"]}-{migrated.Fingerprint[..4]}", migrated.Nick);
             using (var document = JsonDocument.Parse(File.ReadAllText(settings)))
                 Assert.Equal(migrated.Nick, document.RootElement.GetProperty("deviceNick").GetString());
 
-            await new DeviceKeyStore(secrets, settings).SaveNickAsync("Zosia");
-            var own = await new DeviceKeyStore(secrets, settings).GetPublicIdentityAsync();
+            await new DeviceKeyStore(secrets, settings).SaveNickAsync("Zosia", cancellationToken: TestContext.Current.CancellationToken);
+            var own = await new DeviceKeyStore(secrets, settings).GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal("Zosia", own.Nick);
             Assert.Equal(migrated.Fingerprint, own.Fingerprint);
         }

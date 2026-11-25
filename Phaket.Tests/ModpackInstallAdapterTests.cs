@@ -15,6 +15,7 @@ using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -111,7 +112,7 @@ public sealed class ModpackInstallAdapterTests
             Dispatcher.UIThread.RunJobs();
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/39-catalog-github.png");
+            frame!.Save("/tmp/opencode/phaket-render/39-catalog-github.png", PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally
@@ -213,7 +214,7 @@ public sealed class ModpackInstallAdapterTests
             using var http = new HttpClient(new SingleReplyHandler(HttpStatusCode.OK, detail))
             { BaseAddress = new Uri("https://catalog.example.test/") };
             using var api = new ModpackApiClient(http, root);
-            var pack = await api.GetAsync("public-pack");
+            var pack = await api.GetAsync("public-pack", cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.NotNull(pack);
             Assert.True(pack!.IsPublic);
@@ -221,8 +222,8 @@ public sealed class ModpackInstallAdapterTests
 
             var plan = await new ModpackInstallService(root).PrepareAsync(Game(gameRoot), pack, TestContext.Current.CancellationToken);
             Assert.Equal("Catalog.InstallNexusLocalArchiveRequired", plan.BlockReason);
-            Assert.Empty(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories)
-                .Where(path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal)));
+            Assert.DoesNotContain(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories),
+                path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal));
 
             // A user who picks the archive themselves is not blocked by the trust boundary.
             var userArchive = WriteArchive(root, "user-picked.zip", Zip("plugins/mod.dll", "user bytes"));
@@ -231,8 +232,8 @@ public sealed class ModpackInstallAdapterTests
                 .PrepareAsync(Game(gameRoot), pack, TestContext.Current.CancellationToken);
             Assert.True(userPlan.CanInstall, userPlan.BlockReason);
             Assert.Equal("Nexus Mod", Assert.Single(userPlan.SourcePlan!.Items).Name);
-            Assert.Empty(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories)
-                .Where(path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal)));
+            Assert.DoesNotContain(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories),
+                path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal));
 
             // A cache file written by an older build must not resurrect the server path.
             string cacheDirectory = Path.Combine(root, "modpack-cache");
@@ -245,7 +246,7 @@ public sealed class ModpackInstallAdapterTests
                 }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
             using var offline = new HttpClient(new OfflineHandler()) { BaseAddress = new Uri("https://catalog.example.test/") };
             using var offlineApi = new ModpackApiClient(offline, root);
-            var cached = await offlineApi.GetAsync("public-pack");
+            var cached = await offlineApi.GetAsync("public-pack", cancellationToken: TestContext.Current.CancellationToken);
             Assert.Null(Assert.Single(cached!.Items).ManualPath);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
@@ -302,8 +303,8 @@ public sealed class ModpackInstallAdapterTests
             Assert.False(badHashPlan.CanInstall);
             Assert.Equal("Catalog.InstallHashMismatch", badHashPlan.BlockReason);
             Assert.Equal(1, transport.Requests);
-            Assert.Empty(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories)
-                .Where(path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal)));
+            Assert.DoesNotContain(Directory.GetFiles(gameRoot, "*", SearchOption.AllDirectories),
+                path => !string.Equals(path, Path.Combine(gameRoot, "Among Us.exe"), StringComparison.Ordinal));
 
             var rejectedTransport = new RouteTransport(archive);
             var unsafePack = Pack(new ModpackMod
@@ -332,7 +333,7 @@ public sealed class ModpackInstallAdapterTests
         {
             var game = Game(gameRoot);
             Directory.CreateDirectory(Path.GetDirectoryName(existingFile)!);
-            await File.WriteAllTextAsync(existingFile, "user-owned fixture");
+            await File.WriteAllTextAsync(existingFile, "user-owned fixture", cancellationToken: TestContext.Current.CancellationToken);
             var profiles = new ProfileStore(root);
             var oldData = profiles.For("among-us");
             var oldActive = oldData.ActiveProfileId;
@@ -349,7 +350,7 @@ public sealed class ModpackInstallAdapterTests
             Assert.False(result.Success);
             Assert.Equal("Catalog.InstallPlanFailed", result.Error);
             Assert.False(File.Exists(existingFile.Replace("Second", "First", StringComparison.Ordinal)));
-            Assert.Equal("user-owned fixture", await File.ReadAllTextAsync(existingFile));
+            Assert.Equal("user-owned fixture", await File.ReadAllTextAsync(existingFile, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(oldActive, new ProfileStore(root).For("among-us").ActiveProfileId);
             Assert.Equal(originalProfiles, new ProfileStore(root).For("among-us").Profiles.Select(profile => profile.Id));
             Assert.Empty(new InstallRegistry(Path.Combine(root, "installs.json")).ForGame("among-us"));
@@ -380,7 +381,7 @@ public sealed class ModpackInstallAdapterTests
             var archive = Zip("plugins/mod.dll", "pinned bytes");
             var local = Path.Combine(root, "nexus.zip");
             Directory.CreateDirectory(root);
-            await File.WriteAllBytesAsync(local, archive);
+            await File.WriteAllBytesAsync(local, archive, cancellationToken: TestContext.Current.CancellationToken);
             using var client = new HttpClient(new GitHubHandler(archive, "example/mod"));
             var github = new GitHubReleaseService(client);
             var transport = new Transport(archive);
@@ -398,7 +399,7 @@ public sealed class ModpackInstallAdapterTests
             Assert.Contains("GITHUB_HASH_UNVERIFIED", plan.Warnings);
             Assert.Equal("v1.0.0", sourcePlan.Items[0].Version);
             Assert.Equal("2.0", sourcePlan.Items[1].Version);
-            Assert.True(plan.Steps.Any(step => step.Contains("file.copy", StringComparison.Ordinal)));
+            Assert.Contains(plan.Steps, step => step.Contains("file.copy", StringComparison.Ordinal));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
@@ -414,10 +415,10 @@ public sealed class ModpackInstallAdapterTests
         {
             var archive = Path.Combine(root, "manual" + extension);
             Directory.CreateDirectory(root);
-            await File.WriteAllTextAsync(archive, "not a zip");
+            await File.WriteAllTextAsync(archive, "not a zip", cancellationToken: TestContext.Current.CancellationToken);
             var service = new ModpackInstallService(root);
             var plan = await service.PrepareAsync(Game(Path.Combine(root, "game")), Pack(
-                new ModpackMod { Name = "Nexus Mod", Version = "1", Source = "nexus", Link = "https://www.nexusmods.com/amongus/mods/123", ManualPath = archive }));
+                new ModpackMod { Name = "Nexus Mod", Version = "1", Source = "nexus", Link = "https://www.nexusmods.com/amongus/mods/123", ManualPath = archive }), cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal("Catalog.InstallArchiveUnsupported", plan.BlockReason);
             Assert.Equal("Catalog.InstallArchiveUnsupported", ModpackInstallService.GetMappedErrorForTest(ErrorCodes.ArchiveFormatUnsupported));
             Assert.Contains("ZIP", ErrorMessages.Format(ErrorCodes.ArchiveFormatUnsupported, "pl-PL", new Dictionary<string, string> { ["artifact"] = "mod.rar", ["format"] = extension }));
@@ -454,7 +455,7 @@ public sealed class ModpackInstallAdapterTests
             var transport = new CatalogIndexTransport(catalogMod);
             var service = new ModpackInstallService(root, catalogTransport: transport, packageTransport: new Transport(archive));
             var plan = await service.PrepareAsync(Game(Path.Combine(root, "game")), Pack(
-                new ModpackMod { Name = "Test-Mod", Version = "1.0.0", Source = "thunderstore", ModId = "mod-id" }));
+                new ModpackMod { Name = "Test-Mod", Version = "1.0.0", Source = "thunderstore", ModId = "mod-id" }), cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(plan.CanInstall, plan.BlockReason);
             Assert.Single(plan.Preparations);
             Assert.Null(plan.SourcePlan);

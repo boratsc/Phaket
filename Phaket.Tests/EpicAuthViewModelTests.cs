@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -102,7 +103,8 @@ public class EpicAuthViewModelTests
         Dispatcher.UIThread.RunJobs();
         Directory.CreateDirectory("/tmp/opencode/phaket-render");
         using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-        frame.Save("/tmp/opencode/phaket-render/16-epic-auth-fallback.png");
+        Assert.NotNull(frame);
+        frame.Save("/tmp/opencode/phaket-render/16-epic-auth-fallback.png", PngBitmapEncoderOptions.Default);
         window.Close();
     }
 }

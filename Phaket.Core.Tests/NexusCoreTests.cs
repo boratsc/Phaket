@@ -127,23 +127,23 @@ public sealed class NexusCoreTests
     {
         var store = new InMemorySecretStore();
         var keys = new NexusApiKeyStore(store);
-        Assert.Null(await keys.ReadAsync());
-        Assert.True(await keys.SaveAsync("  abcdef123456  "));
-        Assert.Equal("abcdef123456", await keys.ReadAsync());
-        Assert.Equal("abcdef123456", Encoding.UTF8.GetString((await store.GetAsync(NexusApiKeyStore.SecretKey))!));
-        await keys.DeleteAsync();
-        Assert.Null(await keys.ReadAsync());
+        Assert.Null(await keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.True(await keys.SaveAsync("  abcdef123456  ", cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("abcdef123456", await keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("abcdef123456", Encoding.UTF8.GetString((await store.GetAsync(NexusApiKeyStore.SecretKey, cancellationToken: TestContext.Current.CancellationToken))!));
+        await keys.DeleteAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Null(await keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Key_falls_back_to_session_memory_when_the_store_is_unavailable()
     {
         var keys = new NexusApiKeyStore(new ThrowingStore());
-        Assert.False(await keys.SaveAsync("session-only-key"));
+        Assert.False(await keys.SaveAsync("session-only-key", cancellationToken: TestContext.Current.CancellationToken));
         Assert.True(keys.IsMemoryOnly);
-        Assert.Equal("session-only-key", await keys.ReadAsync());
-        await keys.DeleteAsync();
-        Assert.Null(await keys.ReadAsync());
+        Assert.Equal("session-only-key", await keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        await keys.DeleteAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Null(await keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -151,10 +151,10 @@ public sealed class NexusCoreTests
     {
         var keys = new NexusApiKeyStore(new InMemorySecretStore());
         var tokens = new NexusOAuthTokens("access", "refresh", new DateTimeOffset(2026, 12, 1, 12, 0, 0, TimeSpan.Zero));
-        await keys.SaveOAuthTokensAsync(tokens);
-        Assert.Equal(tokens, await keys.ReadOAuthTokensAsync());
-        await keys.DeleteOAuthTokensAsync();
-        Assert.Null(await keys.ReadOAuthTokensAsync());
+        await keys.SaveOAuthTokensAsync(tokens, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(tokens, await keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken));
+        await keys.DeleteOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Null(await keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -177,18 +177,18 @@ public sealed class NexusCoreTests
         var handler = new RecordingHandler(_ => Json(
             """{ "mod_id": 123, "name": "Example", "author": "A", "version": "1.0", "endorsement_count": 7 }"""));
         var keys = new NexusApiKeyStore(new InMemorySecretStore());
-        await keys.SaveAsync("key");
+        await keys.SaveAsync("key", cancellationToken: TestContext.Current.CancellationToken);
         var client = new NexusApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.nexusmods.com") }, new NexusApiKeyCredentialProvider(keys),
             new NexusCache(null, time, TimeSpan.FromMinutes(5)));
 
-        Assert.Equal("Example", (await client.GetModAsync("amongus", 123)).Name);
-        Assert.Equal("Example", (await client.GetModAsync("amongus", 123)).Name);
+        Assert.Equal("Example", (await client.GetModAsync("amongus", 123, cancellationToken: TestContext.Current.CancellationToken)).Name);
+        Assert.Equal("Example", (await client.GetModAsync("amongus", 123, cancellationToken: TestContext.Current.CancellationToken)).Name);
         Assert.Equal(1, handler.Calls);
         Assert.True(Assert.Single(handler.Seen).ApiKey);
         Assert.False(string.IsNullOrEmpty(Assert.Single(handler.Seen).UserAgent));
 
         time.Advance(TimeSpan.FromMinutes(6));
-        Assert.Equal("Example", (await client.GetModAsync("amongus", 123)).Name);
+        Assert.Equal("Example", (await client.GetModAsync("amongus", 123, cancellationToken: TestContext.Current.CancellationToken)).Name);
         Assert.Equal(2, handler.Calls);
     }
 
@@ -202,13 +202,13 @@ public sealed class NexusCoreTests
             : Json("""{ "message": "rate limited" }""", HttpStatusCode.TooManyRequests,
                 response => response.Headers.TryAddWithoutValidation("x-rl-hourly-remaining", "0")));
         var keys = new NexusApiKeyStore(new InMemorySecretStore());
-        await keys.SaveAsync("key");
+        await keys.SaveAsync("key", cancellationToken: TestContext.Current.CancellationToken);
         var client = new NexusApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.nexusmods.com") }, new NexusApiKeyCredentialProvider(keys),
             new NexusCache(null, time, TimeSpan.FromMinutes(5)));
 
-        await client.GetModAsync("amongus", 5);
+        await client.GetModAsync("amongus", 5, cancellationToken: TestContext.Current.CancellationToken);
         time.Advance(TimeSpan.FromMinutes(6));
-        var stale = await client.GetModAsync("amongus", 5);
+        var stale = await client.GetModAsync("amongus", 5, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("Cached", stale.Name);
         Assert.True(client.LastReadFromStaleCache);
         Assert.Equal(0, client.RateLimits.HourlyRemaining);
@@ -220,7 +220,7 @@ public sealed class NexusCoreTests
     {
         var handler = new RecordingHandler(_ => Json("""{ "name": "Someone", "is_premium": true }"""));
         var client = new NexusApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.nexusmods.com") }, new BearerProvider());
-        var user = await client.ValidateAsync();
+        var user = await client.ValidateAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(user.IsPremium);
         Assert.False(Assert.Single(handler.Seen).ApiKey);
         Assert.Equal("Bearer", Assert.Single(handler.Seen).AuthScheme);
@@ -271,7 +271,7 @@ public sealed class NexusCoreTests
             return Json("""{ "access_token": "at", "refresh_token": "rt", "expires_in": 3600, "token_type": "Bearer" }""");
         });
         var tokens = await NexusOAuth.ExchangeCodeAsync(new HttpClient(handler), NexusOAuthOptions.Default,
-            "the-code", "the-verifier", time);
+            "the-code", "the-verifier", time, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("at", tokens.AccessToken);
         Assert.Equal("rt", tokens.RefreshToken);
@@ -288,7 +288,7 @@ public sealed class NexusCoreTests
         var time = new FakeTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
         var handler = new RecordingHandler(_ => Json("""{ "access_token": "new", "expires_in": 60 }"""));
         var previous = new NexusOAuthTokens("old", "keep-me", time.GetUtcNow().AddSeconds(-1));
-        var tokens = await NexusOAuth.RefreshAsync(new HttpClient(handler), NexusOAuthOptions.Default, previous, time);
+        var tokens = await NexusOAuth.RefreshAsync(new HttpClient(handler), NexusOAuthOptions.Default, previous, time, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("new", tokens.AccessToken);
         Assert.Equal("keep-me", tokens.RefreshToken);
     }
@@ -299,7 +299,7 @@ public sealed class NexusCoreTests
         var handler = new RecordingHandler(_ => Json("""{ "error": "invalid_grant" }""", HttpStatusCode.BadRequest));
         var current = new NexusOAuthTokens("a", "r", DateTimeOffset.UtcNow.AddSeconds(-1));
         var ex = await Assert.ThrowsAsync<NexusApiException>(() =>
-            NexusOAuth.RefreshAsync(new HttpClient(handler), NexusOAuthOptions.Default, current));
+            NexusOAuth.RefreshAsync(new HttpClient(handler), NexusOAuthOptions.Default, current, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("NEXUS_OAUTH_REVOKED", ex.Code);
     }
 }

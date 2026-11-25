@@ -12,7 +12,7 @@ public class ReceiptSenderTests
     public async Task SendsReceiptFields(string result, string? errorCode)
     {
         var transport = new FakeTransport();
-        await new ReceiptSender(transport).SendAsync("valheim", "mod.full", "1.2", "steam", result, errorCode);
+        await new ReceiptSender(transport).SendAsync("valheim", "mod.full", "1.2", "steam", result, errorCode, cancellationToken: TestContext.Current.CancellationToken);
         var receipt = Assert.IsType<ModReceipt>(transport.Receipt);
         Assert.Equal("valheim", receipt.GameId);
         Assert.Equal("mod.full", receipt.ModFullName);
@@ -28,7 +28,7 @@ public class ReceiptSenderTests
     public async Task InvalidStoreBecomesNullAndTransportFailureIsIgnored()
     {
         var transport = new FakeTransport { Throw = true };
-        await new ReceiptSender(transport).SendAsync("among-us", "mod", "1", "other", "installed");
+        await new ReceiptSender(transport).SendAsync("among-us", "mod", "1", "other", "installed", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Null(transport.Receipt!.Store);
     }
 
@@ -43,7 +43,7 @@ public class ReceiptSenderTests
     public async Task NullStoreIsAccepted()
     {
         var transport = new FakeTransport();
-        await new ReceiptSender(transport).SendAsync("game", "mod", "1", null, "installed");
+        await new ReceiptSender(transport).SendAsync("game", "mod", "1", null, "installed", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Null(transport.Receipt!.Store);
     }
 
@@ -52,7 +52,7 @@ public class ReceiptSenderTests
     {
         var transport = new FakeTransport();
         await new ReceiptSender(transport).SendAsync("game", "mod", "1", null, "failed",
-            new PhaketException(ErrorCodes.ValidationFailed).Error.Code);
+            new PhaketException(ErrorCodes.ValidationFailed).Error.Code, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(ErrorCodes.ValidationFailed, transport.Receipt!.ErrorCode);
     }
 

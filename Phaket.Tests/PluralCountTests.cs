@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -276,7 +277,8 @@ public sealed class PluralCountTests
         const string dir = "/tmp/opencode/phaket-render";
         Directory.CreateDirectory(dir);
         using var frame = window.CaptureRenderedFrame();
-        frame.Save(Path.Combine(dir, name));
+        Assert.NotNull(frame);
+        frame.Save(Path.Combine(dir, name), PngBitmapEncoderOptions.Default);
     }
 
     private static void AssertNotClipped(Window window, string text)

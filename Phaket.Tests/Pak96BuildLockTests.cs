@@ -63,8 +63,8 @@ public sealed class Pak96BuildLockTests : IDisposable
         using var holder = Lock(path);
         var items = JsonSerializer.SerializeToElement(new[] { Build("b1", "2026.8.18") });
 
-        var writing = Task.Run(() => store.ReplaceAll(items, 1, null));
-        await Task.Delay(300);
+        var writing = Task.Run(() => store.ReplaceAll(items, 1, null), TestContext.Current.CancellationToken);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
         holder.Dispose();
         await writing;
 

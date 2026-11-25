@@ -17,6 +17,7 @@ using Phaket.Core.Platforms;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -514,7 +515,7 @@ public sealed class Pak105ModpackSusModderTests
             Assert.True(shown);
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/40-steam-mobile-confirm.png");
+            frame!.Save("/tmp/opencode/phaket-render/40-steam-mobile-confirm.png", PngBitmapEncoderOptions.Default);
             window.Close();
 
             vm.CancelDialogCommand.Execute(null);

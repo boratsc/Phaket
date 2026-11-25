@@ -15,7 +15,7 @@ public class SteamLibraryServiceTests
         {
             File.WriteAllText(Path.Combine(dataRoot, "steam-installs.json"), "[{\"AppId\":\"12345\",\"TargetPath\":\"/games/Test Game\",\"Executable\":\"game.exe\",\"InstalledAt\":\"2024-01-01T00:00:00Z\"}]");
             var definitions = new[] { new GameDefinition("test-game", [], new Dictionary<string, string> { ["steam"] = "12345" }) };
-            var service = new SteamLibraryService(() => Task.FromResult<string?>(null), "76561198000000000", new HttpClient(), definitions, dataRoot: dataRoot, userProfile: home);
+            var service = new SteamLibraryService("76561198000000000", definitions, dataRoot: dataRoot, userProfile: home);
             var game = Assert.Single(await service.GetOwnedGamesAsync(TestContext.Current.CancellationToken));
             Assert.Equal("12345", game.AppId);
             Assert.Equal("test-game", game.Definition!.Slug);
@@ -35,7 +35,7 @@ public class SteamLibraryServiceTests
             Directory.CreateDirectory(Path.Combine(steamapps, "common", "Among Us"));
             File.WriteAllText(Path.Combine(steamapps, "appmanifest_945360.acf"), "\"AppState\" { \"appid\" \"945360\" \"name\" \"Among Us\" \"buildid\" \"123\" \"installdir\" \"Among Us\" }");
             var definitions = new[] { new GameDefinition("among-us", [], new Dictionary<string, string> { ["steam"] = "945360" }) };
-            var service = new SteamLibraryService(() => Task.FromResult<string?>(null), "76561198000000000", new HttpClient(), definitions, dataRoot: Path.Combine(home, "data"), userProfile: home);
+            var service = new SteamLibraryService("76561198000000000", definitions, dataRoot: Path.Combine(home, "data"), userProfile: home);
 
             var game = Assert.Single(await service.GetOwnedGamesAsync(TestContext.Current.CancellationToken));
             Assert.Equal("945360", game.AppId);

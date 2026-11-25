@@ -11,6 +11,7 @@ using Phaket.Controls;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -39,7 +40,7 @@ public sealed class RestyleTests
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.IsVisible && text.Text == LocalizationService.Instance["Ui.Library.Unsupported"]);
             using var frame = window.CaptureRenderedFrame();
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            frame!.Save("/tmp/opencode/phaket-render/36-library.png");
+            frame!.Save("/tmp/opencode/phaket-render/36-library.png", PngBitmapEncoderOptions.Default);
         }
         finally
         {
@@ -79,7 +80,7 @@ public sealed class RestyleTests
                 Assert.Equal(LocalizationService.Instance["HelpTip.Secrets.Content"], tip.Message);
                 using var frame = window.CaptureRenderedFrame();
                 Directory.CreateDirectory("/tmp/opencode/phaket-render");
-                frame!.Save("/tmp/opencode/phaket-render/37-settings.png");
+                frame!.Save("/tmp/opencode/phaket-render/37-settings.png", PngBitmapEncoderOptions.Default);
             }
             finally { window.Close(); }
         }

@@ -10,6 +10,7 @@ using Phaket.Core.Accounts;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -52,13 +53,13 @@ public sealed class DeviceKeyTests
     public async Task Canonical_request_and_fingerprint_match_server_vector()
     {
         var secretStore = new MemorySecretStore();
-        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
         var keys = new DeviceKeyStore(secretStore, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json"));
-        DevicePublicIdentity identity = await keys.GetPublicIdentityAsync();
+        DevicePublicIdentity identity = await keys.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
         const string canonical = "POST\n/packages\n1000\nnonce-1234567890\nabc";
         Assert.Equal(canonical, DeviceKeySigner.BuildCanonical("post", "/packages", "1000", "nonce-1234567890", "abc"));
 
-        byte[] signature = await keys.SignAsync(Encoding.UTF8.GetBytes(canonical));
+        byte[] signature = await keys.SignAsync(Encoding.UTF8.GetBytes(canonical), cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(DeviceKeySigner.VerifyForTest(identity.PublicKey, signature, canonical));
         Assert.False(DeviceKeySigner.VerifyForTest(identity.PublicKey, signature, canonical + "changed"));
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(identity.PublicKey))[..8], identity.Fingerprint);
@@ -68,15 +69,15 @@ public sealed class DeviceKeyTests
     public async Task Signer_hashes_exact_body_uses_fresh_nonce_and_five_minute_window()
     {
         var store = new MemorySecretStore();
-        await store.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+        await store.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
         var keys = new DeviceKeyStore(store, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json"));
         var signer = new DeviceKeySigner(keys);
         var first = new HttpRequestMessage(HttpMethod.Post, "https://api.example.test/packages?game=valheim")
         { Content = new ByteArrayContent(Encoding.UTF8.GetBytes("snapshot-body")) };
-        var firstHeaders = await signer.SignAsync(first);
+        var firstHeaders = await signer.SignAsync(first, cancellationToken: TestContext.Current.CancellationToken);
         var second = new HttpRequestMessage(HttpMethod.Post, "https://api.example.test/packages?game=valheim")
         { Content = new ByteArrayContent(Encoding.UTF8.GetBytes("snapshot-body")) };
-        var secondHeaders = await signer.SignAsync(second);
+        var secondHeaders = await signer.SignAsync(second, cancellationToken: TestContext.Current.CancellationToken);
 
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         long timestamp = long.Parse(firstHeaders["X-Timestamp"], System.Globalization.CultureInfo.InvariantCulture);
@@ -89,7 +90,7 @@ public sealed class DeviceKeyTests
         Assert.Equal(32, firstHeaders["X-Nonce"].Length);
         Assert.All(firstHeaders["X-Nonce"], c => Assert.True(char.IsAsciiHexDigit(c)));
 
-        DevicePublicIdentity identity = await keys.GetPublicIdentityAsync();
+        DevicePublicIdentity identity = await keys.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
         string canonical = DeviceKeySigner.CreateCanonicalRepresentation("POST", "/packages?game=valheim",
             firstHeaders["X-Timestamp"], firstHeaders["X-Nonce"], Encoding.UTF8.GetBytes("snapshot-body"));
         byte[] signature = Convert.FromBase64String(firstHeaders["X-Signature"]);
@@ -106,16 +107,16 @@ public sealed class DeviceKeyTests
             string settings = Path.Combine(root, "settings.json");
             var secretStore = new ConsentFileStore(Path.Combine(root, "secrets"), true, "test-only-passphrase");
             var firstStore = new DeviceKeyStore(secretStore, settings);
-            DevicePublicIdentity first = await firstStore.GetPublicIdentityAsync();
-            await firstStore.SaveNickAsync("Test device");
+            DevicePublicIdentity first = await firstStore.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
+            await firstStore.SaveNickAsync("Test device", cancellationToken: TestContext.Current.CancellationToken);
 
             var secondStore = new DeviceKeyStore(secretStore, settings);
-            DevicePublicIdentity second = await secondStore.GetPublicIdentityAsync();
+            DevicePublicIdentity second = await secondStore.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(first.PublicKey, second.PublicKey);
             Assert.Equal(first.Fingerprint, second.Fingerprint);
             Assert.Equal("Test device", second.Nick);
 
-            byte[] privateSeed = (await secretStore.GetAsync(DeviceKeyStore.SecretKey))!;
+            byte[] privateSeed = (await secretStore.GetAsync(DeviceKeyStore.SecretKey, cancellationToken: TestContext.Current.CancellationToken))!;
             try
             {
                 string settingsText = File.ReadAllText(settings);
@@ -135,10 +136,10 @@ public sealed class DeviceKeyTests
     public async Task Profile_publish_uses_signed_create_and_version_routes()
     {
         var secretStore = new MemorySecretStore();
-        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
         var keys = new DeviceKeyStore(secretStore, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json"));
         var signer = new DeviceKeySigner(keys, registerBeforeSigning: false);
-        string fingerprint = (await keys.GetPublicIdentityAsync()).Fingerprint[..8];
+        string fingerprint = (await keys.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken)).Fingerprint[..8];
         string endpoint = $"https://{Guid.NewGuid():N}.example.test/";
         var requests = new List<CapturedRequest>();
         CaptureHandler CreateHandler() => new((request, _) => Task.FromResult(JsonResponse(request.RequestUri!.AbsolutePath switch
@@ -151,11 +152,11 @@ public sealed class DeviceKeyTests
         var service = identityServices.CreateProfilePublisher(endpoint, CreateHandler());
         using var snapshot = JsonDocument.Parse("""{"schemaVersion":1,"items":[{"modName":"Mod A","modVersion":"1","source":"github","repo":"owner/repo","tag":"v1","assetId":"mod.zip"}]}""");
 
-        await identityServices.RegisterDeviceAsync(endpoint);
+        await identityServices.RegisterDeviceAsync(endpoint, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(new ProfilePublishResult("test-pack", 1), await service.PublishAsync(
-            new ProfilePublishRequest("test-pack", "among-us", "Test pack", "", snapshot.RootElement)));
+            new ProfilePublishRequest("test-pack", "among-us", "Test pack", "", snapshot.RootElement), cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(new ProfilePublishResult("test-pack", 2), await service.PublishAsync(
-            new ProfilePublishRequest("test-pack", "among-us", "Test pack", "", snapshot.RootElement, CreateNew: false)));
+            new ProfilePublishRequest("test-pack", "among-us", "Test pack", "", snapshot.RootElement, CreateNew: false), cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(["/devices", "/packages", "/packages/test-pack/versions"], requests.Select(request => request.Path));
         Assert.All(requests, request => Assert.Equal("POST", request.Method));
@@ -166,7 +167,7 @@ public sealed class DeviceKeyTests
             string nonce = AssertHeader(request, "X-Nonce");
             byte[] signature = Convert.FromBase64String(AssertHeader(request, "X-Signature"));
             byte[] publicKey = Convert.FromBase64String(keyHeader);
-            Assert.Equal((await keys.GetPublicIdentityAsync()).PublicKey, publicKey);
+            Assert.Equal((await keys.GetPublicIdentityAsync(cancellationToken: TestContext.Current.CancellationToken)).PublicKey, publicKey);
             Assert.True(long.TryParse(timestampHeader, System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out long timestamp));
             Assert.True(DeviceKeySigner.TimestampIsWithinWindow(timestamp, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
@@ -186,7 +187,7 @@ public sealed class DeviceKeyTests
         try
         {
             var secretStore = new MemorySecretStore();
-            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
             var keys = new DeviceKeyStore(secretStore, Path.Combine(root, "settings.json"));
             var signer = new DeviceKeySigner(keys);
             var capture = new CaptureHandler((_, _) => Task.FromResult(JsonResponse("{\"slug\":\"mod-pack\",\"version\":1}")));
@@ -199,8 +200,8 @@ public sealed class DeviceKeyTests
                 Items = [new ModpackMod { Name = "Mod A", Version = "1.0", Source = "github", Repository = "owner/repo", Tag = "v1", AssetId = "mod.zip" }]
             };
 
-            Assert.Equal(new ModpackPublishResult("mod-pack", 1), await api.PublishAsync(pack, "mod-pack"));
-            CapturedRequest published = Assert.Single(capture.Requests.Where(request => request.Path == "/packages"));
+            Assert.Equal(new ModpackPublishResult("mod-pack", 1), await api.PublishAsync(pack, "mod-pack", cancellationToken: TestContext.Current.CancellationToken));
+            CapturedRequest published = Assert.Single(capture.Requests, request => request.Path == "/packages");
             Assert.Contains("X-Signature", published.Headers.Keys);
             using var body = JsonDocument.Parse(published.Body);
             Assert.Equal(1, body.RootElement.GetProperty("snapshot").GetProperty("schemaVersion").GetInt32());
@@ -225,7 +226,7 @@ public sealed class DeviceKeyTests
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/32-identity.png");
+            frame.Save("/tmp/opencode/phaket-render/32-identity.png", PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

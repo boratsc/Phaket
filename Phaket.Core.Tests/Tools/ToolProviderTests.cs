@@ -23,16 +23,16 @@ public sealed class ToolProviderTests
     {
         byte[] bytes = "verified tool"u8.ToArray();
         using var fixture = new Fixture(Release("1.0", LegendaryAsset, bytes, Digest(bytes)), bytes);
-        string path = await fixture.Provider.EnsureAsync("legendary");
+        string path = await fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken);
         Assert.True(File.Exists(path));
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task RejectsMismatchedDigest()
     {
         using var fixture = new Fixture(Release("1.0", LegendaryAsset, "bad"u8.ToArray(), new string('0', 64)), "bad"u8.ToArray());
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
     }
 
@@ -40,7 +40,7 @@ public sealed class ToolProviderTests
     public async Task LegendaryWithoutApiDigestIsRejected()
     {
         using var fixture = new Fixture(Release("1.0", LegendaryAsset, "bad"u8.ToArray(), null), "bad"u8.ToArray());
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
     }
 
@@ -53,7 +53,7 @@ public sealed class ToolProviderTests
             ReleaseJson("DepotDownloader_9.9.0", asset, [], null),
             ReleaseJson("DepotDownloader_3.3.0", asset, zip, Digest(zip)));
         using var fixture = new Fixture(releases, zip);
-        string path = await fixture.Provider.EnsureAsync("depotdownloader");
+        string path = await fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken);
         Assert.EndsWith(Path.Combine("DepotDownloader_3.3.0", DepotExe), path);
         Assert.True(File.Exists(path));
     }
@@ -64,7 +64,7 @@ public sealed class ToolProviderTests
         string asset = DepotAsset;
         HttpRequestMessage? requested = null;
         using var fixture = new Fixture(_ => Release("DepotDownloader_3.4.0", asset, [], null), "mismatch"u8.ToArray(), request => requested = request);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
         Assert.Equal("https://asset.test/tool", requested?.RequestUri!.ToString());
     }
@@ -77,7 +77,7 @@ public sealed class ToolProviderTests
         using var fixture = new Fixture(_ => Releases(
             ReleaseJson("DepotDownloader_9.9.0", asset, [], null),
             ReleaseJson("DepotDownloader_3.4.0", asset, [], null)), "untrusted archive"u8.ToArray(), request => requested = request);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
         Assert.Equal("https://asset.test/tool", requested?.RequestUri!.ToString());
     }
@@ -88,7 +88,7 @@ public sealed class ToolProviderTests
         string asset = DepotAsset;
         byte[] zip = MakeZip(DepotExe, []);
         using var fixture = new Fixture(Release("unknown-version", asset, zip, null), zip);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", "unknown-version"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", "unknown-version", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_UNVERIFIED_VERSION", ex.Error.Code);
     }
 
@@ -100,7 +100,7 @@ public sealed class ToolProviderTests
         string asset = DepotAsset;
         byte[] zip = MakeZip(symlink ? "evil" : "../evil", "payload"u8.ToArray(), symlink ? unchecked((int)(0xA000 << 16)) : 0);
         using var fixture = new Fixture(Release("DepotDownloader_3.3.0", asset, zip, Digest(zip)), zip);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
     }
 
@@ -110,9 +110,9 @@ public sealed class ToolProviderTests
         string asset = DepotAsset;
         byte[] zip = MakeZip(DepotExe, "valid"u8.ToArray());
         using var fixture = new Fixture(Release("DepotDownloader_3.3.0", asset, zip, Digest(zip)), zip);
-        string path = await fixture.Provider.EnsureAsync("depotdownloader");
+        string path = await fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken);
         Assert.True(File.Exists(path));
-        Assert.Equal("valid", await File.ReadAllTextAsync(path));
+        Assert.Equal("valid", await File.ReadAllTextAsync(path, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public sealed class ToolProviderTests
         string asset = DepotAsset;
         byte[] bytes = "not a zip"u8.ToArray();
         using var fixture = new Fixture(Release("DepotDownloader_3.3.0", asset, bytes, Digest(bytes)), bytes);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("depotdownloader", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
     }
 
@@ -130,7 +130,7 @@ public sealed class ToolProviderTests
     {
         using var fixture = new Fixture(_ => throw new HttpRequestException());
         fixture.Install("legendary", "other");
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", "X"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", "X", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_OFFLINE", ex.Error.Code);
     }
 
@@ -138,7 +138,7 @@ public sealed class ToolProviderTests
     public async Task EmptyDownloadIsRejected()
     {
         using var fixture = new Fixture(Release("1.0", LegendaryAsset, [], Digest([])), []);
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_DOWNLOAD_FAILED", ex.Error.Code);
     }
 
@@ -147,14 +147,14 @@ public sealed class ToolProviderTests
     {
         using var fixture = new Fixture(_ => throw new HttpRequestException());
         string path = fixture.Install("legendary", "old");
-        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary"));
+        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task OfflineWithoutExistingInstallationFails()
     {
         using var fixture = new Fixture(_ => throw new HttpRequestException());
-        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary"));
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
         Assert.Equal("TOOL_OFFLINE", ex.Error.Code);
     }
 
@@ -164,7 +164,7 @@ public sealed class ToolProviderTests
         using var fixture = new Fixture(_ => throw new InvalidOperationException("Unexpected HTTP request"));
         string path = fixture.Install("legendary", "old");
         File.WriteAllText(Path.Combine(fixture.Root, "legendary", ".updatecheck"), DateTimeOffset.UtcNow.ToString("O"));
-        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary"));
+        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken));
         Assert.Equal(0, fixture.RequestCount);
     }
 
@@ -173,7 +173,7 @@ public sealed class ToolProviderTests
     {
         using var fixture = new Fixture(_ => throw new InvalidOperationException("Unexpected HTTP request"));
         string path = fixture.Install("legendary", "pinned");
-        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary", "pinned"));
+        Assert.Equal(path, await fixture.Provider.EnsureAsync("legendary", "pinned", ct: TestContext.Current.CancellationToken));
         Assert.Equal(0, fixture.RequestCount);
     }
 
@@ -182,14 +182,14 @@ public sealed class ToolProviderTests
     {
         byte[] bytes = "verified tool"u8.ToArray();
         using var fixture = new Fixture(Release("1.0", LegendaryAsset, bytes, Digest(bytes)), bytes);
-        string path = await fixture.Provider.EnsureAsync("legendary");
+        string path = await fixture.Provider.EnsureAsync("legendary", ct: TestContext.Current.CancellationToken);
         string cache = Path.Combine(fixture.Root, "legendary", ".updatecheck");
         File.WriteAllText(cache, "2000-01-01T00:00:00.0000000+00:00");
 
-        string refreshed = await fixture.Provider.EnsureAsync("legendary", forceRefresh: true);
+        string refreshed = await fixture.Provider.EnsureAsync("legendary", forceRefresh: true, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(path, refreshed);
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken));
         Assert.True(DateTimeOffset.Parse(File.ReadAllText(cache)) > DateTimeOffset.Parse("2000-01-01T00:00:00.0000000+00:00"));
     }
 
@@ -201,10 +201,10 @@ public sealed class ToolProviderTests
         // An interrupted earlier download left the version folder without its binary.
         Directory.CreateDirectory(Path.Combine(fixture.Root, "legendary", "1.0"));
 
-        string path = await fixture.Provider.EnsureAsync("legendary", "1.0");
+        string path = await fixture.Provider.EnsureAsync("legendary", "1.0", ct: TestContext.Current.CancellationToken);
 
         Assert.True(File.Exists(path));
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();

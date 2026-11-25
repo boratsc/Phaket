@@ -127,7 +127,7 @@ public sealed class GithubNexusInstallTests
         var timeoutClock = new ManualTimeProvider();
         using var timeoutHttp = new HttpClient(timeoutHandler) { Timeout = Timeout.InfiniteTimeSpan };
         var timeoutInstaller = new ModpackSourceInstaller(new HttpPackageTransport(timeoutHttp), TimeSpan.FromSeconds(1), timeoutClock);
-        var timeoutTask = timeoutInstaller.PrepareAsync([GitHub([], size: 1)], Context(fixture));
+        var timeoutTask = timeoutInstaller.PrepareAsync([GitHub([], size: 1)], Context(fixture), cancellationToken: TestContext.Current.CancellationToken);
 
         await timeoutRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         timeoutClock.ExpireTimer();
@@ -265,7 +265,7 @@ public sealed class GithubNexusInstallTests
         var installer = new ModpackSourceInstaller(new FakePackageTransport([]));
         var plan = await installer.PrepareAsync([Nexus(archive)], Context(fixture), TestContext.Current.CancellationToken);
 
-        var error = Assert.Throws<PhaketException>(() => installer.Execute(plan, false));
+        var error = Assert.Throws<PhaketException>(() => installer.Execute(plan, false, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.PlanNotAccepted, error.Error.Code);
         Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Manual_Mod", "Mod.dll")));

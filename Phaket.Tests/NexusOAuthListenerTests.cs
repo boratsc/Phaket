@@ -22,7 +22,7 @@ public sealed class NexusOAuthListenerTests
     public async Task Callback_code_is_returned_when_state_matches()
     {
         Task<NexusOAuthCallback> waiting;
-        try { waiting = NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromSeconds(10)); }
+        try { waiting = NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromSeconds(10), cancellationToken: TestContext.Current.CancellationToken); }
         catch (NexusApiException unavailable) when (unavailable.Code == "NEXUS_OAUTH_UNAVAILABLE")
         {
             Assert.Skip("127.0.0.1:8642 is not available in this environment");
@@ -40,7 +40,7 @@ public sealed class NexusOAuthListenerTests
     public async Task Mismatched_state_is_rejected()
     {
         Task<NexusOAuthCallback> waiting;
-        try { waiting = NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromSeconds(10)); }
+        try { waiting = NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromSeconds(10), cancellationToken: TestContext.Current.CancellationToken); }
         catch (NexusApiException unavailable) when (unavailable.Code == "NEXUS_OAUTH_UNAVAILABLE")
         {
             Assert.Skip("127.0.0.1:8642 is not available in this environment");
@@ -57,7 +57,7 @@ public sealed class NexusOAuthListenerTests
     public async Task Waiting_past_the_timeout_reports_a_timeout()
     {
         var ex = await Assert.ThrowsAsync<NexusApiException>(() =>
-            NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromMilliseconds(200)));
+            NexusOAuthCallbackListener.WaitAsync("state-ok", TimeSpan.FromMilliseconds(200), cancellationToken: TestContext.Current.CancellationToken));
         Assert.True(ex.Code is "NEXUS_OAUTH_TIMEOUT" or "NEXUS_OAUTH_UNAVAILABLE", ex.Code);
     }
 }

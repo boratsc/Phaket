@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -378,7 +379,7 @@ public sealed class LifecycleTests
 
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using (var frame = window.CaptureRenderedFrame())
-                frame!.Save("/tmp/opencode/phaket-render/43-publish.png");
+                frame!.Save("/tmp/opencode/phaket-render/43-publish.png", PngBitmapEncoderOptions.Default);
 
             await vm.PublishCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();

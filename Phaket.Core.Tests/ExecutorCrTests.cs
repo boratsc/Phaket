@@ -19,12 +19,12 @@ public class ExecutorCrTests
         var crashing = new PlanExecutor(fixture.PlanExecutionContext("test.crash"),
             phase => { if (phase == "after-file-write") throw new IOException("simulated process kill"); });
         var journal = crashing.Approve(plan);
-        Assert.Throws<IOException>(() => crashing.Execute(plan, journal));
+        Assert.Throws<IOException>(() => crashing.Execute(plan, journal, ct: TestContext.Current.CancellationToken));
         // The file was mutated, but the base copy is already durable.
         Assert.Equal("mod-content", File.ReadAllText(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Crash.dll")));
 
         var recovered = new PlanExecutor(fixture.PlanExecutionContext("test.crash"));
-        var completed = recovered.Execute(plan, PlanExecutor.LoadJournal(fixture.ProfileRoot)!);
+        var completed = recovered.Execute(plan, PlanExecutor.LoadJournal(fixture.ProfileRoot)!, ct: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, completed.State);
         recovered.Uninstall("test.crash");
         Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Crash.dll")));
@@ -41,7 +41,7 @@ public class ExecutorCrTests
         var recipeB = fixture.CopyRecipe("test.pb", "mod-pb", target, "B", "replace");
         var planB = OperationPlanner.Plan(recipeB, fixture.PlannerContext());
         var executorB = new PlanExecutor(fixture.PlanExecutionContext("test.pb", profileB));
-        executorB.Execute(planB, executorB.Approve(planB));
+        executorB.Execute(planB, executorB.Approve(planB), ct: TestContext.Current.CancellationToken);
 
         new PlanExecutor(fixture.PlanExecutionContext("test.pa")).Uninstall("test.pa");
         Assert.Equal("B", File.ReadAllText(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Shared.dll")));
@@ -56,7 +56,7 @@ public class ExecutorCrTests
         var recipe = fixture.CopyRecipe("test.ow", "mod-ow", "game://BepInEx/plugins/Existing.dll", "mod");
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.ow"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ValidationFailed, ex.Error.Code);
         Assert.Equal("user-file", File.ReadAllText(target));
     }
@@ -82,7 +82,7 @@ public class ExecutorCrTests
         };
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.ow2"));
-        executor.Execute(plan, executor.Approve(plan));
+        executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
         Assert.Equal("mod", File.ReadAllText(target));
         executor.Uninstall("test.ow2");
         Assert.Equal("user-file", File.ReadAllText(target));
@@ -114,7 +114,7 @@ public class ExecutorCrTests
         };
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.dirs"));
-        var journal = executor.Execute(plan, executor.Approve(plan));
+        var journal = executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, journal.State);
         Assert.True(File.Exists(Path.Combine(fixture.StagingRoot, "out", "BepInEx", "plugins", "mod.dll")));
     }
@@ -154,7 +154,7 @@ public class ExecutorCrTests
             ("winhttp.dll", "tampered"u8.ToArray()),
             ("BepInEx/core/BepInEx.IL2CPP.dll", "x"u8.ToArray()));
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.recipe"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArtifactHashMismatch, ex.Error.Code);
         Assert.Equal("original-loader", File.ReadAllText(Path.Combine(fixture.GameRoot, "winhttp.dll")));
     }
@@ -205,7 +205,7 @@ public class ExecutorCrTests
         };
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.partial"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArchiveUnsafe, ex.Error.Code);
         // Two-pass validation: nothing was written, not even the first entry.
         Assert.False(File.Exists(Path.Combine(fixture.StagingRoot, "out", "first.dll")));
@@ -237,7 +237,7 @@ public class ExecutorCrTests
             };
             var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
             var executor = new PlanExecutor(fixture.PlanExecutionContext("test.redirect"));
-            var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+            var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.ArchiveUnsafe, ex.Error.Code);
             Assert.False(File.Exists(Path.Combine(outside, "evil.dll")));
         }

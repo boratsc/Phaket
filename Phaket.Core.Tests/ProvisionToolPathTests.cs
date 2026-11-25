@@ -60,7 +60,7 @@ public sealed class ProvisionToolPathTests : IDisposable
             runner: runner, settingsPath: Path.Combine(root, "settings.json"));
 
         var prepared = await source.TryPrepareAsync("steam", "2026.8.18", "9223372036854775807",
-            Path.Combine(root, "cache"));
+            Path.Combine(root, "cache"), ct: TestContext.Current.CancellationToken);
 
         Assert.True(prepared.Success, prepared.ErrorCode);
         Assert.Equal(Path.GetFullPath(binary), runner.Executable);
@@ -102,7 +102,7 @@ public sealed class ProvisionToolPathTests : IDisposable
             settingsPath: Path.Combine(root, "settings.json"));
 
         var prepared = await source.TryPrepareAsync("steam", "2026.8.18", "9223372036854775807",
-            Path.Combine(root, "cache"));
+            Path.Combine(root, "cache"), ct: TestContext.Current.CancellationToken);
 
         Assert.False(prepared.Success);
         Assert.Equal("TOOL_OFFLINE", prepared.ErrorCode);
@@ -114,7 +114,7 @@ public sealed class ProvisionToolPathTests : IDisposable
         var source = new ToolBaseGameSource(depotDownloaderPath: "", legendaryPath: "",
             toolProvider: new ToolProvider(Path.Combine(root, "unused"), Offline()));
 
-        var prepared = await source.TryPrepareAsync("steam", "2026.8.18", null, Path.Combine(root, "cache"));
+        var prepared = await source.TryPrepareAsync("steam", "2026.8.18", null, Path.Combine(root, "cache"), ct: TestContext.Current.CancellationToken);
 
         Assert.False(prepared.Success);
         Assert.Equal(ErrorCodes.BaseGameManifestMissing, prepared.ErrorCode);
@@ -132,7 +132,7 @@ public sealed class ProvisionToolPathTests : IDisposable
             steamCredentials: new SteamCredentialStore(new InMemorySecretStore()));
 
         var prepared = await source.TryPrepareAsync("steam", "2026.8.18", "9223372036854775807",
-            Path.Combine(root, "cache"));
+            Path.Combine(root, "cache"), ct: TestContext.Current.CancellationToken);
 
         Assert.False(prepared.Success);
         Assert.Equal(ErrorCodes.BaseGameSignInRequired, prepared.ErrorCode);

@@ -147,7 +147,7 @@ public class PlanExecutorTests
         plan = plan with { Operations = plan.Operations.Select(operation => operation with { Sha256 = null }).ToArray() };
         Assert.Contains(plan.Operations, x => x.Shared);
         var executor = new PlanExecutor(fixture.PlanExecutionContext(generated.Recipe.Id));
-        executor.Execute(plan, executor.Approve(plan));
+        executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
         var config = Path.Combine(fixture.GameRoot, "BepInEx", "config", "x.cfg");
         var plugin = Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Test-Mod", "Mod.dll");
         File.AppendAllText(config, "user edit");
@@ -174,7 +174,7 @@ public class PlanExecutorTests
             generated.Ownership.ToDictionary(x => x.StepId, x => x.Ownership));
         plan = plan with { Operations = plan.Operations.Select(operation => operation with { Sha256 = null }).ToArray() };
         var executor = new PlanExecutor(fixture.PlanExecutionContext(generated.Recipe.Id));
-        executor.Execute(plan, executor.Approve(plan));
+        executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
         var config = Path.Combine(fixture.GameRoot, "BepInEx", "config", "x.cfg");
         var plugin = Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "Test-Mod", "Mod.dll");
         executor.Uninstall(generated.Recipe.Id);
@@ -214,7 +214,7 @@ public class PlanExecutorTests
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext(), new Dictionary<string, string> { ["copy"] = "shared" });
         Assert.True(Assert.Single(plan.Operations).Shared);
         var executor = new PlanExecutor(fixture.PlanExecutionContext(recipe.Id));
-        executor.Execute(plan, executor.Approve(plan));
+        executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
         var ledgerPath = Path.Combine(fixture.Root, "installation-state", "ledger.json");
         Assert.True(OwnershipLedger.Load(ledgerPath).Entries["BepInEx/config/x.cfg"].Shared);
 
@@ -272,7 +272,7 @@ public class PlanExecutorTests
         var interrupted = PlanExecutor.LoadJournal(fixture.ProfileRoot)!;
         Assert.Equal(JournalState.Interrupted, interrupted.State);
 
-        var resumed = executor.Execute(plan, interrupted);
+        var resumed = executor.Execute(plan, interrupted, ct: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, resumed.State);
         Assert.True(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "CustomRoles.dll")));
     }
@@ -288,13 +288,13 @@ public class PlanExecutorTests
         var modZip = Path.Combine(fixture.PackageRoot, "mod-bundle.zip");
         var saved = File.ReadAllBytes(modZip);
         File.Delete(modZip);
-        Assert.Throws<PhaketException>(() => executor.Execute(plan, journal));
+        Assert.Throws<PhaketException>(() => executor.Execute(plan, journal, ct: TestContext.Current.CancellationToken));
         var failed = PlanExecutor.LoadJournal(fixture.ProfileRoot)!;
         Assert.Equal(JournalState.Failed, failed.State);
         Assert.True(failed.Entries[0].Verified); // loader step survived
 
         File.WriteAllBytes(modZip, saved);
-        var resumed = executor.Execute(plan, failed);
+        var resumed = executor.Execute(plan, failed, ct: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, resumed.State);
     }
 
@@ -313,7 +313,7 @@ public class PlanExecutorTests
         // Simulates process restart: a fresh executor reads the durable journal.
         var second = new PlanExecutor(fixture.PlanExecutionContext("test.recipe"));
         var recovered = PlanExecutor.LoadJournal(fixture.ProfileRoot)!;
-        var completed = second.Execute(plan, recovered);
+        var completed = second.Execute(plan, recovered, ct: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, completed.State);
     }
 
@@ -355,7 +355,7 @@ public class PlanExecutorTests
         ExecutorFixture.MakeZip(Path.Combine(fixture.PackageRoot, "mod-bundle.zip"),
             ("CustomRoles.dll", "tampered-content"u8.ToArray()));
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.recipe"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArtifactHashMismatch, ex.Error.Code);
         Assert.Equal(JournalState.Failed, PlanExecutor.LoadJournal(fixture.ProfileRoot)!.State);
     }
@@ -382,7 +382,7 @@ public class PlanExecutorTests
         ExecutorFixture.MakeZip(Path.Combine(fixture.PackageRoot, "bad.zip"), ("../evil.dll", "x"u8.ToArray()));
         var plan = OperationPlanner.Plan(ExtractRecipe("bad"), fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.extract"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArchiveUnsafe, ex.Error.Code);
         Assert.False(File.Exists(Path.Combine(fixture.Root, "evil.dll")));
     }
@@ -395,7 +395,7 @@ public class PlanExecutorTests
             ("zeros.bin", new byte[20_000_000]));
         var plan = OperationPlanner.Plan(ExtractRecipe("bomb"), fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.extract"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArchiveUnsafe, ex.Error.Code);
     }
 
@@ -413,7 +413,7 @@ public class PlanExecutorTests
         }
         var plan = OperationPlanner.Plan(ExtractRecipe("link"), fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.extract"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.ArchiveUnsafe, ex.Error.Code);
     }
 
@@ -436,7 +436,7 @@ public class PlanExecutorTests
         };
         var plan = OperationPlanner.Plan(recipe, fixture.PlannerContext());
         var executor = new PlanExecutor(fixture.PlanExecutionContext("test.remove"));
-        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+        var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
         Assert.Equal(ErrorCodes.OwnershipViolation, ex.Error.Code);
         Assert.True(File.Exists(Path.Combine(fixture.GameRoot, "winhttp.dll")));
     }

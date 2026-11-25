@@ -45,7 +45,7 @@ public partial class LibraryViewModel : ViewModelBase
         installAdapter = new LegendaryInstallAdapter(LegendaryTokenProvider.From(accounts.Epic));
         steamCredentials = accounts.SteamCredentials;
         ConfigureSteam(accounts.Steam,
-            account => new SteamLibraryService(accounts.GetSteamApiKeyAsync, account.UserId, epicHttp, definitions).GetOwnedGamesAsync(),
+            account => new SteamLibraryService(account.UserId, definitions).GetOwnedGamesAsync(),
             () => new DepotDownloaderInstallAdapter().GetRecordedInstallations());
     }
 

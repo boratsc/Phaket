@@ -299,7 +299,7 @@ public sealed class Pak101SusModderCompositionTests
         try
         {
             var secretStore = new MemorySecretStore();
-            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
             var keys = new DeviceKeyStore(secretStore, Path.Combine(root, "settings.json"));
             var signer = new DeviceKeySigner(keys);
             var capture = new CaptureHandler();
@@ -312,7 +312,7 @@ public sealed class Pak101SusModderCompositionTests
                 Items = [new ModpackMod { Name = "SusModder-Mira", Version = "1.6.3b", Source = "susmodder", ModId = "Mira" }]
             };
 
-            Assert.Equal(new ModpackPublishResult("mod-pack", 1), await api.PublishAsync(pack, "mod-pack"));
+            Assert.Equal(new ModpackPublishResult("mod-pack", 1), await api.PublishAsync(pack, "mod-pack", cancellationToken: TestContext.Current.CancellationToken));
             using var body = JsonDocument.Parse(capture.Body!);
             var item = body.RootElement.GetProperty("snapshot").GetProperty("items")[0];
             Assert.Equal("susmodder", item.GetProperty("source").GetString());
@@ -333,7 +333,7 @@ public sealed class Pak101SusModderCompositionTests
         try
         {
             var secretStore = new MemorySecretStore();
-            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
             var keys = new DeviceKeyStore(secretStore, Path.Combine(root, "settings.json"));
             var signer = new DeviceKeySigner(keys);
             var capture = new CaptureHandler();
@@ -346,7 +346,7 @@ public sealed class Pak101SusModderCompositionTests
                 Items = [new ModpackMod { Name = "SusModder-Mira", Version = "1.6.3b", Source = "susmodder", ModId = new string('a', 101) }]
             };
 
-            await Assert.ThrowsAsync<ArgumentException>(() => api.PublishAsync(pack, "mod-pack"));
+            await Assert.ThrowsAsync<ArgumentException>(() => api.PublishAsync(pack, "mod-pack", cancellationToken: TestContext.Current.CancellationToken));
             Assert.Null(capture.Body);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

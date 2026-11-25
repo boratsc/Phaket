@@ -23,7 +23,9 @@ public sealed class RecipeGeneratorTests
         Assert.Contains("game://BepInEx/plugins/owner-Mod/manifest.json", targets);
         Assert.Equal("shared", Assert.Single(generated.Ownership).Ownership);
         Assert.Equal("thunderstore.owner.mod", generated.Recipe.Id);
-        Assert.Equal("owner-Mod", generated.Recipe.Metadata.Title["en"]);
+        var metadata = generated.Recipe.Metadata;
+        Assert.NotNull(metadata);
+        Assert.Equal("owner-Mod", metadata!.Title!["en"]);
         Assert.Empty(RecipeValidator.Validate(generated.Recipe, game).Select(e => (e.Code, string.Join(";", e.Parameters.Select(p => p.Key + "=" + p.Value)))));
     }
 

@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using Phaket;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -21,7 +22,7 @@ public class CommunitiesApiClientTests
         var handler = new QueueHandler(_ => Json(HttpStatusCode.OK, """{"messages":[{"id":4,"authorNickname":"A","authorKey":"key123456789","content":"new","createdAt":"2026-01-01T00:00:00Z"},{"id":3,"authorNickname":"A","authorKey":"key123456789","content":"old"},{"id":5,"authorNickname":"B","content":"next"}]}"""));
         using var client = new CommunitiesApiClient(Client(handler), new TestSigner());
 
-        var result = await client.GetMessagesAsync("the-group", "general", after: 3, limit: 50);
+        var result = await client.GetMessagesAsync("the-group", "general", after: 3, limit: 50, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal([4L, 5L], result.Select(message => message.Id));
         Assert.Contains("after=3", handler.Requests.Single().RequestUri!.Query);
@@ -50,7 +51,7 @@ public class CommunitiesApiClientTests
         var handler = new QueueHandler(_ => Json(HttpStatusCode.OK, """{"communities":[{"slug":"secret-group","name":"Secret","description":"private","accessMode":"invite-code","isMember":false,"memberCount":1},{"slug":"open-group","name":"Open","description":"public","accessMode":"public","isMember":false,"memberCount":1}]}"""));
         using var client = new CommunitiesApiClient(Client(handler), new TestSigner());
 
-        var result = await client.ListAsync();
+        var result = await client.ListAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(result.Communities);
         Assert.Equal("open-group", result.Communities[0].Slug);
@@ -82,13 +83,13 @@ public class CommunitiesApiClientTests
         });
 
         Assert.True(client.IsDemoMode);
-        var created = await client.CreateAsync(new("My group", "local", CommunityAccessModes.Public));
+        var created = await client.CreateAsync(new("My group", "local", CommunityAccessModes.Public), cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(created.IsLocalDemo);
         Assert.True(created.IsMember);
-        var joined = await client.JoinAsync("demo-wyprawa", CommunityAccessModes.Public, null, null);
+        var joined = await client.JoinAsync("demo-wyprawa", CommunityAccessModes.Public, null, null, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(joined.IsMember);
-        await client.SendMessageAsync(created.Slug, "general", "local message");
-        Assert.Single(await client.GetMessagesAsync(created.Slug, "general"));
+        await client.SendMessageAsync(created.Slug, "general", "local message", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Single(await client.GetMessagesAsync(created.Slug, "general", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static HttpClient Client(HttpMessageHandler handler) => new(handler) { BaseAddress = new Uri("https://example.test/") };
@@ -148,7 +149,7 @@ public class CommunitiesHeadlessTests
         var directory = "/tmp/opencode/phaket-render";
         Directory.CreateDirectory(directory);
         using var frame = window.CaptureRenderedFrame();
-        frame!.Save(Path.Combine(directory, filename));
+        frame!.Save(Path.Combine(directory, filename), PngBitmapEncoderOptions.Default);
     }
 
     private sealed class CachedDemoApi(ICommunitiesApiClient inner) : ICommunitiesApiClient

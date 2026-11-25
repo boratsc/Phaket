@@ -22,7 +22,8 @@ public class RenderTests
         Directory.CreateDirectory(dir);
         Dispatcher.UIThread.RunJobs();
         using var frame = window.CaptureRenderedFrame();
-        frame.Save(Path.Combine(dir, name));
+        Assert.NotNull(frame);
+        frame.Save(Path.Combine(dir, name), PngBitmapEncoderOptions.Default);
     }
 
     [AvaloniaTheory]

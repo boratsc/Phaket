@@ -8,6 +8,7 @@ using Phaket.Models;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -149,7 +150,7 @@ public sealed class GitHubPickerTests
             using var frame = window.CaptureRenderedFrame();
             string dir = "/tmp/opencode/phaket-render";
             Directory.CreateDirectory(dir);
-            frame!.Save(Path.Combine(dir, "24-github-picker.png"));
+            frame!.Save(Path.Combine(dir, "24-github-picker.png"), PngBitmapEncoderOptions.Default);
             Assert.True(frame.PixelSize.Width > 0);
         }
         finally

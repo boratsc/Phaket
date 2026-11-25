@@ -55,7 +55,7 @@ public sealed class CommunitiesContractTests
             (HttpMethod.Get, "/communities/grupa", () => Json(HttpStatusCode.OK, FullRecord(isMember: false))));
         using var api = Client(routes);
 
-        var created = await api.CreateAsync(new("Grupa Granica", "Wspólne wypady", CommunityAccessModes.Public));
+        var created = await api.CreateAsync(new("Grupa Granica", "Wspólne wypady", CommunityAccessModes.Public), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("grupa", created.Slug);
         Assert.Equal("Grupa Granica", created.Name);
@@ -71,7 +71,7 @@ public sealed class CommunitiesContractTests
         var routes = Routes((HttpMethod.Post, "/communities", () => Json(HttpStatusCode.Created, FullRecord())));
         using var api = Client(routes);
 
-        var created = await api.CreateAsync(new("Grupa Granica", "", CommunityAccessModes.Public));
+        var created = await api.CreateAsync(new("Grupa Granica", "", CommunityAccessModes.Public), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Grupa Granica", created.Name);
         Assert.True(created.IsMember);
@@ -85,7 +85,7 @@ public sealed class CommunitiesContractTests
         using var api = Client(routes);
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            api.CreateAsync(new("Grupa", "", CommunityAccessModes.Public)));
+            api.CreateAsync(new("Grupa", "", CommunityAccessModes.Public), cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class CommunitiesContractTests
             (HttpMethod.Get, "/communities/grupa", () => Json(HttpStatusCode.OK, FullRecord())));
         using var api = Client(routes);
 
-        var joined = await api.JoinAsync("grupa", CommunityAccessModes.Public, null, null);
+        var joined = await api.JoinAsync("grupa", CommunityAccessModes.Public, null, null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Grupa Granica", joined.Name);
         Assert.Equal(3, joined.MemberCount);
@@ -111,7 +111,7 @@ public sealed class CommunitiesContractTests
             (HttpMethod.Get, "/communities/grupa", () => Json(HttpStatusCode.NotFound, "{}")));
         using var api = Client(routes);
 
-        var joined = await api.JoinAsync("grupa", CommunityAccessModes.Password, "password8", null);
+        var joined = await api.JoinAsync("grupa", CommunityAccessModes.Password, "password8", null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("grupa", joined.Slug);
         Assert.True(joined.IsMember);
@@ -126,7 +126,7 @@ public sealed class CommunitiesContractTests
         var routes = Routes((HttpMethod.Get, "/communities/grupa/channels", () => Json(HttpStatusCode.OK, payload)));
         using var api = Client(routes);
 
-        var messages = await api.GetMessagesAsync("grupa", ChannelId, after: 6);
+        var messages = await api.GetMessagesAsync("grupa", ChannelId, after: 6, cancellationToken: TestContext.Current.CancellationToken);
 
         var message = Assert.Single(messages);
         Assert.Equal(7, message.Id);
@@ -144,7 +144,7 @@ public sealed class CommunitiesContractTests
             (HttpMethod.Get, "/communities/grupa/channels", () => Json(HttpStatusCode.OK, stored)));
         using var api = Client(routes);
 
-        var sent = await api.SendMessageAsync("grupa", ChannelId, "Nowa");
+        var sent = await api.SendMessageAsync("grupa", ChannelId, "Nowa", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotNull(sent);
         Assert.Equal(8, sent!.Id);
@@ -164,7 +164,7 @@ public sealed class CommunitiesContractTests
         using var api = Client(routes);
 
         var error = await Assert.ThrowsAsync<CommunityApiException>(() =>
-            api.CreateAsync(new("Grupa", "", CommunityAccessModes.Public)));
+            api.CreateAsync(new("Grupa", "", CommunityAccessModes.Public), cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(code, error.ErrorCode);
         Assert.Equal((HttpStatusCode)status, error.StatusCode);
@@ -174,7 +174,7 @@ public sealed class CommunitiesContractTests
     public async Task Message_reads_are_signed_over_an_empty_body_and_public_reads_are_not()
     {
         var secretStore = new MemorySecretStore();
-        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32]);
+        await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
         string root = TestAccounts.TempPath();
         Directory.CreateDirectory(root);
         var keys = new DeviceKeyStore(secretStore, Path.Combine(root, "settings.json"));
@@ -186,8 +186,8 @@ public sealed class CommunitiesContractTests
         { BaseAddress = new Uri("https://api.example.test/") };
         using var api = new CommunitiesApiClient(http, signer);
 
-        await api.GetMessagesAsync("grupa", ChannelId);
-        await api.ListAsync();
+        await api.GetMessagesAsync("grupa", ChannelId, cancellationToken: TestContext.Current.CancellationToken);
+        await api.ListAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var messages = routes.Requests.Single(request => request.Path.Contains("/messages", StringComparison.Ordinal));
         var publicRead = routes.Requests.Single(request => request.Path.StartsWith("/communities?", StringComparison.Ordinal));

@@ -13,6 +13,7 @@ using Phaket.Core.Omrl;
 using Phaket.Core.Tools;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -247,7 +248,7 @@ public class SettingsToolsTests
             Assert.Equal(loc["Settings.Tools.Retry"], AutomationProperties.GetName(retry));
             System.IO.Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/10-settings-tools-offline.png");
+            frame!.Save("/tmp/opencode/phaket-render/10-settings-tools-offline.png", PngBitmapEncoderOptions.Default);
 
             // The retry is the same command the button calls: with a working network the list appears.
             stub.Failure = null;
@@ -292,7 +293,7 @@ public class SettingsToolsTests
             Assert.All(checks, b => Assert.Equal(loc["Settings.Tools.CheckUpdates"], AutomationProperties.GetName(b)));
             System.IO.Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/09-settings-tools.png");
+            frame!.Save("/tmp/opencode/phaket-render/09-settings-tools.png", PngBitmapEncoderOptions.Default);
         }
         finally
         {

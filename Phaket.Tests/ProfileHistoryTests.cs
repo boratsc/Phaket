@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -79,7 +80,7 @@ public sealed class ProfileHistoryTests
             using (var frame = window.CaptureRenderedFrame())
             {
                 Assert.NotNull(frame);
-                frame.Save("/tmp/opencode/phaket-render/22-profiles.png");
+                frame.Save("/tmp/opencode/phaket-render/22-profiles.png", PngBitmapEncoderOptions.Default);
             }
             Assert.Contains(vm.Profiles, p => p.IsClean && p.ModCount == 0);
             var active = vm.Profiles.Single(p => p.Id == profile.Id);

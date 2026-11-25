@@ -8,6 +8,7 @@ using Avalonia.VisualTree;
 using Phaket.Core.Catalog;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -140,7 +141,7 @@ public class CatalogOfflineTests
             Assert.Contains(loc["Catalog.Offline"], texts);
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-            frame!.Save("/tmp/opencode/phaket-render/mod-catalog-offline.png");
+            frame!.Save("/tmp/opencode/phaket-render/mod-catalog-offline.png", PngBitmapEncoderOptions.Default);
         }
         finally
         {

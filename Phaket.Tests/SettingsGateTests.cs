@@ -41,11 +41,11 @@ public sealed class SettingsGateTests
                 Task.Run(async () =>
                 {
                     for (int i = 0; i < 25; i++) await keys.SaveNickAsync("Device " + i, TestContext.Current.CancellationToken);
-                }),
+                }, TestContext.Current.CancellationToken),
                 Task.Run(() =>
                 {
                     for (int i = 0; i < 25; i++) settings.SaveCatalogEndpointCommand.Execute(null);
-                })
+                }, TestContext.Current.CancellationToken)
             };
             for (int i = 0; i < 25; i++) Assert.True(theme.SetTheme(i % 2 == 0 ? "dark" : "light"));
             await Task.WhenAll(writers);

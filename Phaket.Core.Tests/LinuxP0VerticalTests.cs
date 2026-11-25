@@ -154,7 +154,7 @@ public class LinuxP0VerticalTests
 
             var executor = new PlanExecutor(new PlanExecutionContext(gameDir, profileRoot, stagingRoot,
                 packageRoot, definition, recipe.Id, "profile-1", stateRoot));
-            var journal = executor.Execute(plan, executor.Approve(plan));
+            var journal = executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
             Assert.Equal(JournalState.Completed, journal.State);
             Assert.True(executor.VerifyPlan(plan).Succeeded);
             Assert.Equal("custom-roles", File.ReadAllText(Path.Combine(gameDir, "BepInEx", "plugins", "CustomRoles.dll")));

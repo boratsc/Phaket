@@ -5,9 +5,8 @@ namespace Phaket.Core.Platforms;
 
 public sealed record OwnedSteamGame(string AppId, string Name, int? PlaytimeMinutes, GameDefinition? Definition, string Source, bool LowerConfidence);
 
-public sealed class SteamLibraryService(Func<Task<string?>> apiKeyProvider, string steamId, HttpClient http, IReadOnlyList<GameDefinition> definitions, bool allowCommunityXml = false, string? dataRoot = null, string? userProfile = null)
+public sealed class SteamLibraryService(string steamId, IReadOnlyList<GameDefinition> definitions, string? dataRoot = null, string? userProfile = null)
 {
-    // shortcut: WebAPI parameters are unused after removing WebAPI; remove them with their UI call-sites.
     public async Task<IReadOnlyList<OwnedSteamGame>> GetOwnedGamesAsync(CancellationToken ct = default)
     {
         if (steamId.Length != 17 || steamId.Any(c => c is < '0' or > '9')) throw new ArgumentException("Invalid Steam ID", nameof(steamId));

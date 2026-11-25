@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -33,7 +34,7 @@ public class HelpContentTests
 
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-            frame!.Save("/tmp/opencode/phaket-render/help-empty.png");
+            frame!.Save("/tmp/opencode/phaket-render/help-empty.png", PngBitmapEncoderOptions.Default);
         }
         finally
         {

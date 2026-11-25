@@ -99,7 +99,7 @@ public sealed class DepotDownloaderInstallAdapterTests : IDisposable
         var provider = new Phaket.Core.Tools.ToolProvider(offlineRoot, client);
         var offlineAdapter = new DepotDownloaderInstallAdapter(runner, Path.Combine(root, "config2"), toolProvider: provider);
         plan = offlineAdapter.BuildInstallPlan(game, Path.Combine(root, "games"), definition, "windows", "64");
-        Assert.Equal("TOOL_OFFLINE", (await Assert.ThrowsAsync<PhaketException>(() => offlineAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true))).Error.Code);
+        Assert.Equal("TOOL_OFFLINE", (await Assert.ThrowsAsync<PhaketException>(() => offlineAdapter.ExecuteInstallAsync(plan, "account", Credentials, true, true, ct: TestContext.Current.CancellationToken))).Error.Code);
     }
 
     [Fact]

@@ -46,7 +46,7 @@ public sealed class Pak95SusModderRecipeTests
         Assert.Equal("epic", recipe.Steps[1].With["store"].GetString());
         Assert.Equal("x86", recipe.Artifacts.Single(a => a.Id == "loader").Arch);
 
-        var include = recipe.Steps[3].With["include"].EnumerateArray().Select(x => x.GetString()).ToArray();
+        var include = recipe.Steps[3].With["include"].EnumerateArray().Select(x => x.GetString()!).ToArray();
         Assert.Equal(AmongUs.WritableAreas.ToArray(), include);
         Assert.Contains("winhttp.dll", include);
         Assert.DoesNotContain(include, pattern => pattern.Contains("_Data", StringComparison.Ordinal));

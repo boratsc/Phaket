@@ -7,6 +7,7 @@ using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -43,7 +44,7 @@ public sealed class RecipeStudioTests
         vm.MoveStepDownCommand.Execute(vm.Steps[0]);
         using var document = System.Text.Json.JsonDocument.Parse(vm.OmrlText);
         var ids = document.RootElement.GetProperty("steps").EnumerateArray()
-            .Select(step => step.GetProperty("id").GetString()).ToArray();
+            .Select(step => step.GetProperty("id").GetString()!).ToArray();
 
         Assert.Equal([secondId, firstId], ids);
     }
@@ -98,8 +99,8 @@ public sealed class RecipeStudioTests
         x64.Version = "6.0.0";
 
         Assert.True(vm.ComparePlansCore());
-        var x86Plan = Assert.Single(vm.PlanComparisons.Where(plan => plan.Store == "steam" && plan.Arch == "x86"));
-        var x64Plan = Assert.Single(vm.PlanComparisons.Where(plan => plan.Store == "steam" && plan.Arch == "x64"));
+        var x86Plan = Assert.Single(vm.PlanComparisons, plan => plan.Store == "steam" && plan.Arch == "x86");
+        var x64Plan = Assert.Single(vm.PlanComparisons, plan => plan.Store == "steam" && plan.Arch == "x64");
         Assert.Contains(x86Plan.Operations, operation => operation.Source == "package://loader-x86.zip");
         Assert.DoesNotContain(x86Plan.Operations, operation => operation.Source == "package://loader-x64.zip");
         Assert.Contains(x64Plan.Operations, operation => operation.Source == "package://loader-x64.zip");
@@ -151,7 +152,7 @@ public sealed class RecipeStudioTests
             studioWindow.Show();
             Dispatcher.UIThread.RunJobs();
             using (var frame = studioWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the wizard.")).Save(Path.Combine(directory, "33-studio-wizard.png"));
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the wizard.")).Save(Path.Combine(directory, "33-studio-wizard.png"), PngBitmapEncoderOptions.Default);
             Assert.Equal(0, studio.WizardStage);
             for (var stage = 1; stage <= 3; stage++)
             {
@@ -163,7 +164,7 @@ public sealed class RecipeStudioTests
             studio.SwitchModeCommand.Execute("editor");
             Dispatcher.UIThread.RunJobs();
             using (var frame = studioWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the editor.")).Save(Path.Combine(directory, "34-studio-editor.png"));
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the editor.")).Save(Path.Combine(directory, "34-studio-editor.png"), PngBitmapEncoderOptions.Default);
             studioWindow.Close();
 
             var game = new GameCatalogItem(new GameDefinition("among-us", ["BepInEx/**"],
@@ -177,7 +178,7 @@ public sealed class RecipeStudioTests
             graphWindow.Show();
             Dispatcher.UIThread.RunJobs();
             using (var frame = graphWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the graph.")).Save(Path.Combine(directory, "35-graph.png"));
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the graph.")).Save(Path.Combine(directory, "35-graph.png"), PngBitmapEncoderOptions.Default);
             graphWindow.Close();
         }
         finally

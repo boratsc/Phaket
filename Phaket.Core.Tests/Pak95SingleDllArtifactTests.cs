@@ -94,7 +94,7 @@ public sealed class Pak95SingleDllArtifactTests
         Assert.Equal(DllHash, verify.Sha256);
 
         var executor = new PlanExecutor(fixture.PlanExecutionContext(recipe.Id));
-        executor.Execute(plan, executor.Approve(plan));
+        executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(DllBytes, File.ReadAllBytes(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "LevelImposter.dll")));
         Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "package.zip")));

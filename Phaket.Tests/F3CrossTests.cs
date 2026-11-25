@@ -46,7 +46,8 @@ public class F3CrossTests
         Directory.CreateDirectory(dir);
         Dispatcher.UIThread.RunJobs();
         using var frame = window.CaptureRenderedFrame();
-        frame.Save(Path.Combine(dir, name));
+        Assert.NotNull(frame);
+        frame.Save(Path.Combine(dir, name), PngBitmapEncoderOptions.Default);
     }
 
     private sealed class FakeApi : IModpackApiClient
@@ -273,7 +274,7 @@ public class F3CrossTests
             Assert.Equal(3, publisher.Requests.Count);
             Assert.False(publisher.Requests[2].CreateNew);
             Assert.Contains("wersja 3", reopened.ShareStatus, StringComparison.Ordinal);
-            Assert.Single(publisher.Requests.Where(request => request.CreateNew));
+            Assert.Single(publisher.Requests, request => request.CreateNew);
         }
         finally { LocalizationService.Instance.CurrentLanguage = language; if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -114,7 +115,7 @@ public sealed class ModPackTests
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/21-modpack.png");
+            frame.Save("/tmp/opencode/phaket-render/21-modpack.png", PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

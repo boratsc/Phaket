@@ -122,7 +122,7 @@ public class ProtonDbTests
             }
             using var reopened = new ProtonDbCache(path);
             Assert.Equal(2, reopened.GetReports("945360").Count);
-            Assert.Equal(1, reopened.GetReports("892970").Count);
+            Assert.Single(reopened.GetReports("892970"));
         }
         finally { Directory.Delete(dir, recursive: true); }
     }

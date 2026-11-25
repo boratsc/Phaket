@@ -242,9 +242,9 @@ public sealed class SandboxRealArtifactTests
         var source = new Source(("EasyWork-Root", [V("EasyWork-Root", "1", "denikson-BepInExPack-5.4.2350", "ValheimModding-Jotunn-2.30.0")]),
             ("denikson-BepInExPack", [V("denikson-BepInExPack", "5.4.2350"), V("denikson-BepInExPack", "5.4.2333")]),
             ("ValheimModding-Jotunn", [V("ValheimModding-Jotunn", "2.30.0", "denikson-BepInExPack-5.4.2333")]));
-        var resolver = new DependencyResolver(source); var conflict = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1");
+        var resolver = new DependencyResolver(source); var conflict = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", ct: TestContext.Current.CancellationToken);
         Assert.Equal("5.4.2350", Assert.Single(conflict.Conflicts).SuggestedVersion);
-        var resolved = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", new Dictionary<string,string> { ["denikson-BepInExPack"]="5.4.2350" });
+        var resolved = await resolver.ResolveWithProposalsAsync("EasyWork-Root", "1", new Dictionary<string,string> { ["denikson-BepInExPack"]="5.4.2350" }, ct: TestContext.Current.CancellationToken);
         Assert.Empty(resolved.Conflicts); Assert.Equal(3, resolved.Pinned.Count);
         Log.Add("resolve: conflict denikson-BepInExPack 5.4.2333/5.4.2350; suggestion 5.4.2350; override resolved (no execute by design)");
     }
@@ -255,8 +255,8 @@ public sealed class SandboxRealArtifactTests
         using var box = new Sandbox("among-us"); var recipe = Load("among-us-outfit-presets.yaml");
         await box.AddArtifacts(recipe, new Dictionary<string,string> { ["loader-pack"]="amongus-loader-6.0.700.zip", ["tabsbuilder-api"]="tabsbuilderapi-1.2.1.zip", ["outfit-presets"]="outfit-presets-1.1.1.zip" });
         var transport = new Receipts(); var sender = new ReceiptSender(transport); var orchestrator = new InstallOrchestrator(box.Executor(recipe), sender);
-        orchestrator.Run(box.Plan(recipe), receiptContext: new ReceiptContext("among-us", "steam", "Cosmella-Outfit_Presets"));
-        orchestrator.Uninstall(recipe.Id, receiptContext: new ReceiptContext("among-us", "steam", "Cosmella-Outfit_Presets"));
+        orchestrator.Run(box.Plan(recipe), receiptContext: new ReceiptContext("among-us", "steam", "Cosmella-Outfit_Presets"), cancellationToken: TestContext.Current.CancellationToken);
+        orchestrator.Uninstall(recipe.Id, receiptContext: new ReceiptContext("among-us", "steam", "Cosmella-Outfit_Presets"), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Collection(transport.Items, installed => { Assert.Equal("among-us", installed.GameId); Assert.Equal("Cosmella-Outfit_Presets", installed.ModFullName); Assert.Equal("1.1.1", installed.ModVersion); Assert.Equal("installed", installed.Result); }, uninstalled => { Assert.Equal("among-us", uninstalled.GameId); Assert.Equal("Cosmella-Outfit_Presets", uninstalled.ModFullName); Assert.Equal("uninstalled", uninstalled.Result); });
         Log.Add("receipts: installed and uninstalled payloads carry gameId/fullName/version");
         await Task.CompletedTask;

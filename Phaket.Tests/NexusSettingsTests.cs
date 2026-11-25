@@ -7,6 +7,7 @@ using Phaket.Core.Nexus;
 using Phaket.Core.Omrl;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -266,7 +267,7 @@ public sealed class NexusSettingsTests
 
                     Directory.CreateDirectory("/tmp/opencode/phaket-render");
                     using var frame = window.CaptureRenderedFrame();
-                    frame!.Save($"/tmp/opencode/phaket-render/53-settings-nexus-{locale}.png");
+                    frame!.Save($"/tmp/opencode/phaket-render/53-settings-nexus-{locale}.png", PngBitmapEncoderOptions.Default);
                 }
                 finally
                 {
@@ -306,7 +307,7 @@ public sealed class NexusSettingsTests
                 Dispatcher.UIThread.RunJobs();
                 using var frame = window.CaptureRenderedFrame();
                 Directory.CreateDirectory("/tmp/opencode/phaket-render");
-                frame!.Save("/tmp/opencode/phaket-render/54-nexus-browser.png");
+                frame!.Save("/tmp/opencode/phaket-render/54-nexus-browser.png", PngBitmapEncoderOptions.Default);
             }
             finally { window.Close(); }
         }

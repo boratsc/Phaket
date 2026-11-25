@@ -1,5 +1,6 @@
 using Phaket.Core.Execution;
 using Phaket.Services;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -50,7 +51,7 @@ public class ModLaunchViewModelTests
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/ui2-launch-requirements.png");
+            frame.Save("/tmp/opencode/phaket-render/ui2-launch-requirements.png", PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { Directory.Delete(root, true); }

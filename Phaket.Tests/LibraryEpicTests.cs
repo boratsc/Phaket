@@ -8,6 +8,7 @@ using Phaket.Core.Platforms;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -28,7 +29,7 @@ public class LibraryEpicTests
         Directory.CreateDirectory("/tmp/opencode/phaket-render");
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/library-install-plan.png");
+        frame.Save("/tmp/opencode/phaket-render/library-install-plan.png", PngBitmapEncoderOptions.Default);
         window.Close();
     }
     private sealed class Account : IAccountService
@@ -83,7 +84,7 @@ public class LibraryEpicTests
             using (var frame = window.CaptureRenderedFrame())
             {
                 Assert.NotNull(frame);
-                frame.Save("/tmp/opencode/phaket-render/game-epic-model.png");
+                frame.Save("/tmp/opencode/phaket-render/game-epic-model.png", PngBitmapEncoderOptions.Default);
             }
             window.Close();
             Assert.False(item.OwnedNotInstalled);
@@ -178,7 +179,7 @@ public class LibraryEpicTests
         Directory.CreateDirectory("/tmp/opencode/phaket-render");
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/library-owned.png");
+        frame.Save("/tmp/opencode/phaket-render/library-owned.png", PngBitmapEncoderOptions.Default);
         window.Close();
     }
 }

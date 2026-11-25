@@ -176,7 +176,7 @@ public class DefinitionTests
             var executor = new PlanExecutor(new PlanExecutionContext(game,
                 Path.Combine(root, "profile"), Path.Combine(root, "staging"), root, definition, "test.layout", "p",
                 Path.Combine(root, "state")));
-            var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan)));
+            var ex = Assert.Throws<PhaketException>(() => executor.Execute(plan, executor.Approve(plan), ct: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.LoaderUnavailable, ex.Error.Code);
         }
         finally { Directory.Delete(root, recursive: true); }

@@ -184,10 +184,10 @@ public sealed class NexusServiceTests
         });
         baseUrl = server.BaseUrl;
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("api-key");
+        await harness.Keys.SaveAsync("api-key", cancellationToken: TestContext.Current.CancellationToken);
 
         NexusDownloadResult result = await harness.Service.DownloadAsync(NxmLink.TryParse(
-            "nxm://amongus/mods/1/files/2?key=k&expires=1700000000", out var link) ? link! : throw new InvalidOperationException());
+            "nxm://amongus/mods/1/files/2?key=k&expires=1700000000", out var link) ? link! : throw new InvalidOperationException(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(payload, await File.ReadAllBytesAsync(result.Path, TestContext.Current.CancellationToken));
         Assert.EndsWith("Example-1.zip", result.Path);
@@ -204,10 +204,10 @@ public sealed class NexusServiceTests
             _ => StubServer.Response.Json("{}", 404)
         });
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("api-key");
+        await harness.Keys.SaveAsync("api-key", cancellationToken: TestContext.Current.CancellationToken);
 
         NxmLink.TryParse("nxm://amongus/mods/1/files/2", out var link);
-        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.DownloadAsync(link!));
+        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.DownloadAsync(link!, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("NEXUS_PREMIUM_REQUIRED", ex.Code);
         Assert.DoesNotContain(server.Requests, request => request.Path.Contains("download_link", StringComparison.Ordinal));
     }
@@ -227,10 +227,10 @@ public sealed class NexusServiceTests
         });
         baseUrl = server.BaseUrl;
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("api-key");
+        await harness.Keys.SaveAsync("api-key", cancellationToken: TestContext.Current.CancellationToken);
 
         NxmLink.TryParse("nxm://amongus/mods/1/files/2", out var link);
-        NexusDownloadResult result = await harness.Service.DownloadAsync(link!);
+        NexusDownloadResult result = await harness.Service.DownloadAsync(link!, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(payload, await File.ReadAllBytesAsync(result.Path, TestContext.Current.CancellationToken));
     }
 
@@ -239,9 +239,9 @@ public sealed class NexusServiceTests
     {
         await using var server = new StubServer(_ => StubServer.Response.Json("""{ "message": "expired" }""", 403));
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("api-key");
+        await harness.Keys.SaveAsync("api-key", cancellationToken: TestContext.Current.CancellationToken);
         NxmLink.TryParse("nxm://amongus/mods/1/files/2?key=k&expires=1", out var link);
-        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.DownloadAsync(link!));
+        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.DownloadAsync(link!, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("NEXUS_NXM_EXPIRED", ex.Code);
     }
 
@@ -250,9 +250,9 @@ public sealed class NexusServiceTests
     {
         await using var server = new StubServer(_ => StubServer.Response.Json(ModJson));
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("key-abc");
-        Assert.Equal("Example", (await harness.Service.GetModAsync("amongus", 1)).Name);
-        Assert.Equal("Example", (await harness.Service.GetModAsync("amongus", 1)).Name);
+        await harness.Keys.SaveAsync("key-abc", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("Example", (await harness.Service.GetModAsync("amongus", 1, cancellationToken: TestContext.Current.CancellationToken)).Name);
+        Assert.Equal("Example", (await harness.Service.GetModAsync("amongus", 1, cancellationToken: TestContext.Current.CancellationToken)).Name);
         Assert.Single(server.Requests);
         Assert.Equal("key-abc", server.Requests[0].Headers["apikey"]);
         Assert.False(server.Requests[0].Headers.ContainsKey("Authorization"));
@@ -279,7 +279,7 @@ public sealed class NexusServiceTests
         var time = new FakeTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
         await using var harness = Create(server, time);
 
-        NexusKeyStatus status = await harness.Service.SignInAsync("test-client");
+        NexusKeyStatus status = await harness.Service.SignInAsync("test-client", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("OAuth User", status.User.Name);
         Assert.True(status.User.IsPremium);
@@ -292,7 +292,7 @@ public sealed class NexusServiceTests
         Assert.Contains("code_verifier=", form);
         Assert.Contains("Bearer access-1", bearer);
 
-        NexusOAuthTokens? tokens = await harness.Keys.ReadOAuthTokensAsync();
+        NexusOAuthTokens? tokens = await harness.Keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("access-1", tokens!.AccessToken);
         Assert.Equal("refresh-1", tokens.RefreshToken);
         Assert.Equal(time.GetUtcNow().AddSeconds(3600), tokens.ExpiresAt);
@@ -305,9 +305,9 @@ public sealed class NexusServiceTests
         await using var harness = Create(server, receive: (_, _, _) =>
             Task.FromResult(new NexusOAuthCallback("the-code", "not-the-state")));
 
-        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.SignInAsync("test-client"));
+        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.SignInAsync("test-client", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("NEXUS_OAUTH_STATE", ex.Code);
-        Assert.Null(await harness.Keys.ReadOAuthTokensAsync());
+        Assert.Null(await harness.Keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -330,14 +330,14 @@ public sealed class NexusServiceTests
         });
         var time = new FakeTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
         await using var harness = Create(server, time);
-        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("stale", "refresh-1", time.GetUtcNow().AddMinutes(-5)));
+        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("stale", "refresh-1", time.GetUtcNow().AddMinutes(-5)), cancellationToken: TestContext.Current.CancellationToken);
 
-        await harness.Service.GetModAsync("amongus", 1);
+        await harness.Service.GetModAsync("amongus", 1, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains("grant_type=refresh_token", refreshForm);
         Assert.Contains("refresh_token=refresh-1", refreshForm);
         Assert.Equal("Bearer access-2", bearer);
-        NexusOAuthTokens? stored = await harness.Keys.ReadOAuthTokensAsync();
+        NexusOAuthTokens? stored = await harness.Keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("access-2", stored!.AccessToken);
         Assert.Equal("refresh-2", stored.RefreshToken);
     }
@@ -350,11 +350,11 @@ public sealed class NexusServiceTests
             : StubServer.Response.Json(ModJson));
         var time = new FakeTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
         await using var harness = Create(server, time);
-        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("stale", "refresh-1", time.GetUtcNow().AddMinutes(-5)));
+        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("stale", "refresh-1", time.GetUtcNow().AddMinutes(-5)), cancellationToken: TestContext.Current.CancellationToken);
 
-        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.GetModAsync("amongus", 1));
+        var ex = await Assert.ThrowsAsync<NexusApiException>(() => harness.Service.GetModAsync("amongus", 1, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("NEXUS_OAUTH_REVOKED", ex.Code);
-        Assert.Null(await harness.Keys.ReadOAuthTokensAsync());
+        Assert.Null(await harness.Keys.ReadOAuthTokensAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -379,11 +379,11 @@ public sealed class NexusServiceTests
         baseUrl = server.BaseUrl;
         var time = new FakeTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
         await using var harness = Create(server, time);
-        await harness.Keys.SaveAsync("api-key");
-        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("oauth-access", "r", time.GetUtcNow().AddHours(1)));
+        await harness.Keys.SaveAsync("api-key", cancellationToken: TestContext.Current.CancellationToken);
+        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("oauth-access", "r", time.GetUtcNow().AddHours(1)), cancellationToken: TestContext.Current.CancellationToken);
 
         NxmLink.TryParse("nxm://amongus/mods/1/files/2?key=k&expires=1700000000", out var link);
-        await harness.Service.DownloadAsync(link!);
+        await harness.Service.DownloadAsync(link!, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Bearer oauth-access", authorization);
         Assert.False(sawApiKey);
@@ -394,14 +394,14 @@ public sealed class NexusServiceTests
     {
         await using var server = new StubServer(_ => StubServer.Response.Json("{}"));
         await using var harness = Create(server);
-        await harness.Keys.SaveAsync("fallback-key");
-        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("a", "r", DateTimeOffset.UtcNow.AddHours(1)));
-        Assert.True(await harness.Service.HasOAuthSessionAsync());
+        await harness.Keys.SaveAsync("fallback-key", cancellationToken: TestContext.Current.CancellationToken);
+        await harness.Keys.SaveOAuthTokensAsync(new NexusOAuthTokens("a", "r", DateTimeOffset.UtcNow.AddHours(1)), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(await harness.Service.HasOAuthSessionAsync(cancellationToken: TestContext.Current.CancellationToken));
 
-        await harness.Service.SignOutAsync();
+        await harness.Service.SignOutAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.False(await harness.Service.HasOAuthSessionAsync());
-        Assert.Equal("fallback-key", await harness.Keys.ReadAsync());
+        Assert.False(await harness.Service.HasOAuthSessionAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("fallback-key", await harness.Keys.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static NxmLink Link() =>
@@ -566,7 +566,7 @@ public sealed class NexusLiveTests
         using var http = new HttpClient { BaseAddress = new Uri("https://api.nexusmods.com"), Timeout = TimeSpan.FromSeconds(20) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Phaket/0.1 (Nexus integration; testing)");
         var client = new NexusApiClient(http, new StaticProvider(key));
-        NexusUser user = await client.ValidateAsync();
+        NexusUser user = await client.ValidateAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrWhiteSpace(user.Name));
     }
 }

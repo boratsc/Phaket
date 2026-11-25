@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Phaket.Core.Catalog;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -146,7 +147,7 @@ public class ModCatalogViewModelTests
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/mod-catalog.png");
+            frame.Save("/tmp/opencode/phaket-render/mod-catalog.png", PngBitmapEncoderOptions.Default);
             window.Close();
         } finally { Directory.Delete(root, true); }
     }

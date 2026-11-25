@@ -18,7 +18,7 @@ public class InstallOrchestratorTests
 
         var progress = new List<InstallProgress>();
         var syncProgress = new SyncProgress(progress);
-        var journal = orchestrator.Run(plan, syncProgress);
+        var journal = orchestrator.Run(plan, syncProgress, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(JournalState.Completed, journal.State);
         Assert.True(File.Exists(Path.Combine(fixture.GameRoot, "BepInEx", "plugins", "CustomRoles.dll")));
@@ -47,7 +47,7 @@ public class InstallOrchestratorTests
         var journal = PlanExecutor.LoadJournal(fixture.ProfileRoot)!;
         Assert.Equal(JournalState.Interrupted, journal.State);
         // Resume completes.
-        var resumed = orchestrator.Run(plan);
+        var resumed = orchestrator.Run(plan, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(JournalState.Completed, resumed.State);
     }
 }

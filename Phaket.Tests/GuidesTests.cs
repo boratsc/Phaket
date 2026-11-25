@@ -10,6 +10,7 @@ using Phaket.Controls;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Phaket.Views;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -73,7 +74,7 @@ public class GuidesTests
 
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/23-guides.png");
+            frame!.Save("/tmp/opencode/phaket-render/23-guides.png", PngBitmapEncoderOptions.Default);
             var article = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), text =>
                 text.Text == vm.SelectedGuide.Title && Avalonia.Automation.AutomationProperties.GetHeadingLevel(text) == 2);
             Assert.Equal(vm.SelectedGuide.Title, article.Text);

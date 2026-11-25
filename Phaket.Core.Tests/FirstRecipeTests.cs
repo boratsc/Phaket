@@ -109,7 +109,7 @@ public class FirstRecipeTests
 
             var executor = new PlanExecutor(new PlanExecutionContext(
                 game, profile, staging, packages, definition, recipe.Id, "p", state));
-            var journal = new InstallOrchestrator(executor).Run(plan);
+            var journal = new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(JournalState.Completed, journal.State);
             Assert.True(executor.VerifyPlan(plan).Succeeded);
 
@@ -145,7 +145,7 @@ public class FirstRecipeTests
         var requirement = definition.LaunchRequirementsFor("linux").Single(r => r.Status == "required");
         Assert.False(string.IsNullOrEmpty(requirement.Source));   // provenance is mandatory data
         Assert.False(string.IsNullOrEmpty(requirement.ObservedAt));
-        Assert.Empty(definition.LaunchRequirementsFor("windows").Where(r => r.Status == "required"));
+        Assert.DoesNotContain(definition.LaunchRequirementsFor("windows"), r => r.Status == "required");
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class FirstRecipeTests
                 new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86");
             var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition, facts));
             var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state));
-            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan));
+            var ex = Assert.Throws<PhaketException>(() => new InstallOrchestrator(executor).Run(plan, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.PathOutOfBounds, ex.Error.Code);
             // The wrapper-folder prefix itself is outside writableAreas: this is
             // exactly why the real recipe must declare stripComponents: 1.

@@ -10,6 +10,7 @@ using Phaket.Core.Tests;
 using Phaket.Services;
 using Phaket.ViewModels;
 using Velopack.Exceptions;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -93,7 +94,7 @@ public sealed class UpdatesTests
             var service = new UpdateService(Path.Combine(root, "settings.json"),
                 _ => new FakeSource { IsInstalled = false, CurrentVersion = "0.1.0" });
 
-            UpdateCheckResult result = await service.CheckAsync();
+            UpdateCheckResult result = await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(UpdateOutcome.DevelopmentMode, result.Outcome);
             Assert.Equal(UpdateError.None, result.Error);
@@ -115,7 +116,7 @@ public sealed class UpdatesTests
             var service = new UpdateService(Path.Combine(root, "settings.json"),
                 _ => new FakeSource { CheckError = NotInstalled() });
 
-            UpdateCheckResult result = await service.CheckAsync();
+            UpdateCheckResult result = await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(UpdateOutcome.DevelopmentMode, result.Outcome);
             Assert.Equal(UpdateError.NotInstalled, result.Error);
@@ -135,9 +136,9 @@ public sealed class UpdatesTests
                 DownloadError = new ChecksumFailedException("bad sha")
             };
             var service = new UpdateService(Path.Combine(root, "settings.json"), _ => source);
-            await service.CheckAsync();
+            await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            UpdateDownloadResult result = await service.DownloadAsync();
+            UpdateDownloadResult result = await service.DownloadAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.False(result.Success);
             Assert.Equal(UpdateError.Checksum, result.Error);
@@ -155,7 +156,7 @@ public sealed class UpdatesTests
             var service = new UpdateService(Path.Combine(root, "settings.json"),
                 _ => new FakeSource { CheckError = new HttpRequestException("offline") });
 
-            UpdateCheckResult result = await service.CheckAsync();
+            UpdateCheckResult result = await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(UpdateOutcome.Error, result.Outcome);
             Assert.Equal("Settings.Updates.Error.Network", UpdateService.KeyFor(result.Error));
@@ -172,9 +173,9 @@ public sealed class UpdatesTests
             var source = new FakeSource { Available = "0.2.0" };
             var service = new UpdateService(Path.Combine(root, "settings.json"), _ => source);
 
-            UpdateCheckResult check = await service.CheckAsync();
+            UpdateCheckResult check = await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
             var progress = new ProgressCollector();
-            UpdateDownloadResult download = await service.DownloadAsync(progress);
+            UpdateDownloadResult download = await service.DownloadAsync(progress, cancellationToken: TestContext.Current.CancellationToken);
             UpdateError apply = service.ApplyAndRestart();
 
             Assert.Equal(UpdateOutcome.Available, check.Outcome);
@@ -201,9 +202,9 @@ public sealed class UpdatesTests
                 return new FakeSource { IsInstalled = false };
             });
 
-            await service.CheckAsync();
+            await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
             service.SetChannel(UpdateChannel.Beta);
-            await service.CheckAsync();
+            await service.CheckAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(new[] { UpdateChannel.Stable, UpdateChannel.Beta }, requested);
         }
@@ -438,7 +439,7 @@ public sealed class UpdatesTests
 
                         Directory.CreateDirectory("/tmp/opencode/phaket-render");
                         using var frame = window.CaptureRenderedFrame();
-                        frame!.Save($"/tmp/opencode/phaket-render/55-settings-updates-{locale}.png");
+                        frame!.Save($"/tmp/opencode/phaket-render/55-settings-updates-{locale}.png", PngBitmapEncoderOptions.Default);
                     }
                     finally { window.Close(); }
                 }

@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Phaket;
 using Phaket.Services;
 using Phaket.ViewModels;
+using Avalonia.Media.Imaging;
 
 [assembly: AvaloniaTestApplication(typeof(Phaket.Tests.TestAppBuilder))]
 
@@ -146,7 +147,7 @@ public class MainWindowTests
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
             Directory.CreateDirectory("/tmp/opencode/phaket");
-            frame.Save("/tmp/opencode/phaket/pak116-mods-valheim.png");
+            frame.Save("/tmp/opencode/phaket/pak116-mods-valheim.png", PngBitmapEncoderOptions.Default);
         }
         finally
         {

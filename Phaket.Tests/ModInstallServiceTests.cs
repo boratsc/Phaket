@@ -12,6 +12,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.Media.Imaging;
 
 namespace Phaket.Tests;
 
@@ -297,7 +298,7 @@ public sealed class ModInstallServiceTests
             var window = new Window { Width = 1280, Height = 900, Content = new Phaket.Views.ModsView { DataContext = modsVm } };
             window.Show(); Dispatcher.UIThread.RunJobs();
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            using (var frame = window.CaptureRenderedFrame()) { Assert.NotNull(frame); frame.Save("/tmp/opencode/phaket-render/realtarget-preview.png"); }
+            using (var frame = window.CaptureRenderedFrame()) { Assert.NotNull(frame); frame.Save("/tmp/opencode/phaket-render/realtarget-preview.png", PngBitmapEncoderOptions.Default); }
             window.Close();
             await vm.ExecuteInstallCommand.ExecuteAsync(null);
             Assert.False(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));
@@ -359,7 +360,7 @@ public sealed class ModInstallServiceTests
             using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
             var (service, _) = lease;
             var gameRoot = Path.Combine(root, "nonexistent-game");
-            await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new(gameRoot, "steam", false)));
+            await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new(gameRoot, "steam", false), ct: TestContext.Current.CancellationToken));
             Assert.False(Directory.Exists(gameRoot));
         }
         finally { Directory.Delete(root, true); }
@@ -377,8 +378,8 @@ public sealed class ModInstallServiceTests
             using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip },
                 (LoaderName, [loader]), (RootName, [mod]));
             var (service, receipts) = lease;
-            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
-            var outcome = await service.ExecuteAsync(prep, true);
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
+            var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);
             Assert.True(outcome.Success, outcome.ErrorCode);
             Assert.Equal(2, outcome.Journals.Count);
             Assert.Equal(2, prep.PackageRoots.Count);
@@ -410,7 +411,7 @@ public sealed class ModInstallServiceTests
             using var lease = await CreateService(root, new Dictionary<string, byte[]>());
             var (service, _) = lease;
             var prep = new InstallPreparation("among-us", RootName, "1.0.0", "", new("", "steam", true), [], [], [], [], "", "", "", "", "");
-            var error = await Assert.ThrowsAsync<PhaketException>(() => service.ExecuteAsync(prep, false));
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.ExecuteAsync(prep, false, ct: TestContext.Current.CancellationToken));
             Assert.Equal("PLAN_NOT_ACCEPTED", error.Error.Code);
         }
         finally { Directory.Delete(root, true); }
@@ -431,13 +432,13 @@ public sealed class ModInstallServiceTests
             var packages = new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip, [otherUrl] = modZip };
             using var lease = await CreateService(root, packages, (LoaderName, [loader1, loader2]), (RootName, [mod]), ("Test-Other", [other]));
             var (service, _) = lease;
-            var conflictPrep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true));
+            var conflictPrep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true), ct: TestContext.Current.CancellationToken);
             var conflict = Assert.Single(conflictPrep.Conflicts);
             Assert.Equal(LoaderName, conflict.Package);
             Assert.Equal("2.0.0", conflict.SuggestedVersion);
             packages["https://thunderstore.io/package/download/Test/Loader/2.0.0/"] = loaderZip;
             var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"),
-                new Dictionary<string, string> { [LoaderName] = "2.0.0" });
+                new Dictionary<string, string> { [LoaderName] = "2.0.0" }, ct: TestContext.Current.CancellationToken);
             Assert.Empty(prep.Conflicts);
             Assert.NotEmpty(prep.Plans);
         }
@@ -454,7 +455,7 @@ public sealed class ModInstallServiceTests
             var mod = Version(RootName, "1.0.0", url, [1, 2, 3]);
             using var lease = await CreateService(root, new Dictionary<string, byte[]> { [url] = [1, 2, 3] }, (RootName, [mod]));
             var (service, _) = lease;
-            await Assert.ThrowsAnyAsync<Exception>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true)));
+            await Assert.ThrowsAnyAsync<Exception>(() => service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true), ct: TestContext.Current.CancellationToken));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -470,7 +471,7 @@ public sealed class ModInstallServiceTests
         {
             using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = modZip, [LoaderUrl] = loaderZip }, (LoaderName, [loader]), (RootName, [mod]));
             var (service, _) = lease;
-            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"));
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
             using var cts = new CancellationTokenSource(); cts.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ExecuteAsync(prep, true, ct: cts.Token));
             var game = Path.Combine(prep.SandboxRoot, "game");
@@ -500,8 +501,8 @@ public sealed class ModInstallServiceTests
             await File.WriteAllBytesAsync(Path.Combine(prep.PackageRoots[1], "package.zip"), [1, 2, 3], TestContext.Current.CancellationToken);
             var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);
             Assert.False(outcome.Success);
-            Assert.Empty(Directory.EnumerateFiles(Path.Combine(prep.SandboxRoot, "game"), "*", SearchOption.AllDirectories)
-                .Where(path => !path.EndsWith("Among Us.exe", StringComparison.Ordinal)));
+            Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(prep.SandboxRoot, "game"), "*", SearchOption.AllDirectories),
+                path => !path.EndsWith("Among Us.exe", StringComparison.Ordinal));
             Assert.Empty(new InstallRegistry(Path.Combine(root, "installs.json")).All());
             Assert.DoesNotContain(new ProfileStore(Path.Combine(root, "empty-profile-store")).Active("among-us")?.Mods ?? [], m => m.Name == RootName);
             Assert.Equal("failed", Assert.Single(receipts.Items).Result);
@@ -733,15 +734,15 @@ public sealed class ModInstallServiceTests
             var client = new ModCatalogClient(new HttpCatalogTransport(http), db);
             var service = new ModInstallService(root.FullName, client, new HttpPackageTransport(packageHttp),
                 profiles: new ProfileStore(Path.Combine(root.FullName, "profiles")));
-            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", LiveServer.Url, new("", "steam", true, "x86"));
-            var outcome = await service.ExecuteAsync(prep, true);
+            var prep = await service.PrepareAsync("among-us", "Cosmella-Outfit_Presets", "1.1.1", LiveServer.Url, new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken);
+            var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);
             Assert.True(outcome.Success, outcome.ErrorCode);
             var game = Path.Combine(prep.SandboxRoot, "game");
             Assert.True(Directory.Exists(Path.Combine(game, "BepInEx", "plugins", "Cosmella-Outfit_Presets")));
             Assert.True(File.Exists(Path.Combine(game, "winhttp.dll")));
-            using var response = await probe.GetAsync($"{LiveServer.Url}/receipts/summary?game=among-us&mod=Cosmella-Outfit_Presets");
+            using var response = await probe.GetAsync($"{LiveServer.Url}/receipts/summary?game=among-us&mod=Cosmella-Outfit_Presets", cancellationToken: TestContext.Current.CancellationToken);
             response.EnsureSuccessStatusCode();
-            var body = await response.Content.ReadAsStringAsync();
+            var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(JsonDocument.Parse(body).RootElement.GetProperty("installed").GetInt32() >= 1, body);
             Console.WriteLine($"LIVE_RECEIPTS_SUMMARY {body}");
         }
