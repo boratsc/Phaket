@@ -267,18 +267,24 @@ public partial class ModCatalogViewModel : ViewModelBase
             {
                 preparation = result;
                 foreach (var package in result.Preview) Preview.Add(package);
-                foreach (var warning in result.Plans.SelectMany(p => p.Warnings).Distinct())
+                var warnings = result.Plans.SelectMany(p => p.Warnings).Distinct(StringComparer.Ordinal).ToArray();
+                var loc = LocalizationService.Instance;
+                foreach (var warning in warnings.Where(w => !w.StartsWith("executable-library:", StringComparison.Ordinal)))
                 {
-                    var loc = LocalizationService.Instance;
                     var text = warning switch
                     {
                         "ARCH_UNKNOWN" => loc["ModInstall.WarningArchUnknown"],
                         "BUILD_UNKNOWN" => loc["ModInstall.WarningBuildUnknown"],
                         "loader-overwrite-unknown" => loc["ModInstall.WarningLoaderOverwriteUnknown"],
+                        "THUNDERSTORE_HASH_UNVERIFIED" => ErrorMessages.Format("THUNDERSTORE_HASH_UNVERIFIED", loc.CurrentLanguage),
                         _ => loc["ModInstall.WarningOther"] + " " + warning
                     };
                     PlanWarnings.Add(text);
                 }
+                // One DLL pack lists a dozen executable libraries; one counted line is the
+                // warning, thirteen identical entries are noise.
+                var executables = warnings.Count(w => w.StartsWith("executable-library:", StringComparison.Ordinal));
+                if (executables > 0) PlanWarnings.Add(string.Format(loc["ModInstall.WarningExecutableLibrary"], executables));
                 IsSandboxTarget = result.Target.Sandbox;
                 TargetDescription = result.Target.Sandbox ? Path.Combine(result.SandboxRoot, "game") : result.Target.GameRoot;
                 foreach (var operation in result.Plans.SelectMany(p => p.Operations))
@@ -295,6 +301,10 @@ public partial class ModCatalogViewModel : ViewModelBase
         { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
         // The planner refused because a needed fact (arch/build) is unknown: say which one.
         catch (PhaketException ex) when (ex.Error.Code == ErrorCodes.InstallFactsMissing)
+        { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
+        // PAK-129: an artifact whose real size differs from the catalog's is a size mismatch,
+        // not a generic prepare failure; the message names both sizes.
+        catch (PhaketException ex) when (ex.Error.Code == ErrorCodes.ArtifactSizeMismatch)
         { InstallStatus = ex.LocalizedMessage(LocalizationService.Instance.CurrentLanguage); }
         catch (Exception) { InstallStatus = LocalizationService.Instance["ModInstall.PrepareFailed"]; }
         finally { IsPreparing = false; }

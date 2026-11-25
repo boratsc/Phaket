@@ -33,6 +33,24 @@ public class ModInstallViewModelTests
         Assert.Empty(vm.PlanWarnings);
         Assert.Equal(LocalizationService.Instance["ModInstall.LoaderArchUnavailable"], vm.InstallStatus);
     }
+
+    // PAK-129: a catalog size that does not match the artifact gets the localized size message,
+    // never the generic prepare failure.
+    [AvaloniaFact]
+    public async Task SizeMismatchShowsTheLocalizedReason()
+    {
+        var vm = new ModCatalogViewModel("among-us", "/tmp/opencode/ui4-test", autoSync: false);
+        var failure = new PhaketException(ErrorCodes.ArtifactSizeMismatch,
+            ("artifact", "Owner-Mod"), ("actual", "2048"), ("expected", "1024"));
+        vm.PrepareOverride = (_, _, _, _, _) => throw failure;
+
+        await vm.BeginInstallAsync("Owner-Mod", "2.0", Target);
+
+        string expected = failure.LocalizedMessage(LocalizationService.Instance.CurrentLanguage);
+        Assert.Equal(expected, vm.InstallStatus);
+        Assert.Contains("2048", expected);
+        Assert.NotEqual(LocalizationService.Instance["ModInstall.PrepareFailed"], vm.InstallStatus);
+    }
     private static readonly InstallTarget Target = new("", "steam", true);
     private static InstallPreparation Preparation(IReadOnlyList<ConflictProposal>? conflicts = null) => new(
         "among-us", "Owner-Mod", "2.0", "http://localhost", Target,

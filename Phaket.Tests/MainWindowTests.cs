@@ -112,6 +112,73 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
+    public async Task Game_picker_rebuilds_mods_for_the_new_game()
+    {
+        string root = TestAccounts.TempPath();
+        Directory.CreateDirectory(root);
+        // Keep the catalog refresh local so the regression test never needs the network.
+        File.WriteAllText(Path.Combine(root, "settings.json"),
+            """{ "catalogEndpoint": "http://127.0.0.1:1" }""");
+        var vm = new MainWindowViewModel(TestAccounts.Create(),
+            new SettingsViewModel(Path.Combine(root, "settings.json")), root);
+        Window? window = null;
+        try
+        {
+            var gameA = vm.Library.Games.Single(game => game.Definition.Slug == "among-us");
+            var gameB = vm.Library.Games.Single(game => game.Definition.Slug == "valheim");
+            window = new MainWindow(vm) { Width = 1280, Height = 800 };
+            window.Show();
+            vm.SelectedGame = gameA;
+            vm.OpenMods();
+            if (vm.Mods!.Catalog.RefreshCommand.ExecutionTask is { } firstRefresh) await firstRefresh;
+            var oldMods = vm.Mods;
+
+            vm.SelectedGame = gameB;
+            if (vm.Mods!.Catalog.RefreshCommand.ExecutionTask is { } secondRefresh) await secondRefresh;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("mods", vm.ActiveNav);
+            Assert.IsType<ModsViewModel>(vm.CurrentPage);
+            Assert.NotSame(oldMods, vm.Mods);
+            Assert.Equal(gameB.Title, vm.Mods!.GameTitle);
+            var modsView = window.GetVisualDescendants().OfType<Phaket.Views.ModsView>().Single();
+            Assert.Contains(modsView.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == gameB.Title);
+            using var frame = window.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+            Directory.CreateDirectory("/tmp/opencode/phaket");
+            frame.Save("/tmp/opencode/phaket/pak116-mods-valheim.png");
+        }
+        finally
+        {
+            window?.Close();
+            vm.Dispose();
+            Directory.Delete(root, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Game_picker_rebuilds_open_game_page_for_the_new_game()
+    {
+        var vm = TestAccounts.ViewModel();
+        try
+        {
+            var gameA = vm.Library.Games.Single(game => game.Definition.Slug == "among-us");
+            var gameB = vm.Library.Games.Single(game => game.Definition.Slug == "valheim");
+            vm.Library.OpenGameCommand.Execute(gameA);
+
+            vm.SelectedGame = gameB;
+
+            Assert.Equal("library", vm.ActiveNav);
+            Assert.IsType<GameViewModel>(vm.CurrentPage);
+            Assert.Same(gameB, vm.Game!.Game);
+        }
+        finally
+        {
+            vm.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
     public void Selected_game_keeps_context_when_library_search_has_no_match()
     {
         var vm = TestAccounts.ViewModel();

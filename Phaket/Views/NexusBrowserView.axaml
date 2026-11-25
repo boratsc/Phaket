@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             x:Class="Phaket.Views.NexusBrowserView"
+             x:DataType="vm:NexusBrowserViewModel">
+  <StackPanel Spacing="10">
+    <StackPanel Spacing="3">
+      <TextBlock Classes="sectionTitle" Text="{Binding [Nexus.Browser.Title], Source={x:Static services:LocalizationService.Instance}}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Nexus.Browser.Description], Source={x:Static services:LocalizationService.Instance}}" />
+    </StackPanel>
+
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox Text="{Binding Reference}"
+               PlaceholderText="{Binding [Nexus.Browser.ReferencePlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+               AutomationProperties.Name="{Binding [Nexus.Browser.ReferencePlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+               AutomationProperties.AutomationId="nexus.browser.reference" />
+      <Button Grid.Column="1" Command="{Binding LoadModCommand}"
+              AutomationProperties.Name="{Binding [Nexus.Browser.Load], Source={x:Static services:LocalizationService.Instance}}">
+        <TextBlock Text="{Binding [Nexus.Browser.Load], Source={x:Static services:LocalizationService.Instance}}" />
+      </Button>
+    </Grid>
+
+    <TextBlock Text="{Binding StatusKey, Converter={x:Static services:LocKeyConverter.Instance}}" IsVisible="{Binding HasStatus}"
+               TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+    <Border IsVisible="{Binding HasWarning}" Padding="8" CornerRadius="6" Background="{DynamicResource WarningBackgroundBrush}">
+      <TextBlock Text="{Binding WarningKey, Converter={x:Static services:LocKeyConverter.Instance}}" Foreground="{DynamicResource WarningBrush}"
+                 TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    </Border>
+
+    <Border IsVisible="{Binding HasMod}" Classes="selectableRow" Padding="10">
+      <StackPanel Spacing="5">
+        <TextBlock Text="{Binding Mod.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+          <TextBlock Classes="muted" Text="{Binding [Nexus.Browser.Author], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Grid.Column="1" Text="{Binding Mod.Author}" TextWrapping="Wrap" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+          <TextBlock Classes="muted" Text="{Binding [Nexus.Browser.Version], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Grid.Column="1" Text="{Binding Mod.Version}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+          <TextBlock Classes="muted" Text="{Binding [Nexus.Browser.Endorsements], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Grid.Column="1" Text="{Binding Mod.Endorsements}" />
+        </Grid>
+        <TextBlock Text="{Binding Mod.Summary}" Classes="muted" TextWrapping="Wrap" MaxLines="4" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel IsVisible="{Binding HasFiles}" Spacing="4">
+      <TextBlock Classes="muted" FontWeight="SemiBold" Text="{Binding [Nexus.Browser.Files], Source={x:Static services:LocalizationService.Instance}}" />
+      <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Files}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:NexusFileItem">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,3">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Meta}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+
+    <Border Height="1" Background="{DynamicResource LineBrush}" />
+
+    <StackPanel Spacing="3">
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Nexus.Browser.NxmHint], Source={x:Static services:LocalizationService.Instance}}" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding NxmLinkText}"
+                 PlaceholderText="{Binding [Nexus.Browser.NxmPlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+                 AutomationProperties.Name="{Binding [Nexus.Browser.NxmPlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+                 AutomationProperties.AutomationId="nexus.browser.nxm" />
+        <Button Grid.Column="1" Classes="primary" Command="{Binding DownloadCommand}"
+                AutomationProperties.Name="{Binding [Nexus.Browser.Download], Source={x:Static services:LocalizationService.Instance}}">
+          <TextBlock Text="{Binding [Nexus.Browser.Download], Source={x:Static services:LocalizationService.Instance}}" />
+        </Button>
+      </Grid>
+      <TextBlock IsVisible="{Binding HasDownloaded}" TextWrapping="Wrap" Classes="muted"
+                 AutomationProperties.LiveSetting="Polite">
+        <Run Text="{Binding [Nexus.Browser.Downloaded], Source={x:Static services:LocalizationService.Instance}}" />
+        <Run Text=" " />
+        <Run Text="{Binding DownloadedName}" />
+        <Run Text=" — " />
+        <Run Text="{Binding DownloadedPath}" />
+      </TextBlock>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

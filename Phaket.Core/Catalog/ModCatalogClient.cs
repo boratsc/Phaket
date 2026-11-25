@@ -17,16 +17,24 @@ public sealed record ThunderstoreVersion(string VersionNumber, string FullName, 
     string? Availability = null)
 {
     // A version the source no longer serves: no usable download target. A version with an
-    // artifacts list is usable only when one artifact has a non-empty https URL and the
-    // declared sha256 the installer verifies; a placeholder row must not look installable.
+    // artifacts list is usable only when one artifact has a non-empty https URL plus either
+    // the declared sha256 the installer verifies or, for Thunderstore, a declared size; a
+    // placeholder row must not look installable.
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsUnavailable => string.Equals(Availability, "unavailable", StringComparison.OrdinalIgnoreCase)
         || (Artifacts is { Count: > 0 } ? !Artifacts.Any(IsUsableArtifact) : string.IsNullOrWhiteSpace(DownloadUrl));
 
+    // PAK-126: the Thunderstore v1 API publishes no sha256, so the server writes artifacts
+    // with sha256=null. Such an artifact is still installable: the downloader enforces the
+    // declared size, the ZIP signature is validated, the plan warns
+    // THUNDERSTORE_HASH_UNVERIFIED and the registry records ArtifactIntegrity=unverified.
+    // This only trusts the Thunderstore source; any other hash-less artifact stays unusable.
     private static bool IsUsableArtifact(ModArtifact artifact) =>
         !string.IsNullOrWhiteSpace(artifact.Url)
         && Uri.TryCreate(artifact.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
-        && !string.IsNullOrWhiteSpace(artifact.Sha256);
+        && (!string.IsNullOrWhiteSpace(artifact.Sha256)
+            || (string.Equals(artifact.Source, "thunderstore", StringComparison.OrdinalIgnoreCase)
+                && artifact.SizeBytes is > 0));
     [System.Text.Json.Serialization.JsonIgnore] public bool IsAvailable => !IsUnavailable;
 }
 public sealed record ThunderstoreMod(string Id, string GameId, string Namespace, string Name, string FullName,
@@ -144,7 +152,9 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
     private async Task Snapshot(string gameId,CancellationToken ct)
     {
         string? cursor=null,etag=null; long revision=0; var all=new List<ThunderstoreMod>();
-        do { var path=$"/mods/index?game={Uri.EscapeDataString(gameId)}&limit=100"+(cursor is null?"":$"&cursor={Uri.EscapeDataString(cursor)}"); var res=await transport.GetAsync(path,cursor is null?store.GameETag(gameId):null,ct);
+        // PAK-128: the server allows 500 rows per page; 100 pages were ~5x the requests
+        // needed and tripped the per-IP limiter (429) during a full sync.
+        do { var path=$"/mods/index?game={Uri.EscapeDataString(gameId)}&limit=500"+(cursor is null?"":$"&cursor={Uri.EscapeDataString(cursor)}"); var res=await transport.GetAsync(path,cursor is null?store.GameETag(gameId):null,ct);
             if(res.StatusCode==304) { if(cursor is null) store.MarkSynced(); return; } if(res.StatusCode!=200||res.Body is null) throw new HttpRequestException($"mod catalog snapshot failed: {res.StatusCode}");
             using var doc=JsonDocument.Parse(res.Body); var root=doc.RootElement; revision=root.GetProperty("revision").GetInt64(); etag=res.ETag;
             all.AddRange(root.GetProperty("mods").EnumerateArray().Select(x=>x.Deserialize<ThunderstoreMod>(JsonOptions)!)); cursor=root.TryGetProperty("nextCursor",out var next)&&next.ValueKind!=JsonValueKind.Null?next.GetString():null;

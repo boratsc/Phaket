@@ -99,10 +99,10 @@ public sealed class Pak105ModpackSusModderTests
             null, false, DateTimeOffset.UnixEpoch, version, Packaging: version.Packaging,
             AmongVersion: version.AmongVersion, Source: "susmodder", ExternalId: externalId);
 
-    private static ThunderstoreMod ThunderstoreMod(string version) =>
+    private static ThunderstoreMod ThunderstoreMod(string version, byte[] bytes) =>
         new("ts-id", "among-us", "Test", "Mod", "Test-Mod", "desc", "Test",
             ThunderstoreUrl, null, false, DateTimeOffset.UnixEpoch,
-            new ThunderstoreVersion(version, "Test-Mod-" + version, ThunderstoreUrl, 1, DateTimeOffset.UnixEpoch, []));
+            new ThunderstoreVersion(version, "Test-Mod-" + version, ThunderstoreUrl, bytes.Length, DateTimeOffset.UnixEpoch, []));
 
     private sealed class Catalog(IReadOnlyList<ThunderstoreMod> mods) : ICatalogTransport
     {
@@ -324,14 +324,15 @@ public sealed class Pak105ModpackSusModderTests
             GitHubReleaseService.ClearCache();
             SourcePolicy.AllowGitHubRepository("example/mod");
             using var http = new HttpClient(new GitHubHandler(Zip(("plugins/mod.dll", "github bytes"))));
+            var thunderstoreZip = Zip(("plugins/Test.dll", "thunderstore bytes"));
             var withGitHub = new ModpackInstallService(root,
                 catalogTransport: new Catalog([
                     SusMod("sus-mira", "Mira", "Mira", SusVersion("1.7.3", FullUrl, FullZip(), "full", "2026-8-18", "tou.zip")),
-                    ThunderstoreMod("1.0.0")]),
+                    ThunderstoreMod("1.0.0", thunderstoreZip)]),
                 packageTransport: new Packages(new Dictionary<string, byte[]>
                 {
                     [FullUrl] = FullZip(), [LoaderUrl] = File.ReadAllBytes(LoaderPath),
-                    [ThunderstoreUrl] = Zip(("plugins/Test.dll", "thunderstore bytes")),
+                    [ThunderstoreUrl] = thunderstoreZip,
                     [GitHubUrl] = Zip(("plugins/mod.dll", "github bytes")),
                 }), githubService: new GitHubReleaseService(http));
             var pack = Pack(

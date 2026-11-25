@@ -1,14 +1,18 @@
 using Avalonia;
+using Velopack;
 
 namespace Phaket;
 
 internal static class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before Main is called: things aren't initialized yet.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // Must run before any Avalonia or app initialization: Velopack handles the installer
+        // hooks (first run, update, uninstall) and exits the process when invoked as a hook.
+        VelopackApp.Build().Run();
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     public static AppBuilder BuildAvaloniaApp()
     {

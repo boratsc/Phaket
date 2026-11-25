@@ -22,6 +22,7 @@
   "ModInstall.WarningBuildUnknown": "Nieznany build gry; sprawdź zgodność moda.",
   "ModInstall.WarningLoaderOverwriteUnknown": "Nie można ustalić, czy loader nadpisze istniejące pliki.",
   "ModInstall.WarningOther": "Ostrzeżenie planu:",
+  "ModInstall.WarningExecutableLibrary": "Plan zapisze {0} bibliotek DLL. Instaluj tylko zaufane mody.",
   "ModInstall.LoaderArchUnavailable": "Nie można wybrać loadera dla nieznanej lub niedostępnej architektury. Wybierz odpowiedni build i architekturę gry.",
   "Game.Architecture": "Architektura instalacji:",
   "Game.ArchitectureUnknown": "Nieznana",

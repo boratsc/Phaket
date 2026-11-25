@@ -1,0 +1,22 @@
+{
+  "Settings.Updates.Tab": "Updates",
+  "Settings.Updates.Title": "Application updates",
+  "Settings.Updates.Hint": "Phaket checks for updates only in an installed build and downloads them from the channel for your system. User data lives outside the install directory, so updating never removes it. The feed address can be overridden with the PHAKET_UPDATE_FEED environment variable.",
+  "Settings.Updates.CurrentVersion": "Installed version:",
+  "Settings.Updates.Channel": "Update channel",
+  "Settings.Updates.Channel.Stable": "Stable",
+  "Settings.Updates.Channel.Beta": "Beta",
+  "Settings.Updates.ChannelHint": "The stable channel receives final releases only; beta may carry earlier fixes. Switching channels may install a version older than the current one.",
+  "Settings.Updates.Check": "Check app updates",
+  "Settings.Updates.Install": "Download and install",
+  "Settings.Updates.Checking": "Checking for updates…",
+  "Settings.Updates.UpToDate": "You have the latest version ({0}).",
+  "Settings.Updates.Available": "Version {0} is available.",
+  "Settings.Updates.Downloading": "Downloading the update…",
+  "Settings.Updates.DownloadingProgress": "Downloading the update… {0}%",
+  "Settings.Updates.Installing": "Installing and restarting…",
+  "Settings.Updates.DevMode": "Development build (version {0}) — updates only work in an installed app.",
+  "Settings.Updates.Error.Checksum": "The downloaded package does not match its checksum. Try again, and if the error persists download the installer from the Phaket website.",
+  "Settings.Updates.Error.Network": "Could not reach the update server. Check your connection and try again.",
+  "Settings.Updates.Error.Download": "The update could not be downloaded or prepared. Try again later."
+}

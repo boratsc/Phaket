@@ -505,6 +505,215 @@ public sealed class ModInstallServiceTests
         finally { Directory.Delete(root, true); }
     }
 
+    // A transient CDN failure must not turn into a failed plan; the second attempt serves bytes.
+    private sealed class FlakyPackage(byte[] bytes) : IPackageTransport
+    {
+        public int Count { get; private set; }
+        public Task<Stream> OpenReadAsync(string url, CancellationToken cancellationToken) =>
+            ++Count == 1
+                ? Task.FromException<Stream>(new HttpRequestException("transient"))
+                : Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    // PAK-118: Thunderstore v1 carries no sha256, so the plan and the local install receipt
+    // must say the download was not verified instead of pretending the observed hash is one.
+    [Fact]
+    public async Task PackageWithoutDeclaredHashIsMarkedUnverifiedInPlanAndRegistry()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-hash-unverified-").FullName;
+        try
+        {
+            var zip = Zip(("plugins/Mod.dll", "plugin"));
+            var version = Version(RootName, "1.0.0", RootUrl, zip);
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
+            var (service, _) = lease;
+
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"),
+                ct: TestContext.Current.CancellationToken);
+
+            Assert.Contains("THUNDERSTORE_HASH_UNVERIFIED", Assert.Single(prep.Plans).Warnings);
+            Assert.Equal(new[] { RootName }, prep.UnverifiedPackages);
+            Assert.Contains("SHA-256", ErrorMessages.Format("THUNDERSTORE_HASH_UNVERIFIED", "pl-PL"));
+            Assert.Contains("SHA-256", ErrorMessages.Format("THUNDERSTORE_HASH_UNVERIFIED", "en"));
+
+            var outcome = await service.ExecuteAsync(prep, true, ct: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Success, outcome.ErrorCode);
+            Assert.Equal("unverified", Assert.Single(new InstallRegistry(Path.Combine(root, "installs.json")).All()).ArtifactIntegrity);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task ThunderstoreDownloadRetriesATransientFailure()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-retry-").FullName;
+        try
+        {
+            var zip = Zip(("plugins/Mod.dll", "plugin"));
+            var version = Version(RootName, "1.0.0", RootUrl, zip);
+            var mod = Mod(RootName, version);
+            using var store = new ModCatalogStore(Path.Combine(root, "catalog.db"));
+            var transport = new FlakyPackage(zip);
+            var service = new ModInstallService(root,
+                new ModCatalogClient(new Catalog(new Details(new Dictionary<string, ThunderstoreModDetails>
+                    { [RootName] = new(mod, [version], DateTimeOffset.UnixEpoch) }), [mod]), store), transport);
+
+            var prep = await service.PrepareAsync("among-us", RootName, "1.0.0", "", new("", "steam", true, "x86"),
+                ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, transport.Count);
+            Assert.Single(prep.Plans);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task PackageWhoseBytesDoNotMatchTheDeclaredSizeIsRefused()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-size-").FullName;
+        try
+        {
+            var zip = Zip(("plugins/Mod.dll", "plugin"));
+            var version = new ThunderstoreVersion("1.0.0", $"{RootName}-1.0.0", RootUrl, zip.Length + 7,
+                DateTimeOffset.UnixEpoch, []);
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
+            var (service, _) = lease;
+
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName,
+                "1.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.ArtifactSizeMismatch, error.Error.Code);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    // A malicious Thunderstore package is refused while the plan is built, before any write.
+    [Fact]
+    public async Task ZipSlipEntryIsRefusedBeforeAnyWrite()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-zip-slip-").FullName;
+        try
+        {
+            var zip = Zip(("../evil.dll", "boom"));
+            var version = Version(RootName, "1.0.0", RootUrl, zip);
+            using var lease = await CreateService(root, new Dictionary<string, byte[]> { [RootUrl] = zip }, (RootName, [version]));
+            var (service, _) = lease;
+
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", RootName,
+                "1.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.ArchiveUnsafe, error.Error.Code);
+            Assert.False(File.Exists(Path.Combine(root, "evil.dll")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task DependencyCycleIsRefusedBeforePlanning()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-cycle-").FullName;
+        var aUrl = "https://thunderstore.io/package/download/Test/A/1.0.0/";
+        var bUrl = "https://thunderstore.io/package/download/Test/B/1.0.0/";
+        try
+        {
+            var a = Version("Test-A", "1.0.0", aUrl, [1], "Test-B-1.0.0");
+            var b = Version("Test-B", "1.0.0", bUrl, [1], "Test-A-1.0.0");
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>(), ("Test-A", [a]), ("Test-B", [b]));
+            var (service, _) = lease;
+
+            var error = await Assert.ThrowsAsync<PhaketException>(() => service.PrepareAsync("among-us", "Test-A",
+                "1.0.0", "", new("", "steam", true, "x86"), ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal("DEPENDENCY_CYCLE", error.Error.Code);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    // PAK-118: a dependency already installed at this game root is not downloaded/planned again,
+    // so installing a second mod does not re-extract BepInEx or every shared library.
+    [Fact]
+    public async Task DependencyAlreadyInstalledAtTheGameRootIsNotReinstalled()
+    {
+        var root = Directory.CreateTempSubdirectory("pak118-installed-dependency-").FullName;
+        var gameRoot = Path.Combine(root, "game");
+        Directory.CreateDirectory(gameRoot);
+        File.WriteAllText(Path.Combine(gameRoot, "Among Us.exe"), "fixture");
+        var depUrl = "https://thunderstore.io/package/download/Test/Dep/1.0.0/";
+        var secondUrl = "https://thunderstore.io/package/download/Test/Second/1.0.0/";
+        try
+        {
+            var modZip = Zip(("plugins/Mod.dll", "plugin"));
+            var depZip = Zip(("plugins/Dep.dll", "dependency"));
+            var secondZip = Zip(("plugins/Second.dll", "second"));
+            var dep = Version("Test-Dep", "1.0.0", depUrl, depZip);
+            var first = Version(RootName, "1.0.0", RootUrl, modZip, "Test-Dep-1.0.0");
+            var second = Version("Test-Second", "1.0.0", secondUrl, secondZip, "Test-Dep-1.0.0");
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>
+                { [RootUrl] = modZip, [depUrl] = depZip, [secondUrl] = secondZip },
+                ("Test-Dep", [dep]), (RootName, [first]), ("Test-Second", [second]));
+            var (service, _) = lease;
+            var target = new InstallTarget(gameRoot, "steam", false, "x86");
+
+            var prepFirst = await service.PrepareAsync("among-us", RootName, "1.0.0", "", target, ct: TestContext.Current.CancellationToken);
+            Assert.Equal(2, prepFirst.Plans.Count);
+            Assert.True((await service.ExecuteAsync(prepFirst, true, ct: TestContext.Current.CancellationToken)).Success);
+
+            var prepSecond = await service.PrepareAsync("among-us", "Test-Second", "1.0.0", "", target, ct: TestContext.Current.CancellationToken);
+            Assert.Equal("Test-Second", Assert.Single(prepSecond.Preview).FullName);
+            Assert.Single(prepSecond.Plans);
+
+            Assert.True((await service.ExecuteAsync(prepSecond, true, ct: TestContext.Current.CancellationToken)).Success);
+            var installed = new InstallRegistry(Path.Combine(root, "installs.json")).All();
+            Assert.Equal(3, installed.Count);
+            Assert.Single(installed, entry => entry.ModFullName == "Test-Dep");
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "plugins", "Test-Dep", "Dep.dll")));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "plugins", "Test-Second", "Second.dll")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    // PAK-129: an installs.json entry is not proof of installation. When the dependency's files
+    // were deleted by hand, the ledger check fails and the dependency is planned again.
+    [Fact]
+    public async Task DependencyWithDeletedFilesIsPlannedAgain()
+    {
+        var root = Directory.CreateTempSubdirectory("pak129-deleted-dependency-").FullName;
+        var gameRoot = Path.Combine(root, "game");
+        Directory.CreateDirectory(gameRoot);
+        File.WriteAllText(Path.Combine(gameRoot, "Among Us.exe"), "fixture");
+        var depUrl = "https://thunderstore.io/package/download/Test/Dep/1.0.0/";
+        var secondUrl = "https://thunderstore.io/package/download/Test/Second/1.0.0/";
+        try
+        {
+            var modZip = Zip(("plugins/Mod.dll", "plugin"));
+            var depZip = Zip(("plugins/Dep.dll", "dependency"));
+            var secondZip = Zip(("plugins/Second.dll", "second"));
+            var dep = Version("Test-Dep", "1.0.0", depUrl, depZip);
+            var first = Version(RootName, "1.0.0", RootUrl, modZip, "Test-Dep-1.0.0");
+            var second = Version("Test-Second", "1.0.0", secondUrl, secondZip, "Test-Dep-1.0.0");
+            using var lease = await CreateService(root, new Dictionary<string, byte[]>
+                { [RootUrl] = modZip, [depUrl] = depZip, [secondUrl] = secondZip },
+                ("Test-Dep", [dep]), (RootName, [first]), ("Test-Second", [second]));
+            var (service, _) = lease;
+            var target = new InstallTarget(gameRoot, "steam", false, "x86");
+
+            var prepFirst = await service.PrepareAsync("among-us", RootName, "1.0.0", "", target, ct: TestContext.Current.CancellationToken);
+            Assert.True((await service.ExecuteAsync(prepFirst, true, ct: TestContext.Current.CancellationToken)).Success);
+            string depFile = Path.Combine(gameRoot, "BepInEx", "plugins", "Test-Dep", "Dep.dll");
+            Assert.True(File.Exists(depFile));
+            File.Delete(depFile);
+
+            var prepSecond = await service.PrepareAsync("among-us", "Test-Second", "1.0.0", "", target, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, prepSecond.Plans.Count);
+            Assert.Contains(prepSecond.Preview, preview => preview.FullName == "Test-Dep");
+            Assert.True((await service.ExecuteAsync(prepSecond, true, ct: TestContext.Current.CancellationToken)).Success);
+            Assert.True(File.Exists(depFile));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "plugins", "Test-Second", "Second.dll")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public async Task LiveAmongUsInstallUsesBackendCatalogAndReportsReceipt()
     {

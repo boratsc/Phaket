@@ -13,13 +13,26 @@ using Phaket.Core.Platforms;
 namespace Phaket.Services;
 
 public sealed record InstallTarget(string GameRoot, string Store, bool Sandbox, string? Arch = null);
-public sealed record InstallPreview(string FullName, string Version, IReadOnlyList<string> Files, long SizeBytes);
+// PAK-127: the plan preview names both the package entry and the path the plan writes it to.
+public sealed record InstallPreviewEntry(string Source, string Target)
+{
+    public string Display => Source == Target ? Target : Source + " → " + Target;
+}
+public sealed record InstallPreview(string FullName, string Version, IReadOnlyList<string> Files, long SizeBytes,
+    // Source → destination pairs from the plan operations; Files carries the destinations.
+    IReadOnlyList<InstallPreviewEntry>? Entries = null)
+{
+    public bool HasEntries => Entries is { Count: > 0 };
+}
 public sealed record InstallPreparation(string GameId, string ModFullName, string Version, string Endpoint,
     InstallTarget Target, IReadOnlyList<OperationPlan> Plans, IReadOnlyList<string> PackageRoots, IReadOnlyList<ConflictProposal> Conflicts,
     IReadOnlyList<InstallPreview> Preview, string SandboxRoot, string ProfileRoot, string StagingRoot,
     string StateRoot, string PackageRoot, IReadOnlyList<string>? PlanProfileRoots = null,
     // "registry" (build id) or "probe" (installed depot manifest); null when unknown.
-    string? GameVersionSource = null);
+    string? GameVersionSource = null,
+    // Packages the catalog declared no sha256 for (Thunderstore v1): installed, but never
+    // recorded as hash-verified in the install registry.
+    IReadOnlyList<string>? UnverifiedPackages = null);
 // ErrorParameters carries the message placeholders (e.g. the tool tail) so the host
 // can show the localized reason instead of a bare code.
 public sealed record InstallOutcome(bool Success, string? ErrorCode, IReadOnlyList<ExecutionJournal> Journals,
@@ -110,6 +123,10 @@ public sealed class ModInstallService
         var packages = Path.Combine(appDataRoot, "packages");
         var rootId = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(gameRoot))));
         var stateRoot = Path.Combine(appDataRoot, "state", gameId, rootId);
+        // PAK-118: a dependency already installed at this exact game root with the same
+        // version is not reinstalled. The requested root always is, so repair/upgrade works.
+        var installed = new InstallRegistry(Path.Combine(appDataRoot, "installs.json")).ForGame(gameId);
+        var unverified = new List<string>();
         if (target.Sandbox) Directory.CreateDirectory(gameRoot); Directory.CreateDirectory(profileRoot); Directory.CreateDirectory(stagingRoot);
         Directory.CreateDirectory(packages); Directory.CreateDirectory(stateRoot);
 
@@ -169,9 +186,18 @@ public sealed class ModInstallService
             installedVersion = GameBuildRegistry.VersionForManifests(builds, target.Store, depotManifests);
             if (installedVersion is not null) versionSource = "probe";
         }
-        foreach (var mod in resolution.Pinned)
+        for (var pinnedIndex = 0; pinnedIndex < resolution.Pinned.Count; pinnedIndex++)
         {
+            var mod = resolution.Pinned[pinnedIndex];
             ct.ThrowIfCancellationRequested();
+            // The resolver appends the requested root last; only its dependencies are skippable.
+            // PAK-129: the registry entry alone is not proof — its ledger files must still exist.
+            if (pinnedIndex < resolution.Pinned.Count - 1 && installed.Any(entry =>
+                string.Equals(entry.GameRoot, gameRoot, StringComparison.Ordinal)
+                && string.Equals(entry.ModFullName, mod.FullName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(entry.ModVersion, mod.Version, StringComparison.Ordinal)
+                && IsInstalledWithFiles(entry)))
+                continue;
             var modPackages = Path.Combine(packages, SafeFile(mod.FullName) + "-" + SafeFile(mod.Version));
             Directory.CreateDirectory(modPackages);
             var loader = mod.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase);
@@ -223,20 +249,19 @@ public sealed class ModInstallService
             {
                 if (!loader)
                 {
-                    await using var sourceStream = await packageTransport.OpenReadAsync(mod.DownloadUrl, ct);
-                    using var buffer = new MemoryStream();
-                    var chunk = new byte[81920];
-                    int count;
-                    while ((count = await sourceStream.ReadAsync(chunk, ct)) > 0)
-                    {
-                        if (buffer.Length + count > 512L * 1024 * 1024) throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable, ("detail", "download too large"));
-                        await buffer.WriteAsync(chunk.AsMemory(0, count), ct);
-                    }
-                    packageBytes = buffer.ToArray();
+                    packageBytes = await PackageDownloader.ReadPackageAsync(packageTransport, mod.DownloadUrl,
+                        mod.FullName, mod.FileSize, ct);
                     hash = Convert.ToHexStringLower(SHA256.HashData(packageBytes));
-                    buffer.Position = 0;
-                    using var sourceZip = new ZipArchive(buffer, ZipArchiveMode.Read);
-                    entries = sourceZip.Entries.Select(e => e.FullName).ToArray();
+                    try
+                    {
+                        using var sourceZip = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
+                        entries = sourceZip.Entries.Select(e => e.FullName).ToArray();
+                    }
+                    catch (InvalidDataException)
+                    {
+                        throw new PhaketException(ErrorCodes.ArchiveInvalid, ("artifact", mod.FullName));
+                    }
+                    SafeArchive.ValidateEntryNames(entries, mod.FullName);
                 }
                 generated = RecipeGenerator.Generate(mod.FullName, mod.Version, mod.DownloadUrl, hash,
                     entries, definition, arch);
@@ -284,13 +309,68 @@ public sealed class ModInstallService
             var planProfileRoot = Path.Combine(profileRoot, plans.Count.ToString("D4", System.Globalization.CultureInfo.InvariantCulture));
             Directory.CreateDirectory(planProfileRoot);
             var context = new PlannerContext("install", "mod-profile", gameRoot, planProfileRoot, stagingRoot, modPackages, definition, facts);
-            plans.Add(OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership)));
+            var plan = OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership));
+            // Thunderstore v1 publishes no sha256. The hash computed above only pins the bytes
+            // already downloaded, so the plan and the registry state that no hash was obtained.
+            if (!loader && mod.Sha256 is null)
+            {
+                plan = plan with { Warnings = [.. plan.Warnings, "THUNDERSTORE_HASH_UNVERIFIED"] };
+                unverified.Add(mod.FullName);
+            }
+            plans.Add(plan);
             planProfileRoots.Add(planProfileRoot);
             packageRoots.Add(modPackages);
-            previews.Add(new(mod.FullName, mod.Version, previewFiles, previewSize));
+            var previewPairs = PreviewEntries(plan, previewFiles, recipe);
+            previews.Add(new(mod.FullName, mod.Version, previewPairs.Select(pair => pair.Target).ToArray(),
+                previewSize, previewPairs));
         }
         return new(gameId, modFullName, version, endpoint, target, plans, packageRoots, [], previews, root, profileRoot, stagingRoot,
-            stateRoot, packages, planProfileRoots, versionSource);
+            stateRoot, packages, planProfileRoots, versionSource, unverified.Count == 0 ? null : unverified);
+    }
+
+    // PAK-127: the preview shows the destination the plan writes, never a bare archive entry
+    // name (CHANGELOG.md) in place of it. A per-file recipe copies each archive entry through
+    // its routed game path; a tree extract filters entries by include/stripComponents and the
+    // destination is the stripped entry path.
+    internal static IReadOnlyList<InstallPreviewEntry> PreviewEntries(OperationPlan plan,
+        IReadOnlyList<string> files, Recipe recipe)
+    {
+        var copies = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var operation in plan.Operations)
+        {
+            // The planned TargetPath is resolved to an absolute host path; the recipe's
+            // game-relative "to" parameter is the path the user sees under the game root.
+            if (operation.Kind != "file.copy" || operation.Parameters is null
+                || !operation.Parameters.TryGetValue("to", out var to)
+                || !VirtualUri.TryParse(to, out var toScheme, out var toPath) || toScheme != "game" || toPath == ".")
+                continue;
+            var source = operation.SourceRef ?? operation.Parameters.GetValueOrDefault("from") ?? "";
+            if (VirtualUri.TryParse(source, out var scheme, out var path) && scheme is "staging" or "package")
+                source = path.StartsWith("package/", StringComparison.Ordinal) ? path["package/".Length..] : path;
+            if (source.Length > 0) copies[source] = toPath;
+        }
+        var filters = ArchiveFilters(recipe);
+        var pairs = new List<InstallPreviewEntry>(files.Count);
+        foreach (var file in files)
+        {
+            if (copies.TryGetValue(file, out var copied)) { pairs.Add(new(file, copied)); continue; }
+            var target = file;
+            foreach (var (include, strip) in filters)
+                if (SafeArchive.MatchesInclude(file, strip, include))
+                {
+                    target = StripEntry(file, strip) ?? file;
+                    break;
+                }
+            pairs.Add(new(file, target));
+        }
+        return pairs;
+    }
+
+    private static string? StripEntry(string entry, int strip)
+    {
+        if (strip <= 0) return entry;
+        var parts = entry.Replace('\\', '/').Split('/');
+        return parts.Length <= strip ? null : string.Join('/', parts.Skip(strip));
     }
 
     // A dll artifact preview lists the plan's file.copy targets. A malformed step
@@ -384,7 +464,9 @@ public sealed class ModInstallService
                 new InstallRegistry(Path.Combine(appDataRoot, "installs.json")).Add(new InstalledRecipe(plan.RecipeRef.Id,
                     plan.RecipeRef.Version, preparation.GameId, preparation.Target.Store, ctx.GameRoot, ctx.ProfileRoot,
                     ctx.StagingRoot, preparation.StateRoot, preparation.Target.Sandbox ? preparation.SandboxRoot : null, DateTimeOffset.UtcNow,
-                    preparation.Preview[i].FullName, preparation.Preview[i].Version));
+                    preparation.Preview[i].FullName, preparation.Preview[i].Version,
+                    preparation.UnverifiedPackages?.Contains(preparation.Preview[i].FullName, StringComparer.OrdinalIgnoreCase) == true
+                        ? "unverified" : null));
                 if (targetProfileId is not null)
                 {
                     var profile = profiles.For(preparation.GameId).Profiles.FirstOrDefault(p => p.Id == targetProfileId)
@@ -490,10 +572,38 @@ public sealed class ModInstallService
 
     // Streams directly to disk: full-game ZIPs are hundreds of MB and must not be
     // buffered in memory. The returned hash is of the bytes actually received.
+    // PAK-129: installs.json only locates an installation. A dependency entry whose files were
+    // removed by hand must be planned again, so the ledger's resources are confirmed on disk.
+    private static bool IsInstalledWithFiles(InstalledRecipe entry)
+    {
+        try
+        {
+            string ledgerPath = Path.Combine(entry.StateRoot, "ledger.json");
+            if (!File.Exists(ledgerPath)) return false;
+            foreach (LedgerEntry resource in OwnershipLedger.Load(ledgerPath).ForRecipe(entry.RecipeId))
+            {
+                string path = resource.Resource;
+                if (path.Contains("::", StringComparison.Ordinal)) continue; // a config key, not a file
+                if (path.StartsWith("staging/", StringComparison.Ordinal)) path = Path.Combine(entry.StagingRoot, path[8..]);
+                else if (path.StartsWith("profile/", StringComparison.Ordinal)) path = Path.Combine(entry.ProfileRoot, path[8..]);
+                else if (path.StartsWith('/')) continue; // outside every root: not verifiable here
+                else path = Path.Combine(entry.GameRoot, path);
+                if (!File.Exists(path.Replace('/', Path.DirectorySeparatorChar))) return false;
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
     private static async Task<(string Sha256, long Length)> DownloadAsync(IPackageTransport transport, string url,
         string path, long? expectedSize, CancellationToken ct)
     {
-        var limit = expectedSize ?? 2L * 1024 * 1024 * 1024;
+        // The declared size is catalog metadata: it sets the expected length, but never above the
+    // 2 GiB policy cap (PAK-129).
+    var limit = Math.Min(expectedSize ?? 2L * 1024 * 1024 * 1024, 2L * 1024 * 1024 * 1024);
         var temp = path + ".phaket-tmp";
         try
         {
@@ -508,8 +618,9 @@ public sealed class ModInstallService
                 {
                     received += read;
                     if (received > limit)
-                        throw new PhaketException(ErrorCodes.ArtifactDownloadUnavailable,
-                            ("artifact", url), ("detail", "download exceeds declared size"));
+                        throw new PhaketException(ErrorCodes.ArtifactSizeMismatch, ("artifact", url),
+                            ("actual", received.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                            ("expected", limit.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     hasher.AppendData(buffer, 0, read);
                     await destination.WriteAsync(buffer.AsMemory(0, read), ct);
                 }

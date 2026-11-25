@@ -144,7 +144,8 @@ public partial class ModPackViewModel : ViewModelBase, IDisposable
     private void EnsureNexusPicker()
     {
         if (NexusPicker is not null) return;
-        NexusPicker = suppliedNexusPicker ?? new NexusManualViewModel();
+        NexusPicker = suppliedNexusPicker ?? new NexusManualViewModel(
+            nexusSource: GameDefinitions.LoadAll().FirstOrDefault(definition => definition.Slug == GameId)?.Sources?.Nexus);
         NexusPicker.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(NexusManualViewModel.Result))

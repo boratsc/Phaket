@@ -7,6 +7,12 @@ namespace Phaket.Core.Omrl;
 // Declarative loader layout: differences between games are data, never Core code.
 public sealed record LoaderLayout(string Id, string Variant, IReadOnlyList<string> EntryFiles);
 
+// Mod-source identity per game (spec: sources in the definition, never Core code).
+// Thunderstore is the community slug; Nexus keeps the domain name and numeric game id
+// so no consumer has to translate one into the other.
+public sealed record NexusSource(string Domain, int GameId);
+public sealed record GameSources(string? Thunderstore = null, NexusSource? Nexus = null);
+
 // Launch requirements are DATA with provenance, never code or a shell string.
 // Kind mirrors Launch.LaunchRequirement: "dll-override" | "env" | "game-arg".
 // Status: "required" | "recommended" | "optional". Os null/empty = every system.
@@ -30,7 +36,9 @@ public sealed record GameDefinition(
     IReadOnlyList<string>? Platforms = null,
     // Architecture a fresh sandbox/install is assumed to be when nothing was probed
     // or chosen: the CURRENT retail build, so the default loader pack matches it.
-    string? DefaultArch = null)
+    string? DefaultArch = null,
+    // Where the game's mods come from (Thunderstore community, Nexus identity).
+    GameSources? Sources = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
@@ -110,6 +118,7 @@ public static class GameDefinitionLoader
         public IReadOnlyList<GameLaunchRequirement>? LaunchRequirements { get; init; }
         public IReadOnlyList<string>? Platforms { get; init; }
         public string? DefaultArch { get; init; }
+        public GameSources? Sources { get; init; }
     }
 
     private sealed record DetectionDto
@@ -129,7 +138,7 @@ public static class GameDefinitionLoader
             throw new PhaketException(ErrorCodes.UnsupportedSchemaVersion, ("schemaVersion", dto.SchemaVersion));
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
             dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
-            dto.Platforms, dto.DefaultArch);
+            dto.Platforms, dto.DefaultArch, dto.Sources);
     }
 }
 

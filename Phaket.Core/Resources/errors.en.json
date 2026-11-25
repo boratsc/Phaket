@@ -23,6 +23,7 @@
   "ARCHIVE_FORMAT_UNSUPPORTED": "Archive {artifact} uses the unsupported format {format}. Choose a ZIP archive.",
   "PLAN_NOT_ACCEPTED": "The installation plan must be reviewed and approved before files can be changed.",
   "GITHUB_HASH_UNVERIFIED": "A GitHub asset has no trusted SHA-256 checksum. Its downloaded content will be pinned in the reviewed plan, but its origin is not verified.",
+  "THUNDERSTORE_HASH_UNVERIFIED": "The Thunderstore package has no SHA-256 in the API, so the download was not cryptographically verified. Its content is pinned in the reviewed plan, but its origin is not attested by the source.",
   "ARCHIVE_UNSAFE": "Archive {artifact} is unsafe: {reason}. Extraction was blocked.",
   "OWNERSHIP_VIOLATION": "File {path} does not belong to this recipe or profile. Removal was blocked.",
   "CONFLICT_UNRESOLVABLE": "The conflict on {path} between {owners} cannot be resolved automatically. Choose a mod order or remove the conflict.",

@@ -447,11 +447,11 @@ public sealed class ModpackInstallAdapterTests
         var root = TestAccounts.TempPath();
         try
         {
+            var archive = Zip("plugins/mod.dll", "bytes");
             var catalogMod = new ThunderstoreMod("mod-id", "among-us", "Test", "Mod", "Test-Mod", "desc", "owner",
                 "https://thunderstore.io/package/download/Test/Mod/1.0.0/", null, false, DateTimeOffset.UtcNow,
-                new ThunderstoreVersion("1.0.0", "Test-Mod", "https://thunderstore.io/package/download/Test/Mod/1.0.0/", 1, DateTimeOffset.UtcNow, []));
+                new ThunderstoreVersion("1.0.0", "Test-Mod", "https://thunderstore.io/package/download/Test/Mod/1.0.0/", archive.Length, DateTimeOffset.UtcNow, []));
             var transport = new CatalogIndexTransport(catalogMod);
-            var archive = Zip("plugins/mod.dll", "bytes");
             var service = new ModpackInstallService(root, catalogTransport: transport, packageTransport: new Transport(archive));
             var plan = await service.PrepareAsync(Game(Path.Combine(root, "game")), Pack(
                 new ModpackMod { Name = "Test-Mod", Version = "1.0.0", Source = "thunderstore", ModId = "mod-id" }));

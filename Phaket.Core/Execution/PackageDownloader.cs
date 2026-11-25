@@ -142,8 +142,9 @@ public sealed record ArtifactDownloadProgress(string ArtifactId, long BytesRecei
 // never touched. The executor itself never downloads.
 public static class PackageDownloader
 {
-    // Hard cap for artifacts without a declared size: never fill the disk.
-    private const long MaxUndeclaredBytes = 512L * 1024 * 1024;
+    // Hard cap for artifacts without a declared size, and the ceiling for a declared one:
+    // a wrong file_size from the catalog must not allocate a multi-gigabyte buffer.
+    internal const long MaxUndeclaredBytes = 512L * 1024 * 1024;
 
     public static async Task<IReadOnlyList<string>> EnsureArtifactsAsync(
         Recipe recipe, string packageRoot, IPackageTransport transport,
@@ -211,6 +212,52 @@ public static class PackageDownloader
         }
         return downloaded;
     }
+
+    // Thunderstore v1 publishes no sha256, so the catalog download ends up in memory once
+    // to list its entries: transient network failures are retried here and the bytes are
+    // content-checked (ZIP signature, declared size) before any recipe trusts them.
+    public const int MaxDownloadAttempts = 3;
+
+    public static async Task<byte[]> ReadPackageAsync(IPackageTransport transport, string url, string artifactId,
+        long? declaredSize, CancellationToken cancellationToken = default)
+    {
+        // Metadata is untrusted: a size above the hard ceiling is refused before any request.
+        if (declaredSize is > MaxUndeclaredBytes)
+            throw SizeMismatch(artifactId, declaredSize.Value, MaxUndeclaredBytes);
+        var limit = declaredSize is > 0 ? declaredSize.Value : MaxUndeclaredBytes;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var source = await transport.OpenReadAsync(url, cancellationToken);
+                using var buffer = new MemoryStream();
+                var chunk = new byte[81920];
+                int read;
+                while ((read = await source.ReadAsync(chunk, cancellationToken)) > 0)
+                {
+                    long received = buffer.Length + read;
+                    if (received > limit) throw SizeMismatch(artifactId, received, limit);
+                    await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+                }
+                if (declaredSize is { } expected && expected > 0 && buffer.Length != expected)
+                    throw SizeMismatch(artifactId, buffer.Length, expected);
+                var bytes = buffer.ToArray();
+                if (!IsZip(bytes))
+                    throw new PhaketException(ErrorCodes.ArchiveInvalid, ("artifact", artifactId));
+                return bytes;
+            }
+            catch (Exception ex) when (attempt < MaxDownloadAttempts && !cancellationToken.IsCancellationRequested
+                && ex is HttpRequestException or IOException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken);
+            }
+        }
+    }
+
+    // No Content-Type survives the transport seam, so the signature of the payload is the
+    // content check: a ZIP ("PK\x03\x04"|"PK\x05\x06"|"PK\x07\x08"), not an HTML error page.
+    private static bool IsZip(ReadOnlySpan<byte> bytes) => bytes.Length >= 4
+        && bytes[0] == 'P' && bytes[1] == 'K' && (bytes[2], bytes[3]) is (3, 4) or (5, 6) or (7, 8);
 
     private static PhaketException SizeMismatch(string artifact, long actual, long expected) =>
         new(ErrorCodes.ArtifactSizeMismatch, ("artifact", artifact),

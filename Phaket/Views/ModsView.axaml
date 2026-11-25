@@ -253,7 +253,14 @@
                       <StackPanel Margin="0,0,0,8">
                         <TextBlock Text="{Binding FullName}" FontWeight="Bold" /><TextBlock Text="{Binding Version}" />
                         <TextBlock Text="{Binding [ModInstall.Size], Source={x:Static services:LocalizationService.Instance}}" /><TextBlock Text="{Binding SizeBytes}" />
-                        <ItemsControl ItemsSource="{Binding Files}" />
+                        <ItemsControl ItemsSource="{Binding Entries}" IsVisible="{Binding HasEntries}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type services:InstallPreviewEntry}">
+                              <SelectableTextBlock Text="{Binding Display}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding !HasEntries}" />
                       </StackPanel>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>

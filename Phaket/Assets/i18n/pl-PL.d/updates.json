@@ -1,0 +1,22 @@
+{
+  "Settings.Updates.Tab": "Aktualizacje",
+  "Settings.Updates.Title": "Aktualizacje aplikacji",
+  "Settings.Updates.Hint": "Phaket sprawdza aktualizacje tylko w zainstalowanej wersji i pobiera je z kanału dopasowanego do systemu. Dane użytkownika są przechowywane poza katalogiem instalacji, więc aktualizacja ich nie usuwa. Adres feedu można nadpisać zmienną środowiskową PHAKET_UPDATE_FEED.",
+  "Settings.Updates.CurrentVersion": "Zainstalowana wersja:",
+  "Settings.Updates.Channel": "Kanał aktualizacji",
+  "Settings.Updates.Channel.Stable": "Stabilny",
+  "Settings.Updates.Channel.Beta": "Beta",
+  "Settings.Updates.ChannelHint": "Kanał stabilny otrzymuje tylko wydania finalne; beta może zawierać wcześniejsze poprawki. Przełączenie kanału może zainstalować wersję starszą niż obecna.",
+  "Settings.Updates.Check": "Sprawdź aktualizacje aplikacji",
+  "Settings.Updates.Install": "Pobierz i zainstaluj",
+  "Settings.Updates.Checking": "Sprawdzam aktualizacje…",
+  "Settings.Updates.UpToDate": "Masz najnowszą wersję ({0}).",
+  "Settings.Updates.Available": "Dostępna jest wersja {0}.",
+  "Settings.Updates.Downloading": "Pobieram aktualizację…",
+  "Settings.Updates.DownloadingProgress": "Pobieram aktualizację… {0}%",
+  "Settings.Updates.Installing": "Instaluję i uruchamiam ponownie…",
+  "Settings.Updates.DevMode": "Tryb deweloperski (wersja {0}) — aktualizacje działają tylko w zainstalowanej aplikacji.",
+  "Settings.Updates.Error.Checksum": "Pobrany pakiet nie zgadza się z sumą kontrolną. Spróbuj ponownie, a jeśli błąd wraca, pobierz instalator ze strony Phaket.",
+  "Settings.Updates.Error.Network": "Nie można połączyć się z serwerem aktualizacji. Sprawdź połączenie i spróbuj ponownie.",
+  "Settings.Updates.Error.Download": "Nie udało się pobrać lub przygotować aktualizacji. Spróbuj ponownie później."
+}

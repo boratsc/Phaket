@@ -373,7 +373,7 @@ public static class RecipeGenerator
             var index = 0;
             foreach (var entry in entries)
             {
-                var target = Route(entry, fullName);
+                var target = Route(entry, fullName, game);
                 var stepId = $"copy-{index++:D5}";
                 steps.Add(Step(stepId, "file.copy", new { from = "staging://package/" + entry, to = "game://" + target }));
                 if (target.StartsWith("BepInEx/config/", StringComparison.Ordinal)) ownership.Add(new(stepId, "shared"));
@@ -440,17 +440,24 @@ public static class RecipeGenerator
         return path;
     }
 
-    private static string Route(string entry, string fullName)
+    private static string Route(string entry, string fullName, GameDefinition game)
     {
         var separator = entry.IndexOf('/');
         var first = separator < 0 ? entry : entry[..separator];
         var rest = separator < 0 ? "" : entry[(separator + 1)..];
+        // PAK-125: a game-relative archive (a loader or a mod already laid out for
+        // the game) keeps its paths; nesting it under plugins/<package>/ breaks it.
+        // The loader folder name is fixed so Linux gets BepInEx, not the archive's case.
+        if (separator > 0 && first.Equals("BepInEx", StringComparison.OrdinalIgnoreCase)) return "BepInEx/" + rest;
         if (first.Equals("manifest.json", StringComparison.OrdinalIgnoreCase)
             || first.Equals("README.md", StringComparison.OrdinalIgnoreCase)
             || first.Equals("icon.png", StringComparison.OrdinalIgnoreCase)) return $"BepInEx/plugins/{fullName}/{entry}";
         if (first.Equals("config", StringComparison.OrdinalIgnoreCase)) return "BepInEx/config/" + rest;
         if (new[] { "plugins", "patchers", "core", "monomod" }.Contains(first, StringComparer.OrdinalIgnoreCase))
             return $"BepInEx/{first}/{fullName}/{rest}";
+        // Loader root files (winhttp.dll, doorstop_config.ini, doorstop_libs/…)
+        // belong at the game root, as the definition's writable areas declare.
+        if (game.AllowsWrite(entry)) return entry;
         return $"BepInEx/plugins/{fullName}/{entry}";
     }
 }

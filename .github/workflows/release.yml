@@ -1,0 +1,122 @@
+name: Release installers
+
+# Buduje instalatory Velopack (Setup.exe / AppImage) i publikuje je jako artefakty CI.
+# Publikacja feedu na serwer odbywa się poza CI: scripts/publish-feed.sh.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Kanał aktualizacji'
+        type: choice
+        options: [beta, stable]
+        default: beta
+      version:
+        description: 'Wersja (puste = z Phaket.csproj)'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  VPK_VERSION: 1.2.161
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve version and channel
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            case "$VERSION" in *-*) CHANNEL=beta ;; *) CHANNEL=stable ;; esac
+          else
+            VERSION="${{ inputs.version }}"
+            [ -z "$VERSION" ] && VERSION=$(dotnet msbuild Phaket/Phaket.csproj -getProperty:Version)
+            CHANNEL="${{ inputs.channel }}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+
+      - name: Install vpk
+        shell: bash
+        run: dotnet tool install --tool-path .vpk vpk --version "$VPK_VERSION"
+
+      - name: Publish win-x64
+        shell: bash
+        run: dotnet publish Phaket/Phaket.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
+
+      - name: Pack Setup.exe
+        shell: bash
+        run: >
+          .vpk/vpk.exe pack
+          -u Phaket -v "$VERSION"
+          -p publish/win-x64 -e Phaket.exe
+          -c "win-x64-$CHANNEL"
+          -i Phaket/Assets/brand/phaket-app-icon.ico
+          --packTitle Phaket --packAuthors "Bartosz Gradzik"
+          -o releases/win-x64 -r win-x64
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: phaket-win-x64-${{ env.CHANNEL }}
+          path: releases/win-x64
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve version and channel
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            case "$VERSION" in *-*) CHANNEL=beta ;; *) CHANNEL=stable ;; esac
+          else
+            VERSION="${{ inputs.version }}"
+            [ -z "$VERSION" ] && VERSION=$(dotnet msbuild Phaket/Phaket.csproj -getProperty:Version)
+            CHANNEL="${{ inputs.channel }}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+
+      - name: Install vpk and mksquashfs
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools
+          dotnet tool install --tool-path .vpk vpk --version "$VPK_VERSION"
+
+      - name: Publish linux-x64
+        shell: bash
+        run: dotnet publish Phaket/Phaket.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
+
+      - name: Pack AppImage
+        shell: bash
+        run: >
+          .vpk/vpk pack
+          -u Phaket -v "$VERSION"
+          -p publish/linux-x64 -e Phaket
+          -c "linux-x64-$CHANNEL"
+          -i Phaket/Assets/brand/phaket-sygnet-512.png
+          --packTitle Phaket --packAuthors "Bartosz Gradzik"
+          -o releases/linux-x64 -r linux-x64
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: phaket-linux-x64-${{ env.CHANNEL }}
+          path: releases/linux-x64
+          if-no-files-found: error

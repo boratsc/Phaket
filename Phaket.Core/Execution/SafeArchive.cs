@@ -40,6 +40,20 @@ public static class SafeArchive
         return planned;
     }
 
+    // Entry-name-only pass for a package still in memory (Thunderstore ZIP): refuses
+    // traversal/absolute/odd paths before a recipe is generated. Symlinks, bombs and
+    // destination escapes are still caught by PlanWrites before any write.
+    public static void ValidateEntryNames(IEnumerable<string> entries, string artifactId)
+    {
+        foreach (var entry in entries)
+        {
+            var name = entry.Replace('\\', '/').TrimEnd('/');
+            if (name.Length == 0) continue;
+            if (name.Split('/').Any(s => s is "" or "." or "..") || name.Any(char.IsControl) || name.Contains(':'))
+                throw Unsafe(artifactId, $"unsafe entry path: {entry}");
+        }
+    }
+
     // Directories the extract would create that do NOT exist yet, deepest last.
     // Recorded in the journal BEFORE any write so a partial failure can be cleaned.
     public static IReadOnlyList<string> PlanDirectories(string archivePath, string targetRoot, string artifactId,

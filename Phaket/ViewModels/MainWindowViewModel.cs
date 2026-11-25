@@ -199,7 +199,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Communities.SetGame(value);
         Downloads.SetGame(value);
         if (ModpackCatalog is not null) ModpackCatalog.Game = value;
-        if (!initializing && IsGameContext) ShowContextTab(currentContextTab);
+        if (initializing) return;
+        if (IsGameContext)
+        {
+            ShowContextTab(currentContextTab);
+            return;
+        }
+        if (value is null) return;
+        // Mods and the game page are per-game but outside IsGameContext, so the picker
+        // rebuilds them instead of leaving the previous game's data on screen (PAK-116).
+        if (CurrentPage is ModsViewModel) OpenMods();
+        else if (CurrentPage is GameViewModel) OpenGame(value);
     }
 
     private void OpenGame(GameCatalogItem game)

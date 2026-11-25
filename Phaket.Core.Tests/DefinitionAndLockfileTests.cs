@@ -33,6 +33,27 @@ public class DefinitionTests
         Assert.Equal("mono", definition.Loader("bepinex")!.Variant);
     }
 
+    // PAK-119: a game's mod sources are data in the definition, not a map in consumer code.
+    [Fact]
+    public void DefinitionsExposeModSources()
+    {
+        var valheim = Load("valheim.yaml").Sources!;
+        Assert.Equal("valheim", valheim.Thunderstore);
+        Assert.Equal(new NexusSource("valheim", 3667), valheim.Nexus);
+
+        var amongUs = Load("among-us.yaml").Sources!;
+        Assert.Equal("among-us", amongUs.Thunderstore);
+        Assert.Equal(new NexusSource("amongus", 9589), amongUs.Nexus);
+    }
+
+    [Fact]
+    public void NexusSourceRequiresDomainAndGameId()
+    {
+        var yaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "definitions", "games", "valheim.yaml"))
+            .Replace("gameId: 3667\n", "");
+        Assert.Throws<PhaketException>(() => GameDefinitionLoader.LoadYaml(yaml));
+    }
+
     [Fact]
     public void UnknownDefinitionFieldIsRejected()
     {

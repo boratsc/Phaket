@@ -83,6 +83,24 @@ public class ModCatalogClientTests
         Assert.True((legacy with { Artifacts = [new ModArtifact("", "x86", ["steam"], new string('a', 64))] }).IsUnavailable);
         Assert.True((legacy with { Artifacts = [new ModArtifact("http://example.test/mod.zip", "x86", ["steam"], new string('a', 64))] }).IsUnavailable);
         Assert.True((legacy with { Artifacts = [new ModArtifact("https://example.test/mod.zip", "x86", ["steam"], null)] }).IsUnavailable);
+        // PAK-126: Thunderstore publishes no sha256, so a hash-less artifact with a declared
+        // size stays usable — the downloader enforces the size and the plan warns it is unverified.
+        Assert.False((legacy with
+        {
+            Artifacts = [new ModArtifact("https://thunderstore.io/package/download/Owner/Mod/1.0.0/", null, [], null,
+                5197134, "thunderstore", "Owner-Mod-1.0.0")]
+        }).IsUnavailable);
+        // The same shape from any other source is still refused: no hash means nothing to verify.
+        Assert.True((legacy with
+        {
+            Artifacts = [new ModArtifact("https://example.test/mod.zip", null, [], null, 42, "github", "mod.zip")]
+        }).IsUnavailable);
+        // A hash-less thunderstore artifact without a size cannot be size-verified either.
+        Assert.True((legacy with
+        {
+            Artifacts = [new ModArtifact("https://thunderstore.io/package/download/Owner/Mod/1.0.0/", null, [], null,
+                null, "thunderstore", "Owner-Mod-1.0.0")]
+        }).IsUnavailable);
         // One usable artifact among placeholders is enough.
         Assert.False((legacy with
         {
@@ -93,5 +111,19 @@ public class ModCatalogClientTests
             ]
         }).IsUnavailable);
         Assert.True((legacy with { Availability = "unavailable", DownloadUrl = "" }).IsUnavailable);
+    }
+
+    [Fact]
+    public async Task SnapshotRequestsTheServerMaximumPageSize()
+    {
+        var (t, s, c, d) = Setup();
+        try
+        {
+            // PAK-128: 150 pages of 100 tripped the per-IP limiter; the server accepts 500.
+            t.Responses.Enqueue(new(200, "e", Page(CamelMod("a"))));
+            await c.SyncAsync("among-us");
+            Assert.Contains("limit=500", t.Requests[0].Path);
+        }
+        finally { Clean(s, d); }
     }
 }

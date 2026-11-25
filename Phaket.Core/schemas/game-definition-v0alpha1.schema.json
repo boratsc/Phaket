@@ -10,6 +10,22 @@
     "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
     "title": { "type": "object", "additionalProperties": { "type": "string" } },
     "storeIds": { "type": "object", "additionalProperties": { "type": "string" } },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "thunderstore": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
+        "nexus": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domain", "gameId"],
+          "properties": {
+            "domain": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.\\-]*$" },
+            "gameId": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
     "detection": {
       "type": "object",
       "additionalProperties": false,

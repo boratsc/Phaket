@@ -23,6 +23,7 @@
   "ARCHIVE_FORMAT_UNSUPPORTED": "Archiwum {artifact} używa nieobsługiwanego formatu {format}. Wybierz plik ZIP.",
   "PLAN_NOT_ACCEPTED": "Przed zmianą plików należy przejrzeć i zatwierdzić plan instalacji.",
   "GITHUB_HASH_UNVERIFIED": "Asset GitHub nie ma zaufanej sumy SHA-256. Pobrana zawartość zostanie przypięta w przejrzanym planie, ale jej pochodzenie nie jest zweryfikowane.",
+  "THUNDERSTORE_HASH_UNVERIFIED": "Pakiet Thunderstore nie ma sumy SHA-256 w API, więc pobrania nie zweryfikowano kryptograficznie. Zawartość zostanie przypięta w przejrzanym planie, ale źródło jej pochodzenia nie jest potwierdzone.",
   "ARCHIVE_UNSAFE": "Archiwum {artifact} jest niebezpieczne: {reason}. Rozpakowanie zostało zablokowane.",
   "OWNERSHIP_VIOLATION": "Plik {path} nie należy do tego przepisu ani profilu. Usunięcie zostało zablokowane.",
   "CONFLICT_UNRESOLVABLE": "Konflikt na zasobie {path} między {owners} nie może być rozstrzygnięty automatycznie. Wybierz kolejność modów lub usuń konflikt.",

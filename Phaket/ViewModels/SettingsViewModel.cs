@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Phaket.Services;
 using Phaket.Core.Accounts;
+using Phaket.Core.Nexus;
 using Phaket.Core.Tools;
 
 namespace Phaket.ViewModels;
@@ -21,7 +24,9 @@ public partial class SettingsViewModel : ViewModelBase
     // plus the Steam install sign-in, which is stored under its own key (PAK-60).
     // "steam-apikey" is no longer written anywhere (the local Steam library needs no key);
     // it stays in the list so deleting secrets also clears it from existing installs.
-    private static readonly IReadOnlyList<string> DefaultSecretKeys = ["epic", "steam", "itch", "account", "steam-apikey", SteamCredentialStore.SecretKey];
+    private static readonly IReadOnlyList<string> DefaultSecretKeys =
+        ["epic", "steam", "itch", "account", "steam-apikey", SteamCredentialStore.SecretKey,
+        NexusApiKeyStore.SecretKey, NexusApiKeyStore.OAuthTokensSecretKey];
 
     // Test seam: active store, its directory, key list, provider label and migration entry point.
     internal sealed record SecretStoreSeam(
@@ -35,6 +40,8 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly string secretDirectory;
     private readonly IReadOnlyList<string> secretKeys;
     private readonly Func<IReadOnlyList<string>, CancellationToken, Task> migrateSecrets;
+    private readonly INexusService nexus;
+    private readonly UpdateService updates;
     private ISecretStore activeStore;
 
     // Last address written to settings.json; typing an invalid one must not corrupt the file.
@@ -62,12 +69,46 @@ public partial class SettingsViewModel : ViewModelBase
      NotifyCanExecuteChangedFor(nameof(RefreshStatusCommand))]
     private bool secretsBusy;
 
+    // Nexus (PAK-117): the API key is validated against validate.json and only ever
+    // written to the platform secret store; the input is cleared right after saving.
+    [ObservableProperty] private string nexusApiKey = "";
+    [ObservableProperty] private string nexusStatusText = "";
+    [ObservableProperty] private string nexusAccountText = "";
+    [ObservableProperty] private string nexusPremiumText = "";
+    [ObservableProperty] private string nexusLimitsText = "";
+
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(CheckNexusKeyCommand)),
+     NotifyCanExecuteChangedFor(nameof(DeleteNexusKeyCommand)), NotifyCanExecuteChangedFor(nameof(SignInNexusCommand)),
+     NotifyCanExecuteChangedFor(nameof(SignOutNexusCommand))]
+    private bool nexusBusy;
+
+    [ObservableProperty] private string nexusClientId = NexusOAuthOptions.DefaultClientId;
+    [ObservableProperty] private bool nexusSignedIn;
+    [ObservableProperty] private string nexusOAuthStatusText = "";
+    private bool nexusSessionChecked;
+
+    // Aktualizacje (PAK-121): the channel preference lives in settings.json and the status
+    // text is sourced from UpdateService; a dev build (not installed) is information, not an error.
+    [ObservableProperty] private bool updateBetaChannel;
+    [ObservableProperty] private string updateCurrentVersion = "";
+    [ObservableProperty] private string updateStatusText = "";
+    [ObservableProperty] private int updateProgress;
+
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(DownloadAndInstallUpdateCommand))]
+    private bool updateAvailable;
+
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(CheckForAppUpdatesCommand)),
+     NotifyCanExecuteChangedFor(nameof(DownloadAndInstallUpdateCommand))]
+    private bool updateBusy;
+
     public ObservableCollection<string> Languages { get; } = [];
     [ObservableProperty] private string selectedSection = "general";
     public bool IsGeneralSection => SelectedSection == "general";
     public bool IsCatalogSection => SelectedSection == "catalog";
     public bool IsToolsSection => SelectedSection == "tools";
     public bool IsSecretsSection => SelectedSection == "secrets";
+    public bool IsNexusSection => SelectedSection == "nexus";
+    public bool IsUpdatesSection => SelectedSection == "updates";
 
     partial void OnSelectedSectionChanged(string value)
     {
@@ -75,12 +116,16 @@ public partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsCatalogSection));
         OnPropertyChanged(nameof(IsToolsSection));
         OnPropertyChanged(nameof(IsSecretsSection));
+        OnPropertyChanged(nameof(IsNexusSection));
+        OnPropertyChanged(nameof(IsUpdatesSection));
+        // The secret store is read only when the section is opened, never in the background.
+        if (value == "nexus" && !nexusSessionChecked) _ = RefreshNexusSessionAsync();
     }
 
     [RelayCommand]
     private void SelectSection(string? section)
     {
-        if (section is "general" or "catalog" or "tools" or "secrets") SelectedSection = section;
+        if (section is "general" or "catalog" or "tools" or "secrets" or "nexus" or "updates") SelectedSection = section;
     }
 
     // Narzędzia: the version pins Core/Tools reads from settings.json, plus the
@@ -99,7 +144,8 @@ public partial class SettingsViewModel : ViewModelBase
     // Test seam for the tools section: provider (fake HTTP), its download root and the settings path.
     internal sealed record ToolSeam(ToolProvider Provider, string ToolsRoot);
 
-    internal SettingsViewModel(string? settingsPath, SecretStoreSeam? secrets, ToolSeam? toolSeam = null)
+    internal SettingsViewModel(string? settingsPath, SecretStoreSeam? secrets, ToolSeam? toolSeam = null,
+        INexusService? nexusService = null, Func<UpdateChannel, IUpdateSource>? updateSource = null)
     {
         this.settingsPath = settingsPath ?? DefaultSettingsPath;
         var toolProvider = toolSeam?.Provider ?? new ToolProvider();
@@ -113,11 +159,18 @@ public partial class SettingsViewModel : ViewModelBase
         secretKeys = seam.Keys ?? DefaultSecretKeys;
         SecretProvider = seam.Provider ?? ProviderFor(activeStore);
         migrateSecrets = seam.Migrate ?? ((keys, ct) => SecretMigration.MigrateAllAsync(secretDirectory, keys, activeStore, ct));
+        // The key store follows activeStore, so a session-only fallback unlock also covers Nexus.
+        nexus = nexusService ?? new NexusService(new NexusApiKeyStore(() => activeStore),
+            appDataRoot: Path.GetDirectoryName(Path.GetFullPath(this.settingsPath)));
+        updates = new UpdateService(this.settingsPath, updateSource);
+        updateBetaChannel = updates.Channel == UpdateChannel.Beta;
+        UpdateCurrentVersion = updates.CurrentVersion;
         foreach (var language in LocalizationService.Instance.AvailableLanguages)
             Languages.Add(language);
         Legendary = new ToolSettingsSection(this, toolProvider, toolsRoot, "legendary");
         Depot = new ToolSettingsSection(this, toolProvider, toolsRoot, "depotdownloader");
         Load();
+        nexus.ConfigureClientId(NexusClientId);
         _ = RefreshStatusAsync();
     }
 
@@ -145,6 +198,258 @@ public partial class SettingsViewModel : ViewModelBase
 
     public bool HasCatalogEndpointStatus => !string.IsNullOrEmpty(CatalogEndpointStatus);
     partial void OnCatalogEndpointStatusChanged(string value) => OnPropertyChanged(nameof(HasCatalogEndpointStatus));
+
+    public bool HasNexusStatus => !string.IsNullOrEmpty(NexusStatusText);
+    public bool HasNexusAccount => !string.IsNullOrEmpty(NexusAccountText);
+    public bool HasNexusLimits => !string.IsNullOrEmpty(NexusLimitsText);
+    public bool HasNexusOAuthStatus => !string.IsNullOrEmpty(NexusOAuthStatusText);
+    partial void OnNexusStatusTextChanged(string value) => OnPropertyChanged(nameof(HasNexusStatus));
+    partial void OnNexusAccountTextChanged(string value) => OnPropertyChanged(nameof(HasNexusAccount));
+    partial void OnNexusLimitsTextChanged(string value) => OnPropertyChanged(nameof(HasNexusLimits));
+    partial void OnNexusOAuthStatusTextChanged(string value) => OnPropertyChanged(nameof(HasNexusOAuthStatus));
+
+    private bool CanRunNexus => !NexusBusy;
+
+    // Preferred sign-in: OAuth2 authorization code + PKCE in the system browser.
+    [RelayCommand(CanExecute = nameof(CanRunNexus))]
+    private async Task SignInNexusAsync()
+    {
+        NexusBusy = true;
+        NexusStatusText = "";
+        NexusOAuthStatusText = Loc("Settings.Nexus.OAuth.Waiting");
+        try
+        {
+            Save();
+            NexusKeyStatus status = await nexus.SignInAsync(NexusClientId.Trim(), CancellationToken.None);
+            NexusSignedIn = true;
+            NexusOAuthStatusText = Loc("Settings.Nexus.OAuth.SignedIn");
+            ShowNexusAccount(status);
+        }
+        catch (NexusApiException ex)
+        {
+            NexusOAuthStatusText = Loc(NexusMessages.KeyFor(ex.Code));
+            NexusSignedIn = await HasNexusSessionAsync();
+        }
+        catch (SecretStoreException)
+        {
+            NexusOAuthStatusText = Loc("Nexus.Error.SecretStore");
+            NexusSignedIn = false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            NexusOAuthStatusText = Loc("Nexus.Error.Unavailable");
+        }
+        finally { NexusBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunNexus))]
+    private async Task SignOutNexusAsync()
+    {
+        NexusBusy = true;
+        try
+        {
+            await nexus.SignOutAsync(CancellationToken.None);
+            NexusSignedIn = false;
+            NexusOAuthStatusText = Loc("Settings.Nexus.OAuth.SignedOut");
+            NexusAccountText = "";
+            NexusPremiumText = "";
+            NexusLimitsText = "";
+        }
+        catch (Exception ex) when (ex is NexusApiException or HttpRequestException or TaskCanceledException or InvalidOperationException or SecretStoreException)
+        {
+            NexusOAuthStatusText = Loc("Nexus.Error.Unavailable");
+        }
+        finally { NexusBusy = false; }
+    }
+
+    internal async Task RefreshNexusSessionAsync()
+    {
+        nexusSessionChecked = true;
+        NexusSignedIn = await HasNexusSessionAsync();
+        if (NexusSignedIn) NexusOAuthStatusText = Loc("Settings.Nexus.OAuth.SignedIn");
+    }
+
+    private async Task<bool> HasNexusSessionAsync()
+    {
+        try { return await nexus.HasOAuthSessionAsync(CancellationToken.None); }
+        catch (Exception ex) when (ex is NexusApiException or InvalidOperationException) { return false; }
+    }
+
+    private void ShowNexusAccount(NexusKeyStatus status)
+    {
+        NexusAccountText = string.Format(CultureInfo.CurrentCulture, Loc("Settings.Nexus.Account"), status.User.Name);
+        NexusPremiumText = Loc(status.User.IsPremium ? "Settings.Nexus.Premium" : "Settings.Nexus.Free");
+        NexusLimitsText = FormatLimits(status.Limits);
+    }
+
+    // The API key stays as the fallback when OAuth is unavailable or not set up.
+    [RelayCommand(CanExecute = nameof(CanRunNexus))]
+    private async Task CheckNexusKeyAsync()
+    {
+        NexusBusy = true;
+        NexusStatusText = "";
+        string typed = NexusApiKey.Trim();
+        try
+        {
+            if (typed.Length > 0 && !NexusApiKeyStore.IsValid(typed))
+            {
+                NexusStatusText = Loc("Settings.Nexus.InvalidKey");
+                return;
+            }
+            NexusKeyStatus status = typed.Length > 0
+                ? await nexus.ValidateKeyAsync(typed, CancellationToken.None)
+                : await nexus.ValidateStoredKeyAsync(CancellationToken.None);
+            if (typed.Length > 0)
+            {
+                bool persisted = await nexus.SaveKeyAsync(typed, CancellationToken.None);
+                NexusApiKey = "";
+                NexusStatusText = Loc(persisted ? "Settings.Nexus.Saved" : "Settings.Nexus.MemoryOnly");
+            }
+            else NexusStatusText = Loc("Settings.Nexus.Valid");
+            ShowNexusAccount(status);
+        }
+        catch (NexusApiException ex) { NexusStatusText = Loc(NexusMessages.KeyFor(ex.Code)); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            NexusStatusText = Loc("Nexus.Error.Unavailable");
+        }
+        finally { NexusBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunNexus))]
+    private async Task DeleteNexusKeyAsync()
+    {
+        NexusBusy = true;
+        try
+        {
+            await nexus.DeleteKeyAsync(CancellationToken.None);
+            NexusStatusText = Loc("Settings.Nexus.Deleted");
+            NexusAccountText = "";
+            NexusPremiumText = "";
+            NexusLimitsText = "";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            NexusStatusText = Loc("Nexus.Error.Unavailable");
+        }
+        finally { NexusBusy = false; }
+    }
+
+    // API Access page on the site; the user creates or copies the personal key there.
+    [RelayCommand]
+    private void OpenNexusApiPage()
+    {
+        try { Process.Start(new ProcessStartInfo("https://www.nexusmods.com/users/myaccount?tab=api+access") { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+    }
+
+    private static string FormatLimits(NexusRateLimits limits) => string.Format(CultureInfo.CurrentCulture,
+        Loc("Settings.Nexus.Limits"),
+        limits.HourlyRemaining?.ToString(CultureInfo.CurrentCulture) ?? "—",
+        limits.DailyRemaining?.ToString(CultureInfo.CurrentCulture) ?? "—");
+
+    // Aktualizacje (PAK-121): stable/beta is the user's preference; the OS part of the Velopack
+    // channel (win-x64/linux-x64) is added by UpdateService.
+    public bool IsStableChannel
+    {
+        get => !UpdateBetaChannel;
+        set { if (value) UpdateBetaChannel = false; }
+    }
+
+    public bool IsBetaChannel
+    {
+        get => UpdateBetaChannel;
+        set { if (value) UpdateBetaChannel = true; }
+    }
+
+    // A radio click always runs this command, even when the chosen channel is already active:
+    // unlike an IsChecked write, it records the explicit preference (PAK-129).
+    [RelayCommand]
+    private void SelectChannel(string? channel)
+    {
+        if (channel is not ("stable" or "beta")) return;
+        bool beta = channel == "beta";
+        updates.SetChannel(beta ? UpdateChannel.Beta : UpdateChannel.Stable);
+        UpdateBetaChannel = beta;
+        UpdateAvailable = false;
+        UpdateStatusText = "";
+    }
+
+    partial void OnUpdateBetaChannelChanged(bool value)
+    {
+        updates.SetChannel(value ? UpdateChannel.Beta : UpdateChannel.Stable);
+        UpdateAvailable = false;
+        UpdateStatusText = "";
+        OnPropertyChanged(nameof(IsStableChannel));
+        OnPropertyChanged(nameof(IsBetaChannel));
+    }
+
+    public bool HasUpdateStatus => !string.IsNullOrEmpty(UpdateStatusText);
+    partial void OnUpdateStatusTextChanged(string value) => OnPropertyChanged(nameof(HasUpdateStatus));
+
+    public bool HasUpdateProgress => UpdateBusy && UpdateProgress > 0;
+    partial void OnUpdateProgressChanged(int value) => OnPropertyChanged(nameof(HasUpdateProgress));
+    partial void OnUpdateBusyChanged(bool value) => OnPropertyChanged(nameof(HasUpdateProgress));
+
+    internal UpdateService Updates => updates;
+
+    private bool CanRunUpdate => !UpdateBusy;
+    private bool CanInstallUpdate => UpdateAvailable && !UpdateBusy;
+
+    [RelayCommand(CanExecute = nameof(CanRunUpdate))]
+    private async Task CheckForAppUpdatesAsync()
+    {
+        UpdateBusy = true;
+        UpdateStatusText = Loc("Settings.Updates.Checking");
+        try
+        {
+            UpdateCheckResult result = await updates.CheckAsync();
+            UpdateCurrentVersion = updates.CurrentVersion;
+            UpdateAvailable = result.Outcome == UpdateOutcome.Available;
+            UpdateStatusText = result.Outcome switch
+            {
+                UpdateOutcome.DevelopmentMode => string.Format(CultureInfo.CurrentCulture,
+                    Loc("Settings.Updates.DevMode"), UpdateCurrentVersion),
+                UpdateOutcome.UpToDate => string.Format(CultureInfo.CurrentCulture,
+                    Loc("Settings.Updates.UpToDate"), UpdateCurrentVersion),
+                UpdateOutcome.Available => string.Format(CultureInfo.CurrentCulture,
+                    Loc("Settings.Updates.Available"), result.Version ?? ""),
+                _ => UpdateErrorText(result.Error)
+            };
+        }
+        finally { UpdateBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInstallUpdate))]
+    private async Task DownloadAndInstallUpdateAsync()
+    {
+        UpdateBusy = true;
+        UpdateProgress = 0;
+        UpdateStatusText = Loc("Settings.Updates.Downloading");
+        try
+        {
+            var progress = new Progress<int>(value =>
+            {
+                UpdateProgress = value;
+                UpdateStatusText = string.Format(CultureInfo.CurrentCulture,
+                    Loc("Settings.Updates.DownloadingProgress"), value);
+            });
+            UpdateDownloadResult result = await updates.DownloadAsync(progress);
+            if (!result.Success)
+            {
+                UpdateStatusText = UpdateErrorText(result.Error);
+                return;
+            }
+            UpdateAvailable = false;
+            UpdateStatusText = Loc("Settings.Updates.Installing");
+            UpdateError apply = updates.ApplyAndRestart();
+            if (apply != UpdateError.None) UpdateStatusText = UpdateErrorText(apply);
+        }
+        finally { UpdateBusy = false; }
+    }
+
+    private string UpdateErrorText(UpdateError error) => string.Format(CultureInfo.CurrentCulture,
+        Loc(UpdateService.KeyFor(error)), UpdateCurrentVersion);
 
     // Tool pins live in the same settings.json, so choosing a version writes through the
     // merging Save(): only tools.<tool>.version is touched, every other node survives.
@@ -296,6 +601,7 @@ public partial class SettingsViewModel : ViewModelBase
         {
             SecretsBusy = false;
             ConfirmDelete = false;
+            NexusSignedIn = false;
         }
         await UpdateStatusAsync();
     }
@@ -305,6 +611,8 @@ public partial class SettingsViewModel : ViewModelBase
         LocalizationService.Instance.CurrentLanguage = value;
         Save();
     }
+
+    partial void OnNexusClientIdChanged(string value) => nexus.ConfigureClientId(value);
 
     private void Load()
     {
@@ -319,6 +627,9 @@ public partial class SettingsViewModel : ViewModelBase
                     SelectedLanguage = value;
                     LocalizationService.Instance.CurrentLanguage = value;
                 }
+                if (doc.RootElement.TryGetProperty("nexusClientId", out var clientId)
+                    && clientId.GetString() is { Length: > 0 } stored)
+                    NexusClientId = stored;
             }
         }
         catch { /* corrupt settings never block startup */ }
@@ -331,6 +642,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         node["language"] = SelectedLanguage;
         node["catalogEndpoint"] = persistedEndpoint;
+        node["nexusClientId"] = NexusClientId.Trim();
         if (toolPins.Count > 0)
         {
             if (node["tools"] is not System.Text.Json.Nodes.JsonObject toolsNode) node["tools"] = toolsNode = [];

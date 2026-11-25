@@ -22,6 +22,7 @@
   "ModInstall.WarningBuildUnknown": "The game build is unknown; check mod compatibility.",
   "ModInstall.WarningLoaderOverwriteUnknown": "Cannot determine whether the loader will overwrite existing files.",
   "ModInstall.WarningOther": "Plan warning:",
+  "ModInstall.WarningExecutableLibrary": "The plan will write {0} DLL libraries. Install only trusted mods.",
   "ModInstall.LoaderArchUnavailable": "No loader is available for the unknown or unsupported architecture. Select a compatible game build and architecture.",
   "Game.Architecture": "Installation architecture:",
   "Game.ArchitectureUnknown": "Unknown",

@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using Phaket.Core.Nexus;
+using Phaket.Core.Omrl;
 using Phaket.Models;
 using Phaket.Services;
 
@@ -23,7 +25,25 @@ public partial class NexusManualViewModel : ViewModelBase
     public bool HasValidationMessage => !string.IsNullOrEmpty(ValidationMessage);
     public bool HasResult => Result is not null;
 
-    public NexusManualViewModel(Func<Task<string?>>? archivePicker = null) => this.archivePicker = archivePicker;
+    public NexusManualViewModel(Func<Task<string?>>? archivePicker = null, NexusSource? nexusSource = null,
+        INexusService? nexusService = null)
+    {
+        this.archivePicker = archivePicker;
+        Browser = new NexusBrowserViewModel(nexusService, nexusSource);
+        Browser.DownloadCompleted += OnNexusDownloaded;
+    }
+
+    // Browse/download from Nexus API v1; a finished download fills the manual form below.
+    public NexusBrowserViewModel Browser { get; }
+
+    private void OnNexusDownloaded(NexusBrowserDownload download)
+    {
+        Url = $"https://www.nexusmods.com/{download.Link.GameDomain}/mods/{download.Link.ModId}";
+        Name = download.Mod?.Name is { Length: > 0 } title ? title : Path.GetFileNameWithoutExtension(download.Result.FileName);
+        PinnedVersion = download.Mod?.Version ?? "";
+        LocalArchivePath = download.Result.Path;
+        ValidationMessage = "";
+    }
 
     partial void OnValidationMessageChanged(string value) => OnPropertyChanged(nameof(HasValidationMessage));
     partial void OnResultChanged(NexusManualPickResult? value) => OnPropertyChanged(nameof(HasResult));
@@ -32,19 +52,8 @@ public partial class NexusManualViewModel : ViewModelBase
     partial void OnPinnedVersionChanged(string value) => Result = null;
     partial void OnLocalArchivePathChanged(string value) => Result = null;
 
-    public static bool IsValidNexusModUrl(string? value)
-    {
-        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(uri.Host, "www.nexusmods.com", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(uri.Host, "nexusmods.com", StringComparison.OrdinalIgnoreCase) ||
-            !uri.IsDefaultPort || uri.UserInfo.Length > 0 || uri.Query.Contains("@", StringComparison.Ordinal))
-            return false;
-
-        string[] parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        int idIndex = parts.Length >= 3 && parts[1].Equals("mods", StringComparison.OrdinalIgnoreCase) ? 2 :
-            parts.Length >= 4 && parts[0].Equals("games", StringComparison.OrdinalIgnoreCase) && parts[2].Equals("mods", StringComparison.OrdinalIgnoreCase) ? 3 : -1;
-        return idIndex >= 0 && long.TryParse(parts[idIndex], out long id) && id > 0;
-    }
+    public static bool IsValidNexusModUrl(string? value) =>
+        value is not null && value.Contains("://", StringComparison.Ordinal) && NexusModReference.TryParse(value, out _);
 
     public static bool IsValidArchive(string? path)
     {

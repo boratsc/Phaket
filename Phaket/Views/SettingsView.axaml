@@ -43,6 +43,10 @@
                   Content="{Binding [Ui.Settings.Tools], Source={x:Static services:LocalizationService.Instance}}" />
           <Button Classes="segment" Classes.active="{Binding IsSecretsSection}" Command="{Binding SelectSectionCommand}" CommandParameter="secrets"
                   Content="{Binding [Ui.Settings.Secrets], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button Classes="segment" Classes.active="{Binding IsNexusSection}" Command="{Binding SelectSectionCommand}" CommandParameter="nexus"
+                  Content="{Binding [Settings.Nexus.Tab], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button Classes="segment" Classes.active="{Binding IsUpdatesSection}" Command="{Binding SelectSectionCommand}" CommandParameter="updates"
+                  Content="{Binding [Settings.Updates.Tab], Source={x:Static services:LocalizationService.Instance}}" />
         </StackPanel>
       </Border>
 
@@ -143,6 +147,120 @@
           </StackPanel>
           <TextBlock Text="{Binding SecretStatusText}" IsVisible="{Binding HasSecretStatus}" TextWrapping="Wrap"
                      AutomationProperties.LiveSetting="Assertive" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card" IsVisible="{Binding IsNexusSection}">
+        <StackPanel Spacing="10">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="sectionTitle" Text="{Binding [Settings.Nexus.Title], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.Temporary], Source={x:Static services:LocalizationService.Instance}}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Command="{Binding SignInNexusCommand}"
+                      Content="{Binding [Settings.Nexus.OAuth.SignIn], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.Name="{Binding [Settings.Nexus.OAuth.SignIn], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.AutomationId="settings.nexus.sign-in" />
+              <Button Classes="secondary" Command="{Binding SignOutNexusCommand}" IsVisible="{Binding NexusSignedIn}"
+                      Content="{Binding [Settings.Nexus.OAuth.SignOut], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.Name="{Binding [Settings.Nexus.OAuth.SignOut], Source={x:Static services:LocalizationService.Instance}}"
+                      AutomationProperties.AutomationId="settings.nexus.sign-out" />
+            </StackPanel>
+            <TextBlock Text="{Binding NexusOAuthStatusText}" IsVisible="{Binding HasNexusOAuthStatus}" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Assertive" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.OAuth.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox Text="{Binding NexusClientId}"
+                       PlaceholderText="{Binding [Settings.Nexus.ClientIdPlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.Name="{Binding [Settings.Nexus.ClientId], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.AutomationId="settings.nexus.client-id" />
+            </Grid>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.ClientIdHint], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource LineBrush}" />
+
+          <StackPanel Spacing="4">
+            <TextBlock Classes="sectionTitle" Text="{Binding [Settings.Nexus.FallbackTitle], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.FallbackHint], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding NexusApiKey}" PasswordChar="•"
+                     PlaceholderText="{Binding [Settings.Nexus.KeyPlaceholder], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.Name="{Binding [Settings.Nexus.Key], Source={x:Static services:LocalizationService.Instance}}"
+                     AutomationProperties.AutomationId="settings.nexus.key" />
+            <Button Grid.Column="1" Classes="secondary" Command="{Binding CheckNexusKeyCommand}"
+                    Content="{Binding [Settings.Nexus.Check], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Settings.Nexus.Check], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Nexus.KeyHint], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button HorizontalAlignment="Left" Padding="0" Background="Transparent" BorderThickness="0" Command="{Binding OpenNexusApiPageCommand}"
+                  Content="{Binding [Settings.Nexus.OpenApiPage], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [Settings.Nexus.OpenApiPage], Source={x:Static services:LocalizationService.Instance}}" />
+          <Border Height="1" Background="{DynamicResource LineBrush}" />
+          <StackPanel Spacing="2" IsVisible="{Binding HasNexusAccount}">
+            <TextBlock Text="{Binding NexusAccountText}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding NexusPremiumText}" />
+            <TextBlock Classes="muted" IsVisible="{Binding HasNexusLimits}" Text="{Binding NexusLimitsText}" />
+          </StackPanel>
+          <Button Classes="danger" HorizontalAlignment="Left" Command="{Binding DeleteNexusKeyCommand}"
+                  Content="{Binding [Settings.Nexus.Delete], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [Settings.Nexus.Delete], Source={x:Static services:LocalizationService.Instance}}" />
+          <TextBlock Text="{Binding NexusStatusText}" IsVisible="{Binding HasNexusStatus}" TextWrapping="Wrap"
+                     AutomationProperties.LiveSetting="Assertive" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card" IsVisible="{Binding IsUpdatesSection}">
+        <StackPanel Spacing="10">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="sectionTitle" Text="{Binding [Settings.Updates.Title], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.HeadingLevel="2" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Updates.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="6" AutomationProperties.Name="{Binding [Settings.Updates.CurrentVersion], Source={x:Static services:LocalizationService.Instance}}">
+            <TextBlock Classes="muted" Text="{Binding [Settings.Updates.CurrentVersion], Source={x:Static services:LocalizationService.Instance}}" />
+            <TextBlock Text="{Binding UpdateCurrentVersion}" FontWeight="SemiBold" />
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="{Binding [Settings.Updates.Channel], Source={x:Static services:LocalizationService.Instance}}" FontWeight="SemiBold" />
+            <StackPanel Orientation="Horizontal" Spacing="16">
+              <RadioButton GroupName="UpdateChannel" IsChecked="{Binding IsStableChannel, Mode=OneWay}"
+                           Command="{Binding SelectChannelCommand}" CommandParameter="stable"
+                           Content="{Binding [Settings.Updates.Channel.Stable], Source={x:Static services:LocalizationService.Instance}}"
+                           AutomationProperties.Name="{Binding [Settings.Updates.Channel.Stable], Source={x:Static services:LocalizationService.Instance}}"
+                           AutomationProperties.AutomationId="settings.updates.stable" />
+              <RadioButton GroupName="UpdateChannel" IsChecked="{Binding IsBetaChannel, Mode=OneWay}"
+                           Command="{Binding SelectChannelCommand}" CommandParameter="beta"
+                           Content="{Binding [Settings.Updates.Channel.Beta], Source={x:Static services:LocalizationService.Instance}}"
+                           AutomationProperties.Name="{Binding [Settings.Updates.Channel.Beta], Source={x:Static services:LocalizationService.Instance}}"
+                           AutomationProperties.AutomationId="settings.updates.beta" />
+            </StackPanel>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Settings.Updates.ChannelHint], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="primary" Command="{Binding CheckForAppUpdatesCommand}"
+                    Content="{Binding [Settings.Updates.Check], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Settings.Updates.Check], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.AutomationId="settings.updates.check" />
+            <Button Classes="secondary" IsVisible="{Binding UpdateAvailable}" Command="{Binding DownloadAndInstallUpdateCommand}"
+                    Content="{Binding [Settings.Updates.Install], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Settings.Updates.Install], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.AutomationId="settings.updates.install" />
+          </StackPanel>
+
+          <ProgressBar Minimum="0" Maximum="100" Value="{Binding UpdateProgress}" IsVisible="{Binding HasUpdateProgress}"
+                       AutomationProperties.Name="{Binding [Settings.Updates.Downloading], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.AutomationId="settings.updates.progress" />
+          <TextBlock Text="{Binding UpdateStatusText}" IsVisible="{Binding HasUpdateStatus}" TextWrapping="Wrap"
+                     AutomationProperties.LiveSetting="Assertive"
+                     AutomationProperties.AutomationId="settings.updates.status" />
         </StackPanel>
       </Border>
     </StackPanel>

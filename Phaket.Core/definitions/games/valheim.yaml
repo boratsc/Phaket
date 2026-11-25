@@ -5,6 +5,13 @@ title:
   en: Valheim
 storeIds:
   steam: "892970"
+# Where the game's mods come from; consumed by the future Nexus client.
+sources:
+  thunderstore: valheim
+  # api.nexusmods.com/v2/graphql game(domainName:"valheim") { id } — fetched 2026-11-25.
+  nexus:
+    domain: valheim
+    gameId: 3667
 detection:
   strategy: steam-manifest
 mainExecutable: valheim.exe

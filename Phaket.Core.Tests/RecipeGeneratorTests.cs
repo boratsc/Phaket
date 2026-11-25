@@ -126,6 +126,96 @@ public sealed class RecipeGeneratorTests
         Assert.NotEmpty(OperationPlanner.Plan(generated.Recipe, context).Operations);
     }
 
+    private static string[] Targets(Recipe recipe) =>
+        recipe.Steps.Where(s => s.Use == "file.copy").Select(s => s.With["to"].GetString()!).ToArray();
+
+    // PAK-125: a game-relative loader archive must land as-is, not under plugins/<package>/.
+    [Fact]
+    public void LoaderLayoutArchiveKeepsGameRelativePaths()
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition("valheim")));
+        var generated = RecipeGenerator.Generate("owner-Loader", "5.4.23.6",
+            "https://thunderstore.io/package/download/owner/Loader/5.4.23.6/", new string('a', 64),
+            ["BepInEx/core/BepInEx.dll", "BepInEx/plugins/Foo/Foo.dll", "doorstop_config.ini", "winhttp.dll", ".doorstop_version"],
+            game);
+
+        Assert.Equal(
+            new[]
+            {
+                "game://.doorstop_version", "game://BepInEx/core/BepInEx.dll", "game://BepInEx/plugins/Foo/Foo.dll",
+                "game://doorstop_config.ini", "game://winhttp.dll",
+            },
+            Targets(generated.Recipe).Order(StringComparer.Ordinal));
+        Assert.Empty(RecipeValidator.Validate(generated.Recipe, game));
+    }
+
+    // A pinned GitHub/Nexus ZIP with the same layout (the e2e BepInEx pack case) goes through
+    // GenerateModpackPackage, so the routing is checked there too.
+    [Fact]
+    public void ModpackPackageWithBepInExLayoutIsNotNestedInThePackageFolder()
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition("valheim")));
+        var generated = RecipeGenerator.GenerateModpackPackage("nexus", "BepInEx Pack 5.4.23.6", "v5.4.23.6",
+            "package://package.zip", new string('b', 64), 4096,
+            ["BepInEx/core/BepInEx.dll", "doorstop_config.ini", "winhttp.dll"], game, "nexus.bepinex_pack");
+
+        Assert.Equal(
+            new[] { "game://BepInEx/core/BepInEx.dll", "game://doorstop_config.ini", "game://winhttp.dll" },
+            Targets(generated.Recipe).Order(StringComparer.Ordinal));
+        Assert.Empty(RecipeValidator.Validate(generated.Recipe, game));
+    }
+
+    [Fact]
+    public void ThunderstoreModFileUnderBepInExPrefixIsNotNestedAgain()
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition("valheim")));
+        var generated = RecipeGenerator.Generate("ShadowRiver-TerrainerFixed", "1.0.7",
+            "https://thunderstore.io/package/download/ShadowRiver/TerrainerFixed/1.0.7/", new string('c', 64),
+            ["BepInEx/plugins/TerrainerFixed.dll", "manifest.json", "README.md", "icon.png"], game);
+
+        var targets = Targets(generated.Recipe);
+        Assert.Contains("game://BepInEx/plugins/TerrainerFixed.dll", targets);
+        Assert.DoesNotContain(targets, t => t.Contains("ShadowRiver-TerrainerFixed/BepInEx", StringComparison.Ordinal));
+        // Thunderstore metadata keeps its existing per-package folder.
+        Assert.Contains("game://BepInEx/plugins/ShadowRiver-TerrainerFixed/README.md", targets);
+        Assert.Contains("game://BepInEx/plugins/ShadowRiver-TerrainerFixed/manifest.json", targets);
+        Assert.Empty(RecipeValidator.Validate(generated.Recipe, game));
+    }
+
+    [Fact]
+    public void DllOnlyArchiveWithoutPrefixKeepsThePluginFolder()
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition("valheim")));
+        var generated = RecipeGenerator.Generate("ShadowRiver-TerrainerFixed", "1.0.7",
+            "https://thunderstore.io/package/download/ShadowRiver/TerrainerFixed/1.0.7/", new string('d', 64),
+            ["TerrainerFixed.dll", "config/TerrainerFixed.cfg"], game);
+
+        Assert.Equal(
+            new[]
+            {
+                "game://BepInEx/config/TerrainerFixed.cfg",
+                "game://BepInEx/plugins/ShadowRiver-TerrainerFixed/TerrainerFixed.dll",
+            },
+            Targets(generated.Recipe).Order(StringComparer.Ordinal));
+        Assert.Equal("shared", Assert.Single(generated.Ownership).Ownership);
+    }
+
+    // Routing a BepInEx-prefixed entry must not bypass the path boundary: both the
+    // generator and the archive guard still refuse traversal.
+    [Fact]
+    public void TraversalAfterBepInExPrefixIsStillRejected()
+    {
+        var game = GameDefinitionLoader.LoadYaml(File.ReadAllText(Definition("valheim")));
+        var exception = Assert.Throws<ArgumentException>(() => RecipeGenerator.Generate("owner-Mod", "1.2.3",
+            "https://thunderstore.io/package/download/owner/Mod/1.2.3/", new string('e', 64),
+            ["BepInEx/../../evil.dll"], game));
+        Assert.Equal("value", exception.ParamName);
+
+        var unsafeEntry = Assert.Throws<PhaketException>(() =>
+            Phaket.Core.Execution.SafeArchive.ValidateEntryNames(["BepInEx/../evil.dll"], "owner-Mod"));
+        Assert.Equal(ErrorCodes.ArchiveUnsafe, unsafeEntry.Error.Code);
+    }
+
     [Fact]
     public void MissingSha256ForRemoteArtifactIsRejected()
     {

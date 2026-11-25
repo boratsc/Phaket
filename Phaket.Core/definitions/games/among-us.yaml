@@ -6,6 +6,13 @@ title:
 storeIds:
   steam: "945360"
   epic: 963137e4c29d4c79a81323b8fab03a40
+# Where the game's mods come from; consumed by the future Nexus client.
+sources:
+  thunderstore: among-us
+  # api.nexusmods.com/v2/graphql game(domainName:"amongus") { id } — fetched 2026-11-25; 912 does not exist.
+  nexus:
+    domain: amongus
+    gameId: 9589
 detection:
   strategy: steam-manifest
 mainExecutable: Among Us.exe

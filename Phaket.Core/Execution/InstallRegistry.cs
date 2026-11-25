@@ -9,7 +9,10 @@ namespace Phaket.Core.Execution;
 public sealed record InstalledRecipe(
     string RecipeId, string RecipeVersion, string GameSlug, string Store,
     string GameRoot, string ProfileRoot, string StagingRoot, string StateRoot,
-    string? SandboxRoot, DateTimeOffset InstalledAt, string ModFullName = "", string ModVersion = "");
+    string? SandboxRoot, DateTimeOffset InstalledAt, string ModFullName = "", string ModVersion = "",
+    // "unverified" when the catalog declared no sha256 for the package (Thunderstore v1 API
+    // does not publish them); null means the declared hash was verified.
+    string? ArtifactIntegrity = null);
 
 public sealed class InstallRegistry
 {
