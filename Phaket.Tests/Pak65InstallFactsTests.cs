@@ -119,7 +119,7 @@ public sealed class Pak65InstallFactsTests
         {
             var vm = new ModCatalogViewModel("among-us", root, autoSync: false);
             vm.PrepareOverride = (_, _, _, _, _) => Task.FromResult(new InstallPreparation("among-us", "Owner-Mod", "2.0",
-                "http://127.0.0.1:18080", new("", "steam", true),
+                "http://127.0.0.1:1", new("", "steam", true),
                 [new OperationPlan(OperationPlan.CurrentSchemaVersion, new RecipeRef("mod", "2"), "i", "p", [], [], [], false, [])],
                 [], [], [new InstallPreview("Owner-Mod", "2.0", [], 0)], "/tmp/sandbox", "", "", "", ""));
             await vm.BeginInstallAsync("Owner-Mod", "2.0", new("", "steam", true));
@@ -145,7 +145,7 @@ public sealed class Pak65InstallFactsTests
             vm.PrepareOverride = (_, _, _, target, _) =>
             {
                 seen = target;
-                return Task.FromResult(new InstallPreparation("among-us", "Owner-Mod", "2.0", "http://127.0.0.1:18080",
+                return Task.FromResult(new InstallPreparation("among-us", "Owner-Mod", "2.0", "http://127.0.0.1:1",
                     target, [], [], [], [], "", "", "", "", ""));
             };
             Assert.Equal(game.Definition.DefaultArch, vm.SelectedArch);

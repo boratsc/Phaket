@@ -6,7 +6,7 @@ namespace Phaket.Services;
 // language choice. The catalog needs a server; without one the UI shows an offline state.
 public static class CatalogSettings
 {
-    public const string DefaultEndpoint = "http://127.0.0.1:18080";
+    public const string DefaultEndpoint = "http://192.168.1.184:18080";
 
     public static string DefaultSettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "settings.json");
@@ -17,7 +17,7 @@ public static class CatalogSettings
         Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
-    // Never throws: a missing or broken settings file falls back to the local default.
+    // Never throws: a missing or broken settings file falls back to the stage default.
     public static string Load(string? settingsPath = null)
     {
         try

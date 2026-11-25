@@ -474,7 +474,7 @@
   "Help.ToolsDepotDownloader": "DepotDownloader (Steam) — GNU GPL v2: https://github.com/SteamRE/DepotDownloader",
   "Help.CatalogTitle": "Katalog modów i buildów",
   "Help.Catalog": "Katalog modów oraz listy buildów wymaga serwera katalogowego. Serwer Phaket nie jest jeszcze udostępniony, dlatego widok „katalog offline” jest stanem normalnym; zainstalowane mody i gry działają bez niego.",
-  "Help.CatalogEndpoint": "Adres serwera katalogu ustawisz w Ustawieniach (domyślnie http://127.0.0.1:18080, czyli lokalny serwer deweloperski). Po odzyskaniu połączenia kliknij „Odśwież”, aby pobrać dane.",
+  "Help.CatalogEndpoint": "Adres serwera katalogu ustawisz w Ustawieniach (domyślnie http://192.168.1.184:18080, czyli trwałe środowisko testowe stage w sieci LAN). Po odzyskaniu połączenia kliknij „Odśwież”, aby pobrać dane.",
   "Shell.SelectedGame": "WYBRANA GRA",
   "Shell.GamePicker": "Wybierz grę",
   "Shell.Application": "APLIKACJA",

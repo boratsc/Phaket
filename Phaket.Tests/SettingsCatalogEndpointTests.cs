@@ -23,7 +23,7 @@ public class SettingsCatalogEndpointTests
         var (vm, path, dir) = Create("""{ "language": "en", "tools": { "legendary": { "version": "0.20.0" } } }""");
         try
         {
-            Assert.Equal(CatalogSettings.DefaultEndpoint, vm.CatalogEndpoint);
+            Assert.Equal("http://192.168.1.184:18080", vm.CatalogEndpoint);
             vm.CatalogEndpoint = "https://catalog.example.test/";
             vm.SaveCatalogEndpointCommand.Execute(null);
             Assert.Equal(LocalizationService.Instance["Settings.Catalog.Saved"], vm.CatalogEndpointStatus);

@@ -474,7 +474,7 @@
   "Help.ToolsDepotDownloader": "DepotDownloader (Steam) — GNU GPL v2: https://github.com/SteamRE/DepotDownloader",
   "Help.CatalogTitle": "Mod and build catalog",
   "Help.Catalog": "The mod catalog and the build lists require a catalog server. The Phaket server is not published yet, so the \"catalog offline\" view is a normal state; installed mods and games work without it.",
-  "Help.CatalogEndpoint": "Set the catalog server address in Settings (default http://127.0.0.1:18080, the local development server). When the connection is back, select \"Refresh\" to download the data.",
+  "Help.CatalogEndpoint": "Set the catalog server address in Settings (default http://192.168.1.184:18080, the permanent stage test environment on the LAN). When the connection is back, select \"Refresh\" to download the data.",
   "Shell.SelectedGame": "SELECTED GAME",
   "Shell.GamePicker": "Choose a game",
   "Shell.Application": "APPLICATION",
