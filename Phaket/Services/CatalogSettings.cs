@@ -6,7 +6,9 @@ namespace Phaket.Services;
 // language choice. The catalog needs a server; without one the UI shows an offline state.
 public static class CatalogSettings
 {
-    public const string DefaultEndpoint = "http://192.168.1.184:18080";
+    // Stage is public behind the CF TLS edge and internal via split-DNS (Let's Encrypt on CT102);
+    // the client never talks plaintext. On promotion to beta/main switch to https://phaket.app.
+    public const string DefaultEndpoint = "https://stage.phaket.app";
 
     public static string DefaultSettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "settings.json");
