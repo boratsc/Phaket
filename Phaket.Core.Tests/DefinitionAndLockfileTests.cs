@@ -50,7 +50,8 @@ public class DefinitionTests
     public void NexusSourceRequiresDomainAndGameId()
     {
         var yaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "definitions", "games", "valheim.yaml"))
-            .Replace("gameId: 3667\n", "");
+                // A Windows checkout turns the fixture into CRLF; normalise before editing it.
+            .Replace("\r\n", "\n").Replace("gameId: 3667\n", "");
         Assert.Throws<PhaketException>(() => GameDefinitionLoader.LoadYaml(yaml));
     }
 

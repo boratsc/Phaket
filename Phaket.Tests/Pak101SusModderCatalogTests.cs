@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
-using Avalonia.Threading;
 using Phaket.Core.Catalog;
 using Phaket.Services;
 using Phaket.ViewModels;
@@ -49,7 +48,9 @@ public sealed class Pak101SusModderCatalogTests
 
     private static async Task WaitForDetails(ModCatalogViewModel vm)
     {
-        for (var i = 0; i < 200 && vm.Details is null; i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
+        // Awaiting the lookup closes its SQLite store; polling for Details leaves the handle open
+        // past the fixture cleanup on Windows.
+        if (vm.PendingDetails is { } pending) await pending;
         Assert.NotNull(vm.Details);
     }
 

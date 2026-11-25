@@ -286,6 +286,9 @@ public sealed class ModInstallServiceTests
             InstallPreparation? plan = null;
             vm.PrepareOverride = async (name, version, endpoint, target, overrides) => plan = await service.PrepareAsync("among-us", name, version, endpoint, target with { Arch = "x86" }, overrides);
             vm.ExecuteOverride = (p, accepted, progress) => service.ExecuteAsync(p, accepted, progress);
+            // The details lookup is not part of this test; keep it off the network and close it
+            // before the fixture directory is deleted.
+            vm.Endpoint = "http://127.0.0.1:1";
             vm.SelectedMod = Mod(RootName, mod);
             await vm.InstallVersionCommand.ExecuteAsync(mod);
             Assert.True(vm.HasPreview, vm.InstallStatus);
@@ -314,6 +317,7 @@ public sealed class ModInstallServiceTests
             Assert.False(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));
             Assert.False(File.Exists(Path.Combine(gameRoot, "BepInEx", "plugins", RootName, "Mod.dll")));
             Assert.Equal("keep", File.ReadAllText(config));
+            if (vm.PendingDetails is { } pending) await pending;
         }
         finally { Directory.Delete(root, true); }
     }

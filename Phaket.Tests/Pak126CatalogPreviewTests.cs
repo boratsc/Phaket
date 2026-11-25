@@ -84,9 +84,10 @@ public sealed class Pak126CatalogPreviewTests
         var zip = Zip();
         var mod = Mod(zip);
         var root = TestAccounts.TempPath();
+        ModCatalogViewModel? vm = null;
         try
         {
-            var vm = new ModCatalogViewModel("among-us", root, new Catalog(mod), false);
+            vm = new ModCatalogViewModel("among-us", root, new Catalog(mod), false);
             await vm.RefreshCommand.ExecuteAsync(null);
 
             var version = Assert.Single(vm.Mods).Latest;
@@ -101,7 +102,13 @@ public sealed class Pak126CatalogPreviewTests
             Assert.True(prepared);
             Assert.NotEqual(LocalizationService.Instance["ModInstall.VersionUnavailable"], vm.InstallStatus);
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            // Selecting the row starts a details lookup that holds modcatalog.db; the fixture
+            // directory cannot be removed on Windows until that task closes the store.
+            if (vm?.PendingDetails is { } pending) await pending;
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     // PAK-127: the preview maps every archive entry to the game path the plan writes, so a
