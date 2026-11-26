@@ -48,5 +48,10 @@
   "BASE_GAME_TIMEOUT": "Pobieranie wersji gry przekroczyło limit czasu. Sprawdź połączenie i spróbuj ponownie.",
   "BASE_GAME_TOOL_FAILED": "Narzędzie pobierania wersji gry zakończyło się błędem. Wyjście narzędzia zewnętrznego: {detail}",
   "EPIC_SIGN_IN_REQUIRED": "Ta wersja gry wymaga zalogowania do Epic. Zaloguj się do Epic w Bibliotece, a następnie spróbuj ponownie zainstalować mod.",
-  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "Nie znaleziono środowiska .NET potrzebnego do uruchomienia DepotDownloader. Zainstaluj .NET Runtime i spróbuj ponownie."
+  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "Nie znaleziono środowiska .NET potrzebnego do uruchomienia DepotDownloader. Zainstaluj .NET Runtime i spróbuj ponownie.",
+  "SAVE_BACKUP_TOO_LARGE": "Twoje zapisy gry zajmują {size}, a limit kopii to {limit}. Nic nie zostało skopiowane — podnieś limit w Ustawieniach lub zwolnij miejsce.",
+  "SAVE_BACKUP_HASH_MISMATCH": "Plik {path} w kopii {id} nie zgadza się z zapisanym. Niczego nie przywrócono — kopia mogła się uszkodzić.",
+  "SAVE_BACKUP_MANIFEST_INVALID": "Nie można odczytać kopii {id}: brakuje jej opisu lub jest uszkodzony.",
+  "SAVE_BACKUP_RESTORE_REFUSED": "Kopia trafiłaby poza folder zapisów gry ({path}). Niczego nie przywrócono.",
+  "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED": "Usuwanie starych kopii jest nieodwracalne. Najpierw potwierdź, że Phaket może je usunąć."
 }

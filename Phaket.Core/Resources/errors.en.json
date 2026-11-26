@@ -48,5 +48,10 @@
   "BASE_GAME_TIMEOUT": "Downloading the game version timed out. Check the connection and try again.",
   "BASE_GAME_TOOL_FAILED": "The game version download tool failed. External tool output: {detail}",
   "EPIC_SIGN_IN_REQUIRED": "This game version needs an Epic sign-in. Sign in to Epic in the Library, then try installing the mod again.",
-  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "The .NET runtime required to run DepotDownloader was not found. Install the .NET runtime and try again."
+  "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "The .NET runtime required to run DepotDownloader was not found. Install the .NET runtime and try again.",
+  "SAVE_BACKUP_TOO_LARGE": "Your saves take {size} and the backup limit is {limit}. Nothing was copied — raise the limit in Settings or free some space.",
+  "SAVE_BACKUP_HASH_MISMATCH": "A file in backup {id} does not match what was saved ({path}). Nothing was restored — the backup may be damaged.",
+  "SAVE_BACKUP_MANIFEST_INVALID": "The backup {id} cannot be read: its description file is missing or damaged.",
+  "SAVE_BACKUP_RESTORE_REFUSED": "The backup would be restored outside the save folder ({path}). Nothing was restored.",
+  "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED": "Deleting old backups is permanent. Confirm first that Phaket may remove them."
 }
