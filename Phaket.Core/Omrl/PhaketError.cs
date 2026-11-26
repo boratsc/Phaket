@@ -28,6 +28,12 @@ public static class ErrorCodes
     public const string ModArtifactHashUndeclared = "MOD_ARTIFACT_HASH_UNDECLARED";
     // PAK-97: the plan combines a SusModder full mod with a dll the upstream matrix marks "does not work".
     public const string ModCompatibilityBlocked = "MOD_COMPATIBILITY_BLOCKED";
+    // PAK-51: the catalog response carries a signature that does not match its body, or a key id
+    // outside the built-in keys. The response is refused and the last good snapshot is kept.
+    public const string CatalogSignatureInvalid = "CATALOG_SIGNATURE_INVALID";
+    public const string CatalogSignatureUnknownKey = "CATALOG_SIGNATURE_UNKNOWN_KEY";
+    // A replayed or stale catalog answer (revision not newer than the cached one).
+    public const string CatalogRevisionStale = "CATALOG_REVISION_STALE";
     public const string ArchiveInvalid = "ARCHIVE_INVALID";
     public const string ArchiveFormatUnsupported = "ARCHIVE_FORMAT_UNSUPPORTED";
     public const string PlanNotAccepted = "PLAN_NOT_ACCEPTED";

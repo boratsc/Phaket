@@ -9,6 +9,9 @@
     <RepositoryUrl>https://github.com/boratsc/Phaket</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
+    <!-- PAK-51: Ed25519 verification of catalog signatures; same library the desktop uses
+         for device keys (PAK-83). -->
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageReference Include="JsonSchema.Net" Version="9.7.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="11.0.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />

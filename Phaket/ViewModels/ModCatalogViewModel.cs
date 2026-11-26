@@ -190,6 +190,9 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool hasConflicts;
     [ObservableProperty] private string targetDescription = "";
     [ObservableProperty] private bool isSandboxTarget;
+    // PAK-51: a mod hash pins the download bytes, it does not say who published them. The
+    // install preview shows this line next to the packages so the two are never confused.
+    [ObservableProperty] private bool hasInstallTrustNote;
     public ObservableCollection<InstallTargetChoice> Targets { get; } = [];
     [ObservableProperty] private InstallTargetChoice? selectedTarget;
     partial void OnSelectedTargetChanged(InstallTargetChoice? value) { OnPropertyChanged(nameof(SandboxSelected)); if (!IsPreparing) ClearInstall(); RebuildVersions(); }
@@ -306,6 +309,9 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
                         ? operation with { TargetPath = Path.Combine(TargetDescription, operation.TargetPath[7..].Replace('/', Path.DirectorySeparatorChar)) }
                         : operation);
                 HasPreview = true;
+                // Only when a plan carries a verified hash is there anything to explain; a
+                // Thunderstore package has none, and the unverified warning already says so.
+                HasInstallTrustNote = result.Plans.Any(p => p.Warnings.All(w => w != "THUNDERSTORE_HASH_UNVERIFIED"));
             }
         }
         catch (PhaketException ex) when (ex.Error.Code == "LOADER_ARCH_UNAVAILABLE") { InstallStatus = LocalizationService.Instance["ModInstall.LoaderArchUnavailable"]; }
@@ -338,7 +344,7 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
     }
     private void ClearInstall()
     {
-        PlanAccepted = false; HasPreview = false; HasConflicts = false; preparation = null;
+        PlanAccepted = false; HasPreview = false; HasConflicts = false; HasInstallTrustNote = false; preparation = null;
         Preview.Clear(); Operations.Clear(); PlanWarnings.Clear(); Conflicts.Clear();
     }
     [RelayCommand(CanExecute = nameof(CanExecuteInstall))]

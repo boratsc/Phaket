@@ -375,6 +375,7 @@
   "ModInstall.Size": "Rozmiar bajtów",
   "ModInstall.Sandbox": "Sandbox — katalog testowy",
   "ModInstall.Real": "Rzeczywisty katalog gry",
+  "ModInstall.HashIdentity": "Suma kontrolna potwierdza pobrany plik, nie tożsamość wydawcy.",
   "Library.Install": "Zainstaluj",
   "Library.InstallPlan": "Plan instalacji gry Epic",
   "Library.InstallChooseFolder": "Wybierz katalog bazowy instalacji",

@@ -375,6 +375,7 @@
   "ModInstall.Size": "Size in bytes",
   "ModInstall.Sandbox": "Sandbox — test directory",
   "ModInstall.Real": "Real game directory",
+  "ModInstall.HashIdentity": "The hash verifies the downloaded file, not the publisher identity.",
   "Library.Install": "Install",
   "Library.InstallPlan": "Epic game installation plan",
   "Library.InstallChooseFolder": "Choose the installation base directory",

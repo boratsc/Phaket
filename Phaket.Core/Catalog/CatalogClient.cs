@@ -19,7 +19,10 @@ public sealed record CatalogBuild(
     public string ReleasedText => ReleasedAt?.ToLocalTime().ToString("d") ?? "—";
 }
 
-public sealed record CatalogResponse(int StatusCode, string? ETag, string? Body);
+// PAK-51: the server signs catalog responses (200 only) with Ed25519 over SHA-256 of the raw
+// body. Both headers are optional: a server without a signing key answers unsigned.
+public sealed record CatalogResponse(int StatusCode, string? ETag, string? Body,
+    string? Signature = null, string? KeyId = null);
 
 public interface ICatalogTransport
 {
@@ -37,8 +40,12 @@ public sealed class HttpCatalogTransport : ICatalogTransport
         if (ifNoneMatch is not null) request.Headers.TryAddWithoutValidation("If-None-Match", ifNoneMatch);
         using var response = await http.SendAsync(request, cancellationToken);
         var etag = response.Headers.ETag?.ToString();
+        // The signature covers the bytes on the wire, so the decoded string is only kept for
+        // callers: ModCatalogClient re-hashes the UTF-8 encoding, which matches the server.
         var body = response.StatusCode == System.Net.HttpStatusCode.NotModified ? null : await response.Content.ReadAsStringAsync(cancellationToken);
-        return new CatalogResponse((int)response.StatusCode, etag, body);
+        return new CatalogResponse((int)response.StatusCode, etag, body,
+            response.Headers.TryGetValues("X-Phaket-Signature", out var signature) ? signature.FirstOrDefault() : null,
+            response.Headers.TryGetValues("X-Phaket-Key-Id", out var keyId) ? keyId.FirstOrDefault() : null);
     }
 }
 

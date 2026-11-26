@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
+using Phaket.Core.Omrl;
 
 namespace Phaket.Core.Catalog;
 
@@ -113,9 +116,73 @@ public sealed class ModCatalogStore : IDisposable
     public void Dispose()=>db.Dispose();
 }
 
+// PAK-51: whether a catalog response carried a signature this client trusts. "Unverified"
+// means the server answered without signature headers (no key configured) — accepted for
+// backward compatibility, never presented as publisher identity.
+public enum CatalogTrust { Unverified, Verified }
+
+public sealed record CatalogSyncResult(CatalogTrust Trust);
+
+// PAK-51 (model A, PAK-83 DeviceKeyStore pattern): the server signs the raw body of
+// GET /mods/index and GET /mods/changes with Ed25519 over SHA-256; the key id is
+// hex(SHA-256(public key))[0..16]. The key list from /catalog/signing-keys is NOT signed,
+// so it is never a trust source: only these built-in keys are.
+public static class ModCatalogSigning
+{
+    // Base64 Ed25519 public keys shipped with the client (bootstrap trust).
+    // shortcut: empty until the production key exists — insert it here before the public
+    // beta, otherwise every server response counts as unverified (accepted, not trusted).
+    private static readonly Dictionary<string, byte[]> TrustedKeys = Trusted().ToDictionary(k => k.Id, k => k.Key, StringComparer.Ordinal);
+
+    private static IEnumerable<(string Id, byte[] Key)> Trusted() => [];
+
+    // Test hook: registers a throwaway key for the process so signature paths run against a
+    // local stub without shipping a real key.
+    internal static void AddTrustedKeyForTests(byte[] publicKey) => TrustedKeys[KeyIdOf(publicKey)] = publicKey;
+
+    // Same derivation as the server: lowercase hex of SHA-256(public key), first 16 chars.
+    public static string KeyIdOf(byte[] publicKey) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(publicKey))[..16];
+
+    // Returns Verified only when signature and key id match a built-in key; no headers is
+    // Unverified; a present-but-bad signature or an unknown key id throws (fail closed).
+    public static CatalogTrust Verify(CatalogResponse response) => Verify(response.Body, response.Signature, response.KeyId);
+
+    public static CatalogTrust Verify(string? body, string? signature, string? keyId)
+    {
+        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(keyId)) return CatalogTrust.Unverified;
+        // An unknown key id is the reported failure even when the signature is also malformed.
+        if (!TrustedKeys.TryGetValue(keyId, out var publicKey))
+            throw new PhaketException(ErrorCodes.CatalogSignatureUnknownKey, ("keyId", keyId));
+        if (body is not null && VerifySignature(publicKey, body, signature)) return CatalogTrust.Verified;
+        throw new PhaketException(ErrorCodes.CatalogSignatureInvalid);
+    }
+
+    private static bool VerifySignature(byte[] publicKey, string body, string signature)
+    {
+        try
+        {
+            var signer = new Ed25519Signer();
+            signer.Init(false, new Ed25519PublicKeyParameters(publicKey));
+            var message = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(body));
+            signer.BlockUpdate(message, 0, message.Length);
+            return signer.VerifySignature(Convert.FromBase64String(signature));
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException or Org.BouncyCastle.Crypto.CryptoException)
+        { return false; /* malformed signature is a bad signature, not a crash */ }
+    }
+}
+
 public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStore store)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public CatalogSyncResult? LastResult { get; private set; }
+
+    // A revision that is not newer than the cached one means a replayed or stale answer:
+    // installing from it would silently roll mods back.
+    private void RequireFresh(long revision) { if (revision <= store.DeltaCursor)
+        throw new PhaketException(ErrorCodes.CatalogRevisionStale, ("revision", revision.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("cached", store.DeltaCursor.ToString(System.Globalization.CultureInfo.InvariantCulture))); }
     public async Task<ThunderstoreModDetails> GetModAsync(string id,CancellationToken cancellationToken=default)
     {
         if(string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Mod id is required",nameof(id));
@@ -139,29 +206,38 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
         if(cached is not null) return cached;
         throw new HttpRequestException("MOD_DETAILS_UNAVAILABLE");
     }
-    public async Task SyncAsync(string gameId,CancellationToken cancellationToken=default)
+    public async Task SyncAsync(string gameId,CancellationToken cancellationToken=default) => LastResult = await SyncCore(gameId,cancellationToken);
+
+    private async Task<CatalogSyncResult> SyncCore(string gameId,CancellationToken cancellationToken)
     {
         if(gameId is not ("among-us" or "valheim")) throw new ArgumentException("Unsupported game id",nameof(gameId));
-        if(!store.HasSnapshot(gameId)) { await Snapshot(gameId,cancellationToken); return; }
+        if(!store.HasSnapshot(gameId)) return await Snapshot(gameId,cancellationToken);
         var rev=store.DeltaCursor;
         var delta=await transport.GetAsync($"/mods/changes?since={rev}",null,cancellationToken);
-        if(delta.StatusCode==410) { await Snapshot(gameId,cancellationToken); return; }
+        if(delta.StatusCode==410) return await Snapshot(gameId,cancellationToken);
         if(delta.StatusCode==200 && delta.Body is not null)
         {
+            // The signature is checked before the body is parsed or written: a forged or
+            // stale delta never reaches the cache, and the last good snapshot stays intact.
+            var trust=ModCatalogSigning.Verify(delta);
             // shortcut: /mods/changes carries no compatibility matrix (PAK-97 contract), so the
             // matrix refreshes only on a full snapshot; a status change waits for the next
             // incremental full refresh/etag miss. Add a matrix field to changes to close it.
             using var doc=JsonDocument.Parse(delta.Body); var root=doc.RootElement;
-            if(root.GetProperty("reset").GetBoolean()) { await Snapshot(gameId,cancellationToken); return; }
+            if(root.GetProperty("reset").GetBoolean()) return await Snapshot(gameId,cancellationToken);
+            // A delta may leave other games' revisions behind, so freshness is checked per game.
+            var revision=root.GetProperty("revision").GetInt64();
+            if(revision<=store.GameRevision(gameId))
+                throw new PhaketException(ErrorCodes.CatalogRevisionStale,("revision",revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),("cached",store.GameRevision(gameId).ToString(System.Globalization.CultureInfo.InvariantCulture)));
             var upserts=new List<ThunderstoreMod>(); var deleted=new List<string>();
             foreach(var item in root.GetProperty("changes").EnumerateArray())
                 if(item.GetProperty("op").GetString()=="tombstone") deleted.Add(item.GetProperty("id").GetString()!);
                 else upserts.Add(item.GetProperty("mod").Deserialize<ThunderstoreMod>(JsonOptions)!);
-            store.Apply(upserts,deleted,root.GetProperty("revision").GetInt64()); return;
+            store.Apply(upserts,deleted,revision); return new(trust);
         }
         throw new HttpRequestException($"mod catalog sync failed: {delta.StatusCode}");
     }
-    private async Task Snapshot(string gameId,CancellationToken ct)
+    private async Task<CatalogSyncResult> Snapshot(string gameId,CancellationToken ct)
     {
         string? cursor=null,etag=null; long revision=0; var all=new List<ThunderstoreMod>();
         // PAK-97: pairs arrive once per full index (the contract has no separate matrix
@@ -169,8 +245,11 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
         var compatibility=new Dictionary<(string Full,string Dll),ModCompatibility>();
         // PAK-128: the server allows 500 rows per page; 100 pages were ~5x the requests
         // needed and tripped the per-IP limiter (429) during a full sync.
+        // Every signed page must verify; one unsigned page makes the whole sync unverified.
+        var trust=CatalogTrust.Verified;
         do { var path=$"/mods/index?game={Uri.EscapeDataString(gameId)}&limit=500"+(cursor is null?"":$"&cursor={Uri.EscapeDataString(cursor)}"); var res=await transport.GetAsync(path,cursor is null?store.GameETag(gameId):null,ct);
-            if(res.StatusCode==304) { if(cursor is null) store.MarkSynced(); return; } if(res.StatusCode!=200||res.Body is null) throw new HttpRequestException($"mod catalog snapshot failed: {res.StatusCode}");
+            if(res.StatusCode==304) { if(cursor is null) store.MarkSynced(); return new(trust); } if(res.StatusCode!=200||res.Body is null) throw new HttpRequestException($"mod catalog snapshot failed: {res.StatusCode}");
+            if(ModCatalogSigning.Verify(res)==CatalogTrust.Unverified) trust=CatalogTrust.Unverified;
             using var doc=JsonDocument.Parse(res.Body); var root=doc.RootElement; revision=root.GetProperty("revision").GetInt64(); etag=res.ETag;
             all.AddRange(root.GetProperty("mods").EnumerateArray().Select(x=>x.Deserialize<ThunderstoreMod>(JsonOptions)!)); cursor=root.TryGetProperty("nextCursor",out var next)&&next.ValueKind!=JsonValueKind.Null?next.GetString():null;
             if(root.TryGetProperty("compatibility",out var matrix)&&matrix.ValueKind==JsonValueKind.Array)
@@ -179,6 +258,8 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
                         && full.GetString() is { Length: > 0 } fullId && dll.GetString() is { Length: > 0 } dllId && status.GetString() is { Length: > 0 } raw)
                         compatibility[(fullId,dllId)]=new(fullId,dllId,raw);
         } while(cursor is not null);
+        RequireFresh(revision);
         store.Replace(gameId,all,revision,etag,compatibility.Values);
+        return new(trust);
     }
 }

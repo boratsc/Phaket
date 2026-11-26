@@ -246,6 +246,7 @@
                 <SelectableTextBlock Text="{Binding TargetDescription}" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding [ModInstall.Warning], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
                 <ItemsControl ItemsSource="{Binding PlanWarnings}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                <TextBlock IsVisible="{Binding HasInstallTrustNote}" Classes="muted" TextWrapping="Wrap" Text="{Binding [ModInstall.HashIdentity], Source={x:Static services:LocalizationService.Instance}}" />
                 <TextBlock FontWeight="Bold" Text="{Binding [ModInstall.Packages], Source={x:Static services:LocalizationService.Instance}}" />
                 <ItemsControl ItemsSource="{Binding Preview}">
                   <ItemsControl.ItemTemplate>
