@@ -32,6 +32,8 @@
   "ARCHIVE_UNSAFE": "Archiwum {artifact} jest niebezpieczne: {reason}. Rozpakowanie zostało zablokowane.",
   "OWNERSHIP_VIOLATION": "Plik {path} nie należy do tego przepisu ani profilu. Usunięcie zostało zablokowane.",
   "CONFLICT_UNRESOLVABLE": "Konflikt na zasobie {path} między {owners} nie może być rozstrzygnięty automatycznie. Wybierz kolejność modów lub usuń konflikt.",
+  "FILE_CONFLICT_REQUIRES_DECISION": "Plik {path} zmienił się zarówno w instalacji, jak i w nowym modzie od czasu ostatniego zgodnego stanu. Wybierz, którą wersję zachować — Phaket nie nadpisze żadnej bez Twojej decyzji.",
+  "BASELINE_INVALID": "Zapisany stan zgodny tej instalacji jest nieprawidłowy ({detail}). Odbuduj stan zgodny, zanim Phaket sprawdzi konflikty plików.",
   "JOURNAL_DIVERGENCE": "Stan instalacji różni się od zapisanego w dzienniku transakcji. Wybierz wznowienie lub przywrócenie poprzedniego stanu.",
   "VALIDATION_FAILED": "Przepis nie przeszedł walidacji: {detail}",
   "BASE_GAME_MISMATCH": "Katalog gry {path} zawiera już bazę gry w wersji {have}, a przepis wymaga {need}. Zmiana wersji bazy pod istniejącymi modami jest niedostępna — użyj osobnej instalacji lub odinstaluj mody.",

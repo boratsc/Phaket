@@ -22,7 +22,9 @@ public sealed record PlannerContext(
     // label). Null means no catalog: "latest" then fails with GAME_BUILD_UNAVAILABLE.
     Func<string, string?>? LatestGameVersion = null,
     // PAK-100: root of the shared vanilla cache; null falls back to VanillaCache.DefaultRoot.
-    string? VanillaCacheRoot = null);
+    string? VanillaCacheRoot = null,
+    // PAK-142: last agreed state of this installation. Null keeps the plan unchanged.
+    InstallBaseline? Baseline = null);
 
 // Expands a validated recipe against concrete installation facts into a dry
 // OperationPlan. Never mutates the filesystem; reads are limited to source
@@ -227,6 +229,21 @@ public static class OperationPlanner
                 $"verify-{verification.Count}", verify.Use, target ?? context.GameRoot, null, null,
                 expectedHash.ValueKind == System.Text.Json.JsonValueKind.String ? expectedHash.GetString() : null,
                 ["installed"], "none", "none", "none", ["read"]));
+        }
+
+        // PAK-142: a two-sided edit is the user's decision. The conflict names both sides and
+        // the plan carries no write until the host resolves it, so nothing (not even a
+        // removal) drops the user's content silently.
+        if (context.Baseline is { } baseline)
+        {
+            var compared = BaselineSync.Compare(operations, baseline, context.GameRoot);
+            foreach (var conflict in compared.Where(c => c.RequiresUserDecision))
+                conflicts.Add(new PlanConflict(conflict.Path,
+                    [.. (conflict.Local is null ? [] : new[] { "local:" + context.InstallationId }),
+                        .. (conflict.Remote is null ? [] : new[] { "remote:" + recipe.Id })],
+                    "requires-user-decision"));
+            if (compared.Any(c => c.RequiresUserDecision))
+                operations = operations.Where(o => !IsWrite(o.Kind)).ToList();
         }
 
         return new OperationPlan(

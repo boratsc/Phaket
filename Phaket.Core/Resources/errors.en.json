@@ -32,6 +32,8 @@
   "ARCHIVE_UNSAFE": "Archive {artifact} is unsafe: {reason}. Extraction was blocked.",
   "OWNERSHIP_VIOLATION": "File {path} does not belong to this recipe or profile. Removal was blocked.",
   "CONFLICT_UNRESOLVABLE": "The conflict on {path} between {owners} cannot be resolved automatically. Choose a mod order or remove the conflict.",
+  "FILE_CONFLICT_REQUIRES_DECISION": "The file {path} changed both in the installation and in the new mod since the last agreed state. Choose which version to keep — Phaket will not overwrite either without your decision.",
+  "BASELINE_INVALID": "The saved agreed state of this installation is invalid ({detail}). Rebuild the agreed state before Phaket can check file conflicts.",
   "JOURNAL_DIVERGENCE": "The installation state differs from the transaction journal. Choose to resume or restore the previous state.",
   "VALIDATION_FAILED": "The recipe failed validation: {detail}",
   "BASE_GAME_MISMATCH": "The game directory {path} already contains base game version {have}, but the recipe requires {need}. Switching the base version under existing mods is not available — use a separate installation or uninstall the mods first.",

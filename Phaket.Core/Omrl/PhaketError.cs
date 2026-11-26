@@ -41,6 +41,12 @@ public static class ErrorCodes
     public const string ArchiveUnsafe = "ARCHIVE_UNSAFE";
     public const string OwnershipViolation = "OWNERSHIP_VIOLATION";
     public const string ConflictUnresolvable = "CONFLICT_UNRESOLVABLE";
+    // PAK-142: the file was changed both in the installation and by the recipe since the
+    // last agreed baseline. The host asks the user before either side is overwritten.
+    public const string FileConflictRequiresDecision = "FILE_CONFLICT_REQUIRES_DECISION";
+    // PAK-142: the baseline for this installation cannot be trusted (wrong install id or
+    // an edited state hash), so it must be rebuilt before conflicts can be judged.
+    public const string BaselineInvalid = "BASELINE_INVALID";
     public const string JournalDivergence = "JOURNAL_DIVERGENCE";
     public const string ValidationFailed = "VALIDATION_FAILED";
     // A recipe conditions on arch/buildId but the host supplied no such fact: refusing to plan
