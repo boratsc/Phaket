@@ -12,7 +12,14 @@ public sealed record InstalledRecipe(
     string? SandboxRoot, DateTimeOffset InstalledAt, string ModFullName = "", string ModVersion = "",
     // "unverified" when the catalog declared no sha256 for the package (Thunderstore v1 API
     // does not publish them); null means the declared hash was verified.
-    string? ArtifactIntegrity = null);
+    string? ArtifactIntegrity = null,
+    // PAK-144 version pin: while pinned, the game build the mods were installed
+    // against is compared with what Steam has now, and a mismatch is reported
+    // instead of being silently updated over. Null = not pinned.
+    DateTimeOffset? PinnedAt = null, string? PinnedBuildId = null, string? PinnedManifestId = null)
+{
+    [JsonIgnore] public bool IsPinned => PinnedAt is not null;
+}
 
 public sealed class InstallRegistry
 {
@@ -40,6 +47,28 @@ public sealed class InstallRegistry
         var entries = All().Where(e => !(e.RecipeId == entry.RecipeId && e.GameRoot == entry.GameRoot)).ToList();
         entries.Add(entry);
         Save(entries);
+    }
+
+    // Pins the current build (the caller may pass nulls for "unknown").
+    public void Pin(InstalledRecipe entry) =>
+        Add(entry with { PinnedAt = DateTimeOffset.UtcNow, PinnedBuildId = null, PinnedManifestId = null });
+
+    public void Pin(InstalledRecipe entry, string? buildId, string? manifestId) =>
+        Add(entry with { PinnedAt = DateTimeOffset.UtcNow, PinnedBuildId = buildId, PinnedManifestId = manifestId });
+
+    // Explicit unpin: drops the pin fields and keeps everything else as it was.
+    public void Unpin(string recipeId, string gameRoot) => UpdatePin(recipeId, gameRoot, null, null, null);
+
+    private void UpdatePin(string recipeId, string gameRoot, DateTimeOffset? pinnedAt, string? buildId, string? manifestId)
+    {
+        bool found = false;
+        var entries = All().Select(e =>
+        {
+            if (e.RecipeId != recipeId || e.GameRoot != gameRoot) return e;
+            found = true;
+            return e with { PinnedAt = pinnedAt, PinnedBuildId = buildId, PinnedManifestId = manifestId };
+        }).ToList();
+        if (found) Save(entries);
     }
 
     public void Remove(string recipeId, string gameRoot)

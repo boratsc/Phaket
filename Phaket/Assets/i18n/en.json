@@ -547,5 +547,19 @@
   "Onboarding.Placeholder.Description": "This window will gather a few starting settings. You can skip it and head straight into the app — Settings are always available in the menu.",
   "Onboarding.Restart.Title": "Initial setup",
   "Onboarding.Restart.Hint": "Walk through the starting settings again: language, platforms and basics.",
-  "Onboarding.Restart.Action": "Run initial setup"
+  "Onboarding.Restart.Action": "Run initial setup",
+  "Pin.Badge": "Version pinned",
+  "Pin.BadgeHint": "Your mods were installed for this game version. Phaket will warn you if Steam updates it.",
+  "Pin.UpdateTitle": "Steam updated this game",
+  "Pin.UpdateChanged": "The game is now a different version ({0} → {1}). Your mods may stop working.",
+  "Pin.Missing": "The game installation is gone. It may have been moved or uninstalled.",
+  "Pin.UpdateHint": "Reinstall your mods for the current version, or start the game from the previous build if Steam still keeps it.",
+  "Pin.Later": "Later",
+  "Pin.Repair": "Repair",
+  "Pin.RepairHint": "Check whether the installed mod sets still match the new game version.",
+  "Pin.Pin": "Pin version",
+  "Pin.Unpin": "Unpin version",
+  "Pin.On": "The game version is pinned.",
+  "Pin.Off": "The game version is no longer pinned.",
+  "Pin.NoModes": "Pin the version when you have mods installed that you don't want to lose on an update."
 }

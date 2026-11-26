@@ -89,5 +89,48 @@
         </StackPanel>
       </Border>
     </Grid>
+
+    <Border Classes="card">
+      <StackPanel Spacing="9" DataContext="{Binding Diagnostics}"
+                  AutomationProperties.Name="{Binding [Ui.Library.DuplicatesTitle], Source={x:Static services:LocalizationService.Instance}}"
+                  x:CompileBindings="False" x:DataType="vm:DuplicateDiagnosticsViewModel">
+        <TextBlock Classes="sectionTitle" Text="{Binding [Ui.Library.DuplicatesTitle], Source={x:Static services:LocalizationService.Instance}}"
+                   AutomationProperties.HeadingLevel="2" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Ui.Library.DuplicatesHint], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Classes="secondary" HorizontalAlignment="Left" Command="{Binding ScanDuplicatesCommand}"
+                Content="{Binding [Ui.Library.DuplicatesScan], Source={x:Static services:LocalizationService.Instance}}"
+                AutomationProperties.AutomationId="help.duplicates.scan" />
+        <TextBlock Text="{Binding DuplicateStatus}" IsVisible="{Binding HasDuplicateStatus}" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="help.duplicates.status" />
+        <ItemsControl ItemsSource="{Binding DuplicateGroups}" x:CompileBindings="False">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DuplicateInstallGroupItem">
+              <Border Classes="card" Margin="0,4,0,0" Padding="10">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding Hint}" />
+                  <ItemsControl ItemsSource="{Binding Copies}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DuplicateInstallCopyItem">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,3,0,0">
+                          <StackPanel Spacing="1">
+                            <SelectableTextBlock Text="{Binding Label}" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock Classes="muted" FontSize="11" Text="{Binding RecentHint}" />
+                          </StackPanel>
+                          <Button Grid.Column="1" Classes="secondary" Padding="10,4" Command="{Binding $parent[ItemsControl].((vm:HelpViewModel)DataContext).Diagnostics.OpenInstallFolderCommand}"
+                                  CommandParameter="{Binding}"
+                                  Content="{Binding [Ui.Library.OpenFolder], Source={x:Static services:LocalizationService.Instance}}"
+                                  AutomationProperties.Name="{Binding [Ui.Library.OpenFolder], Source={x:Static services:LocalizationService.Instance}}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
   </StackPanel>
 </UserControl>

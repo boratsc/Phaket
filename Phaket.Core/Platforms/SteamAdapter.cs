@@ -12,7 +12,9 @@ public sealed record SteamAppManifest(
     string ManifestId, string InstallDir, long SizeOnDisk,
     // W1/PAK-14 probe: depot id -> manifest id actually installed. Lets a build
     // without a known build id still resolve to a game version label.
-    IReadOnlyDictionary<string, string>? DepotManifests = null);
+    IReadOnlyDictionary<string, string>? DepotManifests = null,
+    // PAK-144: unix seconds from the appmanifest; tells which copy Steam last touched.
+    long LastUpdated = 0);
 
 public sealed record SteamLibrary(string Path, bool IsFlatpak);
 
@@ -92,7 +94,8 @@ public sealed class SteamAdapter
             state.Get("manifest") ?? "",
             state.Get("installdir") ?? "",
             long.TryParse(state.Get("SizeOnDisk"), out var size) ? size : 0,
-            depots);
+            depots,
+            long.TryParse(state.Get("LastUpdated"), out var updated) ? updated : 0);
     }
 
     public IReadOnlyList<SteamInstallation> DetectInstallations(string os, string home)
@@ -156,4 +159,83 @@ public sealed class SteamAdapter
         }
         return versions;
     }
+
+    // Whether a detected installation and a recorded path are the same folder
+    // (symlinks and trailing separators must not look like two copies).
+    public static bool SameInstallation(SteamInstallation installation, string path)
+    {
+        try
+        {
+            var left = Path.GetFullPath(installation.Installation.RootPath).TrimEnd(Path.DirectorySeparatorChar);
+            var right = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+            var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            return string.Equals(left, right, comparison);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return false; }
+    }
+
+    // PAK-144: read-only duplicate report. The same Steam app installed in two
+    // libraries is legitimately possible; this only lists the copies so the user
+    // can spot the one the launcher actually runs. Nothing is ever deleted.
+    public static IReadOnlyList<SteamDuplicateGroup> FindDuplicateInstalls(string os, string home) =>
+        GroupDuplicates(DetectLibraries(os, home));
+
+    public static IReadOnlyList<SteamDuplicateGroup> GroupDuplicates(IEnumerable<SteamInstallation> installations)
+    {
+        var groups = new List<SteamDuplicateGroup>();
+        foreach (var byApp in installations.GroupBy(i => i.Manifest.AppId, StringComparer.Ordinal))
+        {
+            // One folder can hold several appmanifests; the folder is the duplicate,
+            // not every manifest that happens to sit in it.
+            var copies = byApp.GroupBy(i => i.Library.Path, StringComparer.Ordinal).Select(g =>
+            {
+                var live = g.First();
+                foreach (var copy in g) if (copy.Manifest.LastUpdated > live.Manifest.LastUpdated) live = copy;
+                return live;
+            }).ToArray();
+            if (copies.Length < 2) continue;
+            var newest = copies[0];
+            foreach (var copy in copies) if (copy.Manifest.LastUpdated > newest.Manifest.LastUpdated) newest = copy;
+            groups.Add(new SteamDuplicateGroup(byApp.Key, copies[0].Manifest.Name, newest, copies));
+        }
+        return groups;
+    }
+
+    // All installations from every default Steam root (native, Flatpak, extra
+    // libraries), deduplicated by folder.
+    public static IReadOnlyList<SteamInstallation> DetectLibraries(string os, string home)
+    {
+        var results = new List<SteamInstallation>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in DefaultSteamRoots(os, home))
+        {
+            if (!Directory.Exists(root)) continue;
+            var isFlatpak = root.Replace('\\', '/').Contains(".var/app/com.valvesoftware.Steam", StringComparison.Ordinal);
+            foreach (var library in ParseLibraries(root, isFlatpak))
+            {
+                var steamapps = Path.Combine(library.Path, "steamapps");
+                if (!Directory.Exists(steamapps)) continue;
+                foreach (var acf in Directory.GetFiles(steamapps, "appmanifest_*.acf").Order(StringComparer.Ordinal))
+                {
+                    SteamAppManifest? manifest;
+                    // One corrupt/unreadable acf must not abort the whole scan.
+                    try { manifest = ParseAppManifest(acf); }
+                    catch (Exception) { continue; }
+                    if (manifest is null) continue;
+                    var installDir = Path.Combine(steamapps, "common", manifest.InstallDir);
+                    var installation = new Installation($"steam-{manifest.AppId}-{StablePathId(library.Path)}",
+                        $"{manifest.AppId}-steam", installDir);
+                    // Unknown games still count as installations for the duplicate report.
+                    if (seen.Add(installation.InstallationId))
+                        results.Add(new SteamInstallation(installation, manifest, library, GameAvailability.Installed));
+                }
+            }
+        }
+        return results;
+    }
 }
+
+// One app installed more than once; Live is the copy Steam updated last.
+public sealed record SteamDuplicateGroup(
+    string AppId, string Name, SteamInstallation Live, IReadOnlyList<SteamInstallation> Copies);

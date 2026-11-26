@@ -547,5 +547,19 @@
   "Onboarding.Placeholder.Description": "To okno będzie zbierać kilka ustawień startowych. Możesz je pominąć i od razu przejść do aplikacji — Ustawienia są zawsze dostępne w menu.",
   "Onboarding.Restart.Title": "Konfiguracja początkowa",
   "Onboarding.Restart.Hint": "Przejdź ponownie przez ustawienia startowe: język, platformy i podstawy.",
-  "Onboarding.Restart.Action": "Uruchom konfigurację początkową"
+  "Onboarding.Restart.Action": "Uruchom konfigurację początkową",
+  "Pin.Badge": "Wersja przypięta",
+  "Pin.BadgeHint": "Mody zostały zainstalowane na tę wersję gry. Phaket ostrzeże, jeśli Steam ją zaktualizuje.",
+  "Pin.UpdateTitle": "Steam zaktualizował tę grę",
+  "Pin.UpdateChanged": "Gra ma teraz inną wersję ({0} → {1}). Twoje mody mogą nie działać.",
+  "Pin.Missing": "Nie znaleziono instalacji gry. Mogła zostać przeniesiona lub odinstalowana.",
+  "Pin.UpdateHint": "Zainstaluj mody ponownie w aktualnej wersji albo uruchom grę z poprzedniego builda, jeśli Steam jeszcze go ma.",
+  "Pin.Later": "Później",
+  "Pin.Repair": "Napraw",
+  "Pin.RepairHint": "Sprawdź, czy zainstalowane zestawy modów wciąż pasują do nowej wersji gry.",
+  "Pin.Pin": "Przypnij wersję",
+  "Pin.Unpin": "Odepnij wersję",
+  "Pin.On": "Wersja gry jest przypięta.",
+  "Pin.Off": "Wersja gry nie jest już przypięta.",
+  "Pin.NoModes": "Przypnij wersję, gdy masz zainstalowane mody, których nie chcesz stracić przy aktualizacji."
 }

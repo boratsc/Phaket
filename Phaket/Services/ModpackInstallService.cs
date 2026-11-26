@@ -262,10 +262,16 @@ public sealed class ModpackInstallService : IModpackInstallService
                             // PAK-100: journal rollback reads the vanilla from the same shared cache.
                             VanillaCacheRoot = Path.Combine(appDataRoot, "vanilla-cache"),
                         };
+                        // PAK-144: modded installations are pinned to the build they were installed on.
                         registry.Add(new InstalledRecipe(operationPlan.RecipeRef.Id, operationPlan.RecipeRef.Version,
                             pack.GameId, preparation.Target.Store, executionContext.GameRoot, executionContext.ProfileRoot,
                             executionContext.StagingRoot, preparation.StateRoot, preparation.SandboxRoot.Length == 0 ? null : preparation.SandboxRoot,
-                            DateTimeOffset.UtcNow, preparation.ModFullName, preparation.Version));
+                            DateTimeOffset.UtcNow, preparation.ModFullName, preparation.Version)
+                        {
+                            PinnedAt = DateTimeOffset.UtcNow,
+                            PinnedBuildId = preparation.Manifest?.BuildId is { Length: > 0 } build ? build : null,
+                            PinnedManifestId = preparation.Manifest?.ManifestId is { Length: > 0 } manifest ? manifest : null,
+                        });
                         registered.Add((operationPlan.RecipeRef.Id, executionContext.GameRoot, executionContext));
                     }
                     completed++;

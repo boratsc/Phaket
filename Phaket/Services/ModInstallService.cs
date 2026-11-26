@@ -32,7 +32,10 @@ public sealed record InstallPreparation(string GameId, string ModFullName, strin
     string? GameVersionSource = null,
     // Packages the catalog declared no sha256 for (Thunderstore v1): installed, but never
     // recorded as hash-verified in the install registry.
-    IReadOnlyList<string>? UnverifiedPackages = null);
+    IReadOnlyList<string>? UnverifiedPackages = null,
+    // PAK-144: the game's appmanifest at install time, so the version pin records
+    // the build the mods were actually installed against.
+    SteamAppManifest? Manifest = null);
 // ErrorParameters carries the message placeholders (e.g. the tool tail) so the host
 // can show the localized reason instead of a bare code.
 public sealed record InstallOutcome(bool Success, string? ErrorCode, IReadOnlyList<ExecutionJournal> Journals,
@@ -145,6 +148,7 @@ public sealed class ModInstallService
         // It carries the build id and, when that is not enough, the installed depot
         // manifest ids that the registry publishes even for rows without a build id.
         string[] depotManifests = [];
+        SteamAppManifest? gameManifest = null;
         if (!target.Sandbox && target.Store == "steam" && definition.StoreIds?.TryGetValue("steam", out var appId) == true
             && appId.All(char.IsAsciiDigit))
         {
@@ -164,6 +168,7 @@ public sealed class ModInstallService
                                 System.Globalization.CultureInfo.InvariantCulture, out var parsedBuild))
                                 buildId = parsedBuild;
                             depotManifests = manifest.DepotManifests?.Values.Distinct(StringComparer.Ordinal).ToArray() ?? [];
+                            gameManifest = manifest;
                         }
                     }
                 }
@@ -326,7 +331,7 @@ public sealed class ModInstallService
                 previewSize, previewPairs));
         }
         return new(gameId, modFullName, version, endpoint, target, plans, packageRoots, [], previews, root, profileRoot, stagingRoot,
-            stateRoot, packages, planProfileRoots, versionSource, unverified.Count == 0 ? null : unverified);
+            stateRoot, packages, planProfileRoots, versionSource, unverified.Count == 0 ? null : unverified, gameManifest);
     }
 
     // PAK-127: the preview shows the destination the plan writes, never a bare archive entry
@@ -463,12 +468,12 @@ public sealed class ModInstallService
                 journals.Add(journal);
                 executed.Add((plan, ctx, i));
                 activeAttemptCompleted = true;
-                new InstallRegistry(Path.Combine(appDataRoot, "installs.json")).Add(new InstalledRecipe(plan.RecipeRef.Id,
+                new InstallRegistry(Path.Combine(appDataRoot, "installs.json")).Add(Pinned(new InstalledRecipe(plan.RecipeRef.Id,
                     plan.RecipeRef.Version, preparation.GameId, preparation.Target.Store, ctx.GameRoot, ctx.ProfileRoot,
                     ctx.StagingRoot, preparation.StateRoot, preparation.Target.Sandbox ? preparation.SandboxRoot : null, DateTimeOffset.UtcNow,
                     preparation.Preview[i].FullName, preparation.Preview[i].Version,
                     preparation.UnverifiedPackages?.Contains(preparation.Preview[i].FullName, StringComparer.OrdinalIgnoreCase) == true
-                        ? "unverified" : null));
+                        ? "unverified" : null), preparation.Manifest));
                 if (targetProfileId is not null)
                 {
                     var profile = profiles.For(preparation.GameId).Profiles.FirstOrDefault(p => p.Id == targetProfileId)
@@ -563,6 +568,16 @@ public sealed class ModInstallService
                 var strip = step.With.TryGetValue("stripComponents", out var raw) && raw.TryGetInt32(out var value) ? value : 0;
                 return (include, strip);
             }).ToArray();
+
+    // PAK-144: a modded installation is pinned against the build it was installed on;
+    // sandbox installs are throwaway and carry no store version worth pinning.
+    private static InstalledRecipe Pinned(InstalledRecipe entry, SteamAppManifest? manifest) =>
+        entry.SandboxRoot is not null ? entry : entry with
+        {
+            PinnedAt = DateTimeOffset.UtcNow,
+            PinnedBuildId = manifest?.BuildId is { Length: > 0 } build ? build : null,
+            PinnedManifestId = manifest?.ManifestId is { Length: > 0 } id ? id : null,
+        };
 
     // A source row can say the version is gone; a row with neither a URL nor artifacts has
     // nothing to download either. Both are refused before any plan or download is made.

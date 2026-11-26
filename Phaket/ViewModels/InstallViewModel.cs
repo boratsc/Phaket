@@ -273,8 +273,14 @@ public partial class InstallViewModel : ViewModelBase
                 }));
                 journal = new InstallOrchestrator(executor).Run(plan, reporter, token);
                 installedGameRoot = gameRoot; installedRecipeId = recipe.Id;
+                // PAK-144: a modded installation carries a version pin against the build it was installed on.
                 Registry.Add(new InstalledRecipe(recipe.Id, recipe.Version, definition.Slug, store, gameRoot, profileRoot,
-                    staging, state, detectedRoot is null ? root : null, DateTimeOffset.UtcNow));
+                    staging, state, detectedRoot is null ? root : null, DateTimeOffset.UtcNow)
+                {
+                    PinnedAt = DateTimeOffset.UtcNow,
+                    PinnedBuildId = evidence?.BuildId is { Length: > 0 } build ? build : null,
+                    PinnedManifestId = evidence?.ManifestIds.FirstOrDefault() is { Length: > 0 } manifest ? manifest : null,
+                });
             }, token);
             Progress = 1; CurrentStep = 4; IsDone = true;
             foreach (var item in Checklist) { item.IsComplete = true; item.IsActive = false; }

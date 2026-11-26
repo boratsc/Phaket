@@ -87,7 +87,7 @@ public partial class LibraryViewModel : ViewModelBase
     public ObservableCollection<GameCatalogItem> Games { get; } = [];
     [ObservableProperty] private GameCatalogItem? selectedGame;
     public bool HasSelectedGame => SelectedGame is not null;
-    partial void OnSelectedGameChanged(GameCatalogItem? value) => OnPropertyChanged(nameof(HasSelectedGame));
+    partial void OnSelectedGameChanged(GameCatalogItem? value) { OnPropertyChanged(nameof(HasSelectedGame)); RefreshPinStatus(); }
 
     [ObservableProperty] private string searchText = "";
     [ObservableProperty] private string status = "";
@@ -130,12 +130,16 @@ public partial class LibraryViewModel : ViewModelBase
             var os = OperatingSystem.IsWindows() ? "windows" : "linux";
             var adapter = new SteamAdapter(definitions);
             var detected = adapter.DetectInstallations(os, home);
+            var pinned = registry.All().Where(e => e.IsPinned).ToArray();
             foreach (var game in catalog)
             {
                 game.Installations.Clear();
                 foreach (var installation in detected.Where(d => d.Manifest.AppId == game.SteamAppId))
                     game.Installations.Add(installation);
                 game.Detected = game.Installations.FirstOrDefault();
+                // PAK-144: the card shows the pin only when a modded install here is pinned.
+                game.IsVersionPinned = game.Detected is { } current
+                    && pinned.Any(e => SteamAdapter.SameInstallation(current, e.GameRoot));
             }
             await RefreshEpicAsync();
             await RefreshSteamAsync();

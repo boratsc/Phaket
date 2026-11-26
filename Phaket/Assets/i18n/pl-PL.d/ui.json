@@ -27,5 +27,20 @@
   "HelpTip.Endpoint.Label": "Adres katalogu",
   "HelpTip.Endpoint.Content": "Endpoint wskazuje serwer metadanych o modach i wydaniach. Zmieniaj go tylko na zaufany adres HTTPS; synchronizacja katalogu nie pobiera ani nie instaluje plików gry.",
   "HelpTip.Secrets.Label": "Magazyn sekretów",
-  "HelpTip.Secrets.Content": "Hasła i tokeny trafiają do magazynu systemowego. Awaryjny magazyn plikowy wymaga osobnej zgody i hasła, które pozostaje tylko w bieżącej sesji."
+  "HelpTip.Secrets.Content": "Hasła i tokeny trafiają do magazynu systemowego. Awaryjny magazyn plikowy wymaga osobnej zgody i hasła, które pozostaje tylko w bieżącej sesji.",
+  "Ui.Library.PinBadge": "Wersja przypięta",
+  "Ui.Library.DuplicatesTitle": "Ta sama gra w kilku miejscach",
+  "Ui.Library.DuplicatesHint": "Gdy ta sama gra leży w dwóch bibliotekach, launcher może uruchamiać inną kopię niż ta z modami. Poniżej tylko ścieżki — niczego nie usuwamy.",
+  "Ui.Library.DuplicatesScan": "Sprawdź duplikaty",
+  "Ui.Library.OpenFolder": "Otwórz folder",
+  "Ui.Library.MissingFolder": "Ten folder już nie istnieje.",
+  "Ui.Library.OpenFolderFailed": "Nie udało się otworzyć folderu.",
+  "Duplicates.Found": "Znaleziono duplikaty: {0}",
+  "Duplicates.None": "Brak duplikatów gier w bibliotekach Steam.",
+  "Duplicates.Error": "Sprawdzenie duplikatów nie powiodło się.",
+  "Duplicates.Explanation": "Usuń nadmiarowe kopie sama/sam w folderze Steam. Ta, którą Steam odświeżał jako ostatnią, jest zwykle tą, którą uruchamia launcher.",
+  "Duplicates.Flatpak": "{0} (wersja Flatpak)",
+  "Duplicates.MissingFolder": "Ten folder już nie istnieje.",
+  "Duplicates.OpenFailed": "Nie udało się otworzyć folderu.",
+  "Duplicates.MostRecent": "Steam odświeżał ją jako ostatnią"
 }

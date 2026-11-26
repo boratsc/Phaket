@@ -33,6 +33,8 @@ public sealed class HelpViewModel : ViewModelBase
     public HelpViewModel(GameCatalogItem? game) : this() => Game = game;
 
     public ObservableCollection<GuideViewModel> Guides { get; } = [];
+    // PAK-144: read-only duplicate report lives next to the troubleshooting guides.
+    public DuplicateDiagnosticsViewModel Diagnostics { get; set; } = new();
     public IReadOnlyList<GuideViewModel> AllGuides => allGuides;
     public GameCatalogItem? Game
     {

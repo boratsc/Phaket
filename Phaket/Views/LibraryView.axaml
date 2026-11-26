@@ -77,6 +77,13 @@
                                            AutomationProperties.AccessibilityView="Raw" />
                           <TextBlock Classes="muted" FontSize="11" Text="{Binding [Library.State.OwnedNotInstalled], Source={x:Static services:LocalizationService.Instance}}" />
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding IsVersionPinned}"
+                                    ToolTip.Tip="{Binding [Pin.BadgeHint], Source={x:Static services:LocalizationService.Instance}}"
+                                    AutomationProperties.Name="{Binding [Pin.Badge], Source={x:Static services:LocalizationService.Instance}}">
+                          <mi:MaterialIcon Kind="Pin" Width="13" Height="13" Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                          <TextBlock Classes="muted" FontSize="11" Text="{Binding [Ui.Library.PinBadge], Source={x:Static services:LocalizationService.Instance}}" />
+                        </StackPanel>
                       </StackPanel>
                     </Grid>
                   </Border>
@@ -95,6 +102,25 @@
       <Border Grid.Column="1" Classes="card detailPane" Padding="16">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="14">
+            <Border Classes="card" IsVisible="{Binding HasPinUpdateWarning}" Background="{DynamicResource WarningBackgroundBrush}"
+                    BorderBrush="{DynamicResource WarningBrush}"
+                    AutomationProperties.Name="{Binding [Pin.UpdateTitle], Source={x:Static services:LocalizationService.Instance}}">
+              <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <mi:MaterialIcon Kind="AlertCircle" Width="18" Height="18" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                  <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}"
+                             Text="{Binding [Pin.UpdateTitle], Source={x:Static services:LocalizationService.Instance}}" />
+                </StackPanel>
+                <TextBlock Text="{Binding PinUpdateMessage}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding [Pin.UpdateHint], Source={x:Static services:LocalizationService.Instance}}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="secondary" Command="{Binding DismissPinWarningCommand}"
+                          Content="{Binding [Pin.Later], Source={x:Static services:LocalizationService.Instance}}"
+                          AutomationProperties.AutomationId="library.pin.later" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
             <StackPanel IsVisible="{Binding HasSelectedGame}" Spacing="14">
               <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                 <Border Width="64" Height="64" CornerRadius="9" ClipToBounds="True" Background="{DynamicResource RaisedBrush}">
@@ -170,6 +196,19 @@
                     <DataTemplate x:DataType="vm:InstallationChoice"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" /></DataTemplate>
                   </ComboBox.ItemTemplate>
                 </ComboBox>
+              </StackPanel>
+
+              <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding SelectedGame.IsVersionPinned}"
+                          ToolTip.Tip="{Binding [Pin.BadgeHint], Source={x:Static services:LocalizationService.Instance}}"
+                          AutomationProperties.Name="{Binding [Pin.Badge], Source={x:Static services:LocalizationService.Instance}}">
+                <mi:MaterialIcon Kind="Pin" Width="16" Height="16" Foreground="{DynamicResource GoldTextBrush}" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Classes="muted" Text="{Binding [Ui.Library.PinBadge], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedGame.IsInstalled}"
+                          ToolTip.Tip="{Binding [Pin.NoModes], Source={x:Static services:LocalizationService.Instance}}">
+                <Button Classes="secondary" Command="{Binding TogglePinCommand}" CommandParameter="{Binding SelectedGame}"
+                        AutomationProperties.AutomationId="library.pin.toggle"
+                        Content="{Binding SelectedGame.PinLabel}" />
               </StackPanel>
 
               <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

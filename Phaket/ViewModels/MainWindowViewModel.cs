@@ -28,7 +28,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // Shared with the settings page ("run initial setup") and the shell's wizard host; App
     // builds the one instance so the wizard steps are registered in exactly one place.
     public OnboardingViewModel Onboarding { get; }
-    public HelpViewModel Help { get; } = new();
+    public HelpViewModel Help { get; internal set; } = new();
     public AccountsViewModel Accounts { get; }
     public ThemeService Theme { get; }
     public GameViewModel? Game { get; private set; }

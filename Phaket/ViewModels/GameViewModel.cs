@@ -85,6 +85,11 @@ public partial class GameCatalogItem : ViewModelBase
     public string SelectedBuild => SelectedInstallation?.BuildId ?? "—";
     [ObservableProperty] private string profileName = "Profil domyślny";
     [ObservableProperty] private int modCount;
+    // PAK-144: true when the modded installation has a version pin recorded.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PinLabel))]
+    private bool isVersionPinned;
+    public string PinLabel => LocalizationService.Instance[IsVersionPinned ? "Pin.Unpin" : "Pin.Pin"];
 
     public bool IsInstalled => SteamInstalled || EpicInstalled;
     public string StatusKey => IsInstalled ? "Library.State.Moddable" : "Library.State.NotDetected";

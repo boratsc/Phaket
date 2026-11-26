@@ -27,5 +27,20 @@
   "HelpTip.Endpoint.Label": "Catalog address",
   "HelpTip.Endpoint.Content": "The endpoint identifies the server that provides mod and release metadata. Change it only to a trusted HTTPS address; catalog sync does not download or install game files.",
   "HelpTip.Secrets.Label": "Secret store",
-  "HelpTip.Secrets.Content": "Passwords and tokens use the system secret store. The fallback file store requires separate consent and a password that remains in the current session."
+  "HelpTip.Secrets.Content": "Passwords and tokens use the system secret store. The fallback file store requires separate consent and a password that remains in the current session.",
+  "Ui.Library.PinBadge": "Version pinned",
+  "Ui.Library.DuplicatesTitle": "The same game in several places",
+  "Ui.Library.DuplicatesHint": "When the same game sits in two libraries, the launcher may start a different copy than the one with your mods. Below are paths only — nothing is deleted.",
+  "Ui.Library.DuplicatesScan": "Check duplicates",
+  "Ui.Library.OpenFolder": "Open folder",
+  "Ui.Library.MissingFolder": "This folder no longer exists.",
+  "Ui.Library.OpenFolderFailed": "Could not open the folder.",
+  "Duplicates.Found": "Duplicates found: {0}",
+  "Duplicates.None": "No duplicate games in Steam libraries.",
+  "Duplicates.Error": "Checking duplicates failed.",
+  "Duplicates.Explanation": "Remove the extra copies yourself in the Steam folder. The one Steam updated last is usually the one the launcher starts.",
+  "Duplicates.Flatpak": "{0} (Flatpak)",
+  "Duplicates.MissingFolder": "This folder no longer exists.",
+  "Duplicates.OpenFailed": "Could not open the folder.",
+  "Duplicates.MostRecent": "Steam updated this one last"
 }
