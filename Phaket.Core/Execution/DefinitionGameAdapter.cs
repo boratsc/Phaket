@@ -17,11 +17,14 @@ public sealed class DefinitionGameAdapter : IGameAdapter
     private readonly string stagingRoot;
     private readonly string packageRoot;
     private readonly Func<RecipeRef, Recipe> recipeResolver;
+    // PAK-142: installation-level state root (ledger, baseline); null keeps plans
+    // baseline-free exactly as before.
+    private readonly string? stateRoot;
 
     public DefinitionGameAdapter(
         GameDefinition definition, string os, string store,
         string gameRoot, string profileRoot, string stagingRoot, string packageRoot,
-        Func<RecipeRef, Recipe> recipeResolver)
+        Func<RecipeRef, Recipe> recipeResolver, string? stateRoot = null)
     {
         this.definition = definition;
         this.os = os;
@@ -31,6 +34,7 @@ public sealed class DefinitionGameAdapter : IGameAdapter
         this.stagingRoot = stagingRoot;
         this.packageRoot = packageRoot;
         this.recipeResolver = recipeResolver;
+        this.stateRoot = stateRoot;
     }
 
     public IReadOnlyList<Installation> DetectInstallations(PlatformSnapshot snapshot) =>
@@ -65,8 +69,23 @@ public sealed class DefinitionGameAdapter : IGameAdapter
             BuildId: long.TryParse(facts.Versions.SingleOrDefault(), System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var buildId) ? buildId : null);
         var context = new PlannerContext(facts.Installation.InstallationId, profile.ProfileId,
-            gameRoot, profileRoot, stagingRoot, packageRoot, definition, planFacts);
+            gameRoot, profileRoot, stagingRoot, packageRoot, definition, planFacts,
+            Baseline: LoadBaseline(facts.Installation.InstallationId));
         return OperationPlanner.Plan(recipe, context);
+    }
+
+    // baseline.json lives in the installation-level state root (the ledger's home), so
+    // every profile of one installation compares against the same agreed state.
+    private string BaselinePath => InstallBaseline.DefaultPath(stateRoot ?? profileRoot);
+
+    // A missing file is "nothing agreed yet": the plan stays as it was before PAK-142.
+    // A file written by an older schema is stale and ignored; anything else damaged is
+    // reported, never silently treated as empty (that would turn every edit into a conflict).
+    private InstallBaseline? LoadBaseline(string installationId)
+    {
+        if (!File.Exists(BaselinePath)) return null;
+        try { return InstallBaseline.Load(BaselinePath, installationId); }
+        catch (PhaketException e) when (e.Error.Code == ErrorCodes.UnsupportedSchemaVersion) { return null; }
     }
 
     public Task<ExecutionJournal> ApplyPlan(OperationPlan plan, IPlanExecutorHost host, CancellationToken cancellationToken)

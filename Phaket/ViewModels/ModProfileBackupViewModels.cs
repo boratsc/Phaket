@@ -119,7 +119,8 @@ public partial class ModsViewModel : ViewModelBase, IDisposable
             {
                 var definition = GameDefinitions.LoadAll().First(g => g.Slug == entry.GameSlug);
                 var ctx = new PlanExecutionContext(entry.GameRoot, entry.ProfileRoot, entry.StagingRoot,
-                    Path.Combine(appDataRoot, "packages"), definition, entry.RecipeId, "install-profile", entry.StateRoot);
+                    Path.Combine(appDataRoot, "packages"), definition, entry.RecipeId, "install-profile", entry.StateRoot,
+                    InstallationId: entry.GameSlug);
                 new PlanExecutor(ctx).Uninstall(entry.RecipeId);
                 Registry.Remove(entry.RecipeId, entry.GameRoot);
             });

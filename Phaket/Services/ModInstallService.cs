@@ -460,7 +460,8 @@ public sealed class ModInstallService
                     baseGameSource ?? new ToolBaseGameSource(steamCredentials: steamCredentials,
                         steamPrompt: steamPrompt, epicTokens: epicTokens,
                         mobileConfirmation: steamMobileConfirmation),
-                    VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"));
+                    VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"),
+                    InstallationId: plan.InstallationRef);
                 activeAttempt = (plan, ctx, i);
                 activeAttemptCompleted = false;
                 var journal = new InstallOrchestrator(new PlanExecutor(ctx)).Run(plan, progress, ct,

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Phaket.Core.Domain;
+using Phaket.Core.Execution.SaveBackup;
 using Phaket.Core.Omrl;
 
 namespace Phaket.Core.Execution;
@@ -15,14 +16,23 @@ public sealed record PlanExecutionContext(
     IBaseGameSource? BaseGameSource = null,
     // PAK-100: root of the ONE vanilla cache shared by every package of a game+version;
     // null falls back to LocalApplicationData (VanillaCache.DefaultRoot).
-    string? VanillaCacheRoot = null);
+    string? VanillaCacheRoot = null,
+    // PAK-142: the installation this plan belongs to, used to key the baseline. Null falls
+    // back to ProfileId, which is a profile, not an installation: pass the real one.
+    string? InstallationId = null);
 
 public enum DivergencePolicy { Fail, Restore, Skip }
+
+// PAK-141/142: the user's answer for one two-sided file conflict. KeepLocal leaves
+// the file as the user has it (the recipe's write for that path is skipped);
+// TakeRecipe accepts the recipe's version. Until every conflict in a plan is decided,
+// Execute refuses before the first write.
+public enum ConflictDecision { KeepLocal, TakeRecipe }
 
 // Transactional executor (spec §7, ADR-014): base state and intent persisted
 // BEFORE mutations, atomic writes, ownership-based rollback, crash recovery
 // with divergence detection. No ACID promise across the filesystem.
-public sealed class PlanExecutor : IPlanExecutorHost
+public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -37,6 +47,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     private readonly string ledgerPath;
     private readonly string backupRoot;
     private readonly Action<string>? faultHook;
+    private PlanLifecycle? lifecycle;
 
     public PlanExecutor(PlanExecutionContext context, Action<string>? faultHook = null)
     {
@@ -47,6 +58,15 @@ public sealed class PlanExecutor : IPlanExecutorHost
         ledgerPath = Path.Combine(stateRoot, "ledger.json");
         backupRoot = Path.Combine(stateRoot, "backups");
     }
+
+    // The installation a plan belongs to. The host knows it best (context), then the plan itself;
+    // the profile id is only the last resort for a context built before PAK-142.
+    public string InstallationIdFor(OperationPlan plan) =>
+        context.InstallationId ?? (plan.InstallationRef == context.ProfileId ? context.ProfileId : plan.InstallationRef);
+
+    // Save backup before the first write. InstallOrchestrator asks through IPlanLifecycle;
+    // Execute asks the same instance directly, so a host that skips Approve is covered too.
+    PlanApproval IPlanLifecycle.Begin(OperationPlan plan) => Lifecycle.Begin(plan);
 
     public static ExecutionJournal? LoadJournal(string profileRoot)
     {
@@ -66,21 +86,26 @@ public sealed class PlanExecutor : IPlanExecutorHost
         return journal;
     }
 
-    public ExecutionJournal Execute(OperationPlan plan, ExecutionJournal journal, CancellationToken ct = default)
+    public ExecutionJournal Execute(OperationPlan plan, ExecutionJournal journal, CancellationToken ct = default,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions = null)
     {
         if (journal.State is not (JournalState.Approved or JournalState.Interrupted or JournalState.Failed or JournalState.Executing))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"journal state {journal.State} cannot execute"));
         using var gate = LockInstallation();
         try
         {
+            // Save backup before the FIRST mutation; a journal write is not a game-tree change,
+            // so a refused plan leaves the journal Approved. The conflict gate is ResolveConflicts.
+            if (journal.State != JournalState.Executing) Lifecycle.Begin(plan);
+            var operations = ResolveConflicts(plan, decisions);
             journal = journal with { State = JournalState.Executing };
             Persist(journal);
-            foreach (var operation in plan.Operations)
+            foreach (var operation in operations)
             {
                 ct.ThrowIfCancellationRequested();
                 journal = ExecuteOperation(plan, journal, operation.OpId);
             }
-            return Complete(plan, journal);
+            return Complete(plan, journal, decisions);
         }
         catch (OperationCanceledException)
         {
@@ -105,6 +130,54 @@ public sealed class PlanExecutor : IPlanExecutorHost
         journal = journal with { State = JournalState.Completed };
         Persist(journal);
         return journal;
+    }
+
+    // Completes the transaction and records the new agreed state (baseline). The
+    // baseline is the executor's own post-condition, not a host concern, so an install
+    // driven step by step gets it too. A conflict left undecided writes no baseline.
+    public ExecutionJournal Complete(OperationPlan plan, ExecutionJournal journal,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions)
+    {
+        var completed = Complete(plan, journal);
+        if (PlanLifecycle.HasConflict(plan)
+            && plan.Conflicts.Any(c => !(decisions?.ContainsKey(c.Path) ?? false))) return completed;
+        SaveBaseline(plan.InstallationRef);
+        return completed;
+    }
+
+    // After an uninstall, or a rollback that returned the tree to its base state, the
+    // agreed state is the tree as it is now; nothing is written when the game is gone.
+    private void SaveBaseline(string? planInstallationId = null)
+    {
+        if (!Directory.Exists(context.GameRoot)) return;
+        var installationId = planInstallationId ?? context.InstallationId ?? context.ProfileId;
+        try
+        {
+            InstallBaseline.Capture(installationId, context.GameRoot).Save(PlanLifecycle.BaselinePath(context));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or PhaketException)
+        {
+            System.Diagnostics.Trace.TraceWarning("phaket: baseline capture failed for {0}: {1}", context.GameRoot, e.Message);
+        }
+    }
+
+    // Every requires-user-decision conflict needs an answer; the plan is filtered to what
+    // the user accepted. Nothing in a plan with an open conflict is written.
+    private IReadOnlyList<PlannedOperation> ResolveConflicts(OperationPlan plan,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions)
+    {
+        if (!PlanLifecycle.HasConflict(plan)) return plan.Operations;
+        var open = plan.Conflicts
+            .Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
+                && decisions?.ContainsKey(c.Path) != true)
+            .Select(c => c.Path).ToArray();
+        if (open.Length > 0)
+            throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", open[0]));
+
+        var kept = plan.Conflicts.Where(c => decisions![c.Path] == ConflictDecision.KeepLocal)
+            .Select(c => Path.GetFullPath(Path.Combine(context.GameRoot, c.Path)))
+            .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        return plan.Operations.Where(o => !kept.Contains(Path.GetFullPath(o.TargetPath))).ToArray();
     }
 
     public ExecutionJournal Interrupt(ExecutionJournal journal)
@@ -196,6 +269,12 @@ public sealed class PlanExecutor : IPlanExecutorHost
 
     ExecutionJournal IPlanExecutorHost.Rollback(ExecutionJournal journal) => Rollback(journal);
 
+    // InstallOrchestrator asks here; Execute calls the same instance directly.
+    Task IPlanLifecycle.FinishAsync(OperationPlan plan, ExecutionJournal journal, CancellationToken ct) =>
+        Lifecycle.FinishAsync(plan, journal, ct);
+
+    private PlanLifecycle Lifecycle => lifecycle ??= new PlanLifecycle(context);
+
     public ExecutionJournal Rollback(ExecutionJournal journal, DivergencePolicy policy = DivergencePolicy.Fail)
     {
         if (journal.State == JournalState.RolledBack) return journal;
@@ -259,6 +338,8 @@ public sealed class PlanExecutor : IPlanExecutorHost
         }
         journal = journal with { State = JournalState.RolledBack };
         Persist(journal);
+        // Rollback returned the tree to its base state: that is the next agreed state.
+        SaveBaseline();
         return journal;
     }
 
@@ -309,6 +390,8 @@ public sealed class PlanExecutor : IPlanExecutorHost
         // Owner content is removed only AFTER the ledger no longer references it.
         var ownerBackupDir = Path.Combine(backupRoot, "owners", recipeId);
         if (Directory.Exists(ownerBackupDir)) Directory.Delete(ownerBackupDir, recursive: true);
+        // The next agreed state is the tree as uninstall left it.
+        SaveBaseline();
         Persist(new ExecutionJournal(ExecutionJournal.CurrentSchemaVersion,
             Guid.NewGuid().ToString("N"), $"uninstall:{recipeId}", JournalState.Completed, []));
     }

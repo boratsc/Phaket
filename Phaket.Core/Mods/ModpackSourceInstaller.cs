@@ -105,7 +105,8 @@ public sealed class ModpackSourceInstaller
             var plan = OperationPlanner.Plan(generated.Recipe, planner,
                 generated.Ownership.ToDictionary(owner => owner.StepId, owner => owner.Ownership));
             var execution = new PlanExecutionContext(gameRoot, itemProfileRoot, itemStagingRoot,
-                itemPackageRoot, context.Game, recipeId, context.ProfileId, context.StateRoot);
+                itemPackageRoot, context.Game, recipeId, context.ProfileId, context.StateRoot,
+                InstallationId: plan.InstallationRef);
             planned.Add(new PlannedModpackSource(name, version, plan, execution));
         }
         return new ModpackSourceInstallPlan(planned);

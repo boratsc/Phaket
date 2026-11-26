@@ -261,6 +261,8 @@ public sealed class ModpackInstallService : IModpackInstallService
                         {
                             // PAK-100: journal rollback reads the vanilla from the same shared cache.
                             VanillaCacheRoot = Path.Combine(appDataRoot, "vanilla-cache"),
+                            // PAK-142: the plan carries the installation the baseline is keyed by.
+                            InstallationId = operationPlan.InstallationRef,
                         };
                         // PAK-144: modded installations are pinned to the build they were installed on.
                         registry.Add(new InstalledRecipe(operationPlan.RecipeRef.Id, operationPlan.RecipeRef.Version,

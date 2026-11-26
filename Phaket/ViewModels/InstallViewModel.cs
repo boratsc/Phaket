@@ -245,7 +245,7 @@ public partial class InstallViewModel : ViewModelBase
                     new Dictionary<string, string> { ["bepinex"] = "6.0.700" },
                     evidence?.ManifestIds.FirstOrDefault(), arch,
                     installedBuild ?? ParseBuildId(evidence?.BuildId));
-                var context = new PlannerContext("install", "install-profile", gameRoot, profileRoot, staging, packages,
+                var context = new PlannerContext("install-1", "install-profile", gameRoot, profileRoot, staging, packages,
                     definition, facts,
                     LatestGameVersion: s =>
                     {
@@ -260,11 +260,14 @@ public partial class InstallViewModel : ViewModelBase
                     await PackageDownloader.EnsureArtifactsAsync(recipe, packages, transport ?? new HttpPackageTransport(),
                         new Progress<ArtifactDownloadProgress>(p => Dispatcher.UIThread.Post(() =>
                         { if (IsRunning) StatusMessage = LocalizationService.Instance["Install.Downloading"] + " " + p.ArtifactId; })), token);
+                // PAK-142: same installation id the planner used, so the baseline matches.
+                var installationId = context.InstallationId;
                 executor = new PlanExecutor(new PlanExecutionContext(gameRoot, profileRoot, staging, packages,
                     definition, recipe.Id, "install-profile", state,
                     new ToolBaseGameSource(steamCredentials: new SteamCredentialStore(),
                         steamPrompt: (p, ct) => SteamPromptViewModel.Shared.RequestAsync(p, ct, promptContext),
-                        mobileConfirmation: SteamPromptViewModel.MobileConfirmationSink())));
+                        mobileConfirmation: SteamPromptViewModel.MobileConfirmationSink()),
+                    InstallationId: installationId));
                 var reporter = new Progress<InstallProgress>(p => Dispatcher.UIThread.Post(() =>
                 {
                     if (!IsRunning) return;

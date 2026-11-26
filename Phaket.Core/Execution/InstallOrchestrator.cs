@@ -1,6 +1,7 @@
 using Phaket.Core.Domain;
 using Phaket.Core.Omrl;
 using Phaket.Core.Mods;
+using Phaket.Core.Execution.SaveBackup;
 
 namespace Phaket.Core.Execution;
 
@@ -15,8 +16,14 @@ public sealed class InstallOrchestrator
 {
     private readonly PlanExecutor executor;
     private readonly ReceiptSender? receipts;
+    private readonly IPlanLifecycle? lifecycle;
 
-    public InstallOrchestrator(PlanExecutor executor, ReceiptSender? receipts = null) { this.executor = executor; this.receipts = receipts; }
+    public InstallOrchestrator(PlanExecutor executor, ReceiptSender? receipts = null)
+    {
+        this.executor = executor;
+        this.receipts = receipts;
+        lifecycle = executor as IPlanLifecycle;
+    }
 
     public ExecutionJournal Run(OperationPlan plan, IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default, ReceiptContext? receiptContext = null)
@@ -24,6 +31,11 @@ public sealed class InstallOrchestrator
         // Hold the installation lock across approval, every operation and
         // completion: a concurrent install/rollback must not interleave.
         using var gate = executor.LockInstallation();
+        // PAK-141: the save backup happens before Approve; a plan with an open conflict
+        // throws here, before anything is written.
+        lifecycle?.Begin(plan);
+        // The baseline is keyed by the installation, which only the plan carries.
+        plan = plan with { InstallationRef = executor.InstallationIdFor(plan) };
         var journal = executor.Approve(plan);
         var count = plan.Operations.Count;
         try
@@ -47,7 +59,8 @@ public sealed class InstallOrchestrator
             if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "failed", (ex as PhaketException)?.Error.Code ?? ex.GetType().Name, cancellationToken);
             throw;
         }
-        journal = executor.Complete(plan, journal);
+        // Complete(plan, journal, decisions) also records the new agreed baseline.
+        journal = executor.Complete(plan, journal, null);
         if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "installed", cancellationToken: cancellationToken);
         progress?.Report(new InstallProgress(count, count, "", "verify", "done", 1.0));
         return journal;

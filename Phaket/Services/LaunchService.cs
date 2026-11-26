@@ -1,8 +1,14 @@
 using System.Diagnostics;
+using Phaket.Core.Execution;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 
 namespace Phaket.Services;
+
+public sealed record LaunchOutcome(bool Started, bool Tracked)
+{
+    public static LaunchOutcome Failed { get; } = new(false, false);
+}
 
 // One-click launch (simplicity): "Graj" opens the game through the Steam
 // protocol. Mod launch options are applied to a SINGLE Steam account's
@@ -10,11 +16,19 @@ namespace Phaket.Services;
 // and rollback — never a manual copy box, never a blind multi-account write.
 public sealed class LaunchService
 {
+    private readonly ProcessTracker trackers;
+
+    // processStorePath is a seam for tests; app state lives in %AppData%/phaket/processes.json,
+    // the same file SessionSweep refreshes.
+    public LaunchService(string? processStorePath = null) => trackers = new ProcessTracker(processStorePath);
+
     public bool LaunchGame(string steamAppId)
     {
         if (string.IsNullOrWhiteSpace(steamAppId)) return false;
         try
         {
+            // steam://rungameid only asks the Steam client to start the game: no process of
+            // ours, so no PID. A record here would point at Steam, never at the game.
             Process.Start(new ProcessStartInfo
             {
                 FileName = $"steam://rungameid/{steamAppId}",
@@ -27,6 +41,49 @@ public sealed class LaunchService
             return false;
         }
     }
+
+    // Direct launch of a game executable, with no launcher in between: the only path
+    // where Phaket owns a process and can record PID + start time for "stop".
+    // A store launcher (Steam -applaunch) hands over to a child and exits; its record is
+    // dropped again so "stop" never targets the launcher. Nothing waits here (the UI must
+    // not freeze) and Stop re-verifies identity anyway.
+    public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId, string? sessionLabel)
+    {
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return LaunchOutcome.Failed;
+        int pid;
+        try
+        {
+            pid = Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(executable)!,
+                UseShellExecute = false,
+            })?.Id ?? 0;
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return LaunchOutcome.Failed;
+        }
+        if (pid <= 0) return LaunchOutcome.Failed;
+
+        var (found, identity) = ProcessIdentity.TryGetProcessIdentity(pid);
+        if (!found || identity is null) return new LaunchOutcome(true, false);
+        var record = ProcessRecord.FromIdentity(identity, appId, sessionLabel);
+        trackers.Save(record);
+        // Not alive right after the start means a launcher handed over and exited.
+        if (trackers.IsAlive(record)) return new LaunchOutcome(true, true);
+        trackers.Remove(record);
+        return new LaunchOutcome(true, false);
+    }
+
+    // The newest record of this app, or null when Phaket never launched the game directly.
+    public ProcessRecord? Tracked(string? appId) =>
+        trackers.Load()
+            .Where(r => appId is null || r.AppId == appId)
+            .OrderByDescending(r => r.LaunchedAt)
+            .FirstOrDefault();
+
+    public ProcessStopResult Stop(ProcessRecord record, bool force = false) => trackers.TryStop(record, force);
 }
 
 public sealed record SteamAccount(string Id, string ConfigPath);

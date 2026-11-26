@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Phaket.Core.Execution;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 using Phaket.Services;
@@ -146,7 +147,7 @@ public sealed record InstallationChoice(string Store, string RootPath, string? B
 
 public partial class GameViewModel : ViewModelBase
 {
-    private readonly LaunchService launch = new();
+    private LaunchService launch = new();
     private readonly ProfileStore store = new();
     private readonly Action back;
     private readonly Action openMods;
@@ -223,6 +224,62 @@ public partial class GameViewModel : ViewModelBase
         var ok = launch.LaunchGame(Game.SteamAppId);
         StatusMessage = ok ? loc["Game.Launched"] : loc["Game.LaunchFailed"];
     }
+
+    // PAK-143: "stop" only applies to a process we launched ourselves. Another game
+    // started through Steam has no PID on our side, so there is nothing to confirm or stop.
+    public bool CanStopGame => PendingStop is null && FindTrackedGame() is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanStopGame))]
+    private ProcessRecord? pendingStop;
+
+    // Step 1: ask. Nothing is signalled until ConfirmStop, and the record is re-read so a
+    // PID reused by another process can never be confirmed by accident.
+    [RelayCommand]
+    private void StopGame()
+    {
+        var loc = LocalizationService.Instance;
+        var record = FindTrackedGame();
+        if (record is null)
+        {
+            StatusMessage = loc["Game.StopNotTracked"];
+            OnPropertyChanged(nameof(CanStopGame));
+            return;
+        }
+        PendingStop = record;
+        StatusMessage = loc["Game.StopConfirm"];
+    }
+
+    [RelayCommand]
+    private void CancelStop()
+    {
+        PendingStop = null;
+        StatusMessage = "";
+    }
+
+    // Step 2: fail-closed. A mismatched or unknown identity is reported, never signalled.
+    [RelayCommand]
+    private void ConfirmStop()
+    {
+        if (PendingStop is not { } record) return;
+        PendingStop = null;
+        var result = StopProcess(record);
+        var loc = LocalizationService.Instance;
+        StatusMessage = loc.CurrentLanguage == LocalizationService.DefaultLanguage ? result.MessagePl : result.MessageEn;
+        OnPropertyChanged(nameof(CanStopGame));
+    }
+
+    // A property rather than a constructor parameter keeps existing callers unchanged and
+    // lets a test point the tracker at a fixture process store.
+    public LaunchService Launch
+    {
+        get => launch;
+        init => launch = value;
+    }
+
+    private ProcessRecord? FindTrackedGame() => launch.Tracked(Game.SteamAppId);
+
+    private ProcessStopResult StopProcess(ProcessRecord record) => launch.Stop(record);
 
     // Launch options proposed for this game on the current OS; null when the
     // definition declares no requirements (e.g. Windows needs none for Among Us).

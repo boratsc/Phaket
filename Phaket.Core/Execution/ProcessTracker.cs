@@ -144,7 +144,10 @@ public sealed class ProcessTracker
         return StopResult(status);
     }
 
-    private static ProcessStopResult StopResult(ProcessStopStatus status) => status switch
+    private static ProcessStopResult StopResult(ProcessStopStatus status) => Localized(status);
+
+    // UI picks the language; the record of what happened is the same in both.
+    public static ProcessStopResult Localized(ProcessStopStatus status) => status switch
     {
         ProcessStopStatus.Stopped => new(status,
             "Gra została zatrzymana.", "The game has been stopped."),

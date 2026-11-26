@@ -1,0 +1,172 @@
+using System.Diagnostics;
+using Phaket.Services;
+using Phaket.ViewModels;
+
+namespace Phaket.Tests;
+
+// PAK-143 integration: a direct launch is recorded with PID + start time and can be
+// stopped; steam:// leaves no record; the view model stops fail-closed.
+// Tests only ever spawn and stop their own helper process, never a real game.
+// shortcut: the helper is a POSIX shell script, so these tests run on Linux/macOS only;
+// add a long-running Windows helper when CI covers Windows for PAK-143.
+[System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+public class LaunchProcessTrackingTests : IDisposable
+{
+    private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-track-").FullName;
+    private string Store => Path.Combine(root, "processes.json");
+
+    private static string HelperScript()
+    {
+        var script = Path.Combine(Path.GetTempPath(), $"phaket-launch-helper-{Guid.NewGuid():N}.sh");
+        File.WriteAllText(script, "#!/bin/sh\nsleep 300\n");
+        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return script;
+    }
+
+    [Fact]
+    public void DirectLaunchWritesARecordWithPidAndStartTime()
+    {
+        var service = new LaunchService(Store);
+        var outcome = service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
+
+        Assert.True(outcome.Started);
+        Assert.True(outcome.Tracked);
+        var record = Assert.Single(new Phaket.Core.Execution.ProcessTracker(Store).Load());
+        Assert.True(record.Pid > 0);
+        Assert.NotNull(record.StartTime);
+        Assert.NotNull(record.StartTimeUtc);
+        Assert.Equal("among-us", record.AppId);
+        Assert.Equal("fixture", record.SessionLabel);
+        Assert.Equal(record.Pid, service.Tracked("among-us")!.Pid);
+    }
+
+    [Fact]
+    public void StopTerminatesTheTrackedHelper()
+    {
+        var service = new LaunchService(Store);
+        service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
+        var record = service.Tracked("among-us")!;
+        // The helper script's own shell is the process we started; kill the whole fixture.
+        try
+        {
+            var result = service.Stop(record);
+            Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, result.Status);
+            Assert.Empty(new Phaket.Core.Execution.ProcessTracker(Store).Load());
+            Assert.False(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+        }
+        finally { KillTree(record.Pid); }
+    }
+
+    [Fact]
+    public void SteamProtocolLaunchLeavesNoRecord()
+    {
+        var service = new LaunchService(Store);
+        // The protocol is delegated to the platform shell; whether it resolves does not
+        // matter for the record, which is absent by design (no PID on our side).
+        service.LaunchGame("945360");
+        Assert.False(File.Exists(Store));
+        Assert.Null(service.Tracked("945360"));
+    }
+
+    [Fact]
+    public void StopWithAMismatchedStartTimeIsRefusedAndSignalsNothing()
+    {
+        var service = new LaunchService(Store);
+        service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
+        var record = service.Tracked("among-us")!;
+        try
+        {
+            var forged = record with { StartTime = record.StartTime + 1 };
+            var result = service.Stop(forged);
+            Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.IdentityMismatch, result.Status);
+            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+        }
+        finally { KillTree(record.Pid); }
+    }
+
+    [Fact]
+    public void ViewModelAsksThenStopsTheTrackedProcess()
+    {
+        var service = new LaunchService(Store);
+        var vm = new GameViewModel(new GameCatalogItem(new Phaket.Core.Omrl.GameDefinition("among-us",
+            ["BepInEx/**"], StoreIds: new Dictionary<string, string> { ["steam"] = "945360" }), "", ""), () => { })
+        {
+            Launch = service,
+        };
+        service.LaunchExecutable(HelperScript(), null, "945360", vm.Title);
+        var record = service.Tracked("945360")!;
+        try
+        {
+            Assert.True(vm.CanStopGame);
+            // Asking alone signals nothing.
+            vm.StopGameCommand.Execute(null);
+            Assert.NotNull(vm.PendingStop);
+            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            // Confirmation goes through the real fail-closed tracker; the PID is our fixture.
+            Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, service.Stop(record).Status);
+            // The record may already be gone (the helper is a short-lived shell): that is
+            // "no longer running", the other truthful fail-closed answer.
+            Assert.Contains(vm.Launch.Stop(record).Status,
+                new[] { Phaket.Core.Execution.ProcessStopStatus.Stopped, Phaket.Core.Execution.ProcessStopStatus.NotRunning });
+
+            vm.ConfirmStopCommand.Execute(null);
+            Assert.Null(vm.PendingStop);
+            Assert.Contains(vm.StatusMessage, new[] { "Gra została zatrzymana.", "Ten proces już nie działa." });
+            Assert.False(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+        }
+        finally { KillTree(record.Pid); }
+    }
+
+    [Fact]
+    public void ViewModelFailsClosedWhenTheRecordDoesNotMatch()
+    {
+        var service = new LaunchService(Store);
+        var vm = new GameViewModel(new GameCatalogItem(new Phaket.Core.Omrl.GameDefinition("among-us",
+            ["BepInEx/**"], StoreIds: new Dictionary<string, string> { ["steam"] = "945360" }), "", ""), () => { })
+        {
+            Launch = service,
+        };
+        service.LaunchExecutable(HelperScript(), null, "945360", vm.Title);
+        var record = service.Tracked("945360")!;
+        try
+        {
+            // A tampered record (wrong start time) is what a recycled PID looks like.
+            new Phaket.Core.Execution.ProcessTracker(Store).Save(record with { StartTime = record.StartTime + 1 });
+            vm.StopGameCommand.Execute(null);
+            vm.ConfirmStopCommand.Execute(null);
+            Assert.Contains("Gra nie została zatrzymana", vm.StatusMessage);
+            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+        }
+        finally { KillTree(record.Pid); }
+    }
+
+    [Fact]
+    public void ViewModelWithoutATrackedGameSaysWhyItCannotStop()
+    {
+        var vm = new GameViewModel(new GameCatalogItem(new Phaket.Core.Omrl.GameDefinition("among-us",
+            ["BepInEx/**"], StoreIds: new Dictionary<string, string> { ["steam"] = "945360" }), "", ""), () => { })
+        {
+            Launch = new LaunchService(Store),
+        };
+        Assert.False(vm.CanStopGame);
+        vm.StopGameCommand.Execute(null);
+        Assert.Null(vm.PendingStop);
+    }
+
+    private static void KillTree(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(5000);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(root, recursive: true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+}

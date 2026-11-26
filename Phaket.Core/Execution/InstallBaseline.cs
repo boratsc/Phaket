@@ -18,6 +18,11 @@ public sealed record InstallBaseline(
 {
     public const string CurrentSchemaVersion = "install-baseline/v1";
 
+    // One baseline per installation, next to the ownership ledger in the
+    // installation-level state root, so a second profile sees the same agreed state.
+    public const string FileName = "baseline.json";
+    public static string DefaultPath(string stateRoot) => Path.Combine(stateRoot, FileName);
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -38,7 +43,17 @@ public sealed record InstallBaseline(
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"baseline root does not exist: {fullRoot}"));
         var files = new Dictionary<string, BaselineFileState>(StringComparer.Ordinal);
         foreach (var path in Directory.GetFiles(fullRoot, "*", SearchOption.AllDirectories))
-            files[Path.GetRelativePath(fullRoot, path).Replace('\\', '/')] = ReadFile(path);
+        {
+            // Account-specific game data (e.g. Among Us per-account folders) is normally
+            // unreadable and can vanish mid-walk: an unreadable or already-gone file is
+            // left out of the agreed state instead of aborting the whole capture.
+            try
+            {
+                if (File.Exists(path))
+                    files[Path.GetRelativePath(fullRoot, path).Replace('\\', '/')] = ReadFile(path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
         return Create(installationId, files);
     }
 

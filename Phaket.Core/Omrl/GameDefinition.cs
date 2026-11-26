@@ -38,7 +38,11 @@ public sealed record GameDefinition(
     // or chosen: the CURRENT retail build, so the default loader pack matches it.
     string? DefaultArch = null,
     // Where the game's mods come from (Thunderstore community, Nexus identity).
-    GameSources? Sources = null)
+    GameSources? Sources = null,
+    // PAK-141: save locations back up before a recipe writes. A "profile://" entry is
+    // relative to the user's profile root (a store prefix such as "steam/" belongs in
+    // the definition); anything else is an absolute path. Empty = no save backup.
+    IReadOnlyList<string>? SavePaths = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
@@ -119,6 +123,7 @@ public static class GameDefinitionLoader
         public IReadOnlyList<string>? Platforms { get; init; }
         public string? DefaultArch { get; init; }
         public GameSources? Sources { get; init; }
+        public IReadOnlyList<string>? SavePaths { get; init; }
     }
 
     private sealed record DetectionDto
@@ -138,7 +143,7 @@ public static class GameDefinitionLoader
             throw new PhaketException(ErrorCodes.UnsupportedSchemaVersion, ("schemaVersion", dto.SchemaVersion));
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
             dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
-            dto.Platforms, dto.DefaultArch, dto.Sources);
+            dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths);
     }
 }
 
