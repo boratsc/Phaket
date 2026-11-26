@@ -61,6 +61,26 @@ public sealed class RestyleTests
     }
 
     [AvaloniaFact]
+    public void Footer_version_and_codename_come_from_one_source()
+    {
+        // PAK-91: MainWindow.axaml must not repeat the csproj version or the codename.
+        string xaml = File.ReadAllText(Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "../../../../Phaket/MainWindow.axaml")));
+        Assert.DoesNotContain("phaket 0.1.0", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Czeladzki Saturn", xaml, StringComparison.Ordinal);
+
+        var vm = TestAccounts.ViewModel();
+        var window = new MainWindow(vm);
+        window.Show();
+        var footer = window.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text).ToHashSet(StringComparer.Ordinal);
+        Assert.Contains(vm.VersionText, footer);
+        Assert.Contains(vm.AppCodename, footer);
+        // The version follows the assembly (csproj <Version>), never a literal in the view.
+        Assert.Equal("phaket " + typeof(MainWindowViewModel).Assembly.GetName().Version!.ToString(3), vm.VersionText);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void Settings_contains_secret_store_help_tip()
     {
         var language = LocalizationService.Instance.CurrentLanguage;

@@ -32,6 +32,7 @@ public partial class ReportViewModel : ViewModelBase
     private readonly IReadOnlyList<ModEntry> profileMods;
     private static string StorePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "reports.db");
     public string GameTitle { get; }
+    public string GameId => gameId;
     public IReadOnlyList<string> Mods { get; }
     public IReadOnlyList<ReportResultOption> Results { get; } =
     [

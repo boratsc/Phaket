@@ -33,8 +33,12 @@ public class ShellThemeTests
             Assert.NotNull(initial);
             Directory.CreateDirectory("/tmp/opencode/phaket-render");
             initial.Save("/tmp/opencode/phaket-render/40-version-bump.png", PngBitmapEncoderOptions.Default);
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "phaket 0.1.0");
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "Czeladzki Saturn");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == vm.VersionText);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == vm.AppCodename);
+            // PAK-91: the footer reads the csproj version and a codename defined once in code.
+            Assert.Equal("phaket " + typeof(MainWindowViewModel).Assembly.GetName().Version!.ToString(3), vm.VersionText);
+            Assert.Matches(@"^phaket \d+\.\d+\.\d+$", vm.VersionText);
+            Assert.False(string.IsNullOrWhiteSpace(vm.AppCodename));
 
             foreach (var (target, expected) in new (string, Type)[]
             {

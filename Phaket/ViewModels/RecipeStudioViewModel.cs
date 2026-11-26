@@ -306,6 +306,7 @@ public partial class RecipeStudioViewModel : ViewModelBase
         DraftChanged();
         if (Graph is not null)
         {
+            Graph.Dispose();
             Graph = new GraphViewModel(new GameCatalogItem(value ?? Games.FirstOrDefault() ??
                 new GameDefinition("unknown-game", ["BepInEx/**"]), "", ""), () => IsGraphVisible = false);
             OnPropertyChanged(nameof(Graph));
@@ -332,6 +333,7 @@ public partial class RecipeStudioViewModel : ViewModelBase
         }
         var game = new GameCatalogItem(SelectedGame ?? Games.FirstOrDefault() ??
             new GameDefinition("unknown-game", ["BepInEx/**"]), "", "");
+        Graph?.Dispose();
         Graph = new GraphViewModel(game, () => IsGraphVisible = false);
         IsGraphVisible = true;
         OnPropertyChanged(nameof(Graph));

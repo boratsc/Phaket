@@ -39,7 +39,7 @@ public partial class ModItemViewModel : ViewModelBase
     }
 }
 
-public partial class ModsViewModel : ViewModelBase
+public partial class ModsViewModel : ViewModelBase, IDisposable
 {
     private readonly ProfileStore store;
     private readonly Action back;
@@ -67,7 +67,10 @@ public partial class ModsViewModel : ViewModelBase
     }
 
     public ModCatalogViewModel Catalog { get; }
+    // A picker switch replaces this page; the detached catalog must not keep refreshing.
+    public void Dispose() => Catalog.Dispose();
     public string GameTitle { get; }
+    public string GameId => gameId;
     public string Cover { get; }
     public ObservableCollection<ModItemViewModel> Mods { get; } = [];
     public ObservableCollection<InstalledRecipeViewModel> InstalledRecipes { get; } = [];
@@ -257,6 +260,7 @@ public partial class BackupViewModel : ViewModelBase
     }
 
     public string GameTitle { get; }
+    public string GameId => gameId;
     public ObservableCollection<BackupItem> Backups { get; } = [];
     [ObservableProperty] private string status = "";
 

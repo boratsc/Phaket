@@ -77,6 +77,8 @@ public partial class InstallViewModel : ViewModelBase
     private InstallRegistry Registry => new(Path.Combine(appDataRoot, "installs.json"));
 
     public InstallItemViewModel[] Steps { get; } = [new("Install.Step1", "1"), new("Install.Step2", "2"), new("Install.Step3", "3"), new("Install.Step4", "4")];
+    // The page reads the game once in LoadOptions, so a regression test can see which game it holds.
+    internal string GameId => game.Definition.Slug;
     public InstallItemViewModel[] Checklist { get; } = [new("Install.VerifyVersion", ""), new("Install.CheckDeps", ""), new("Install.AnalyzeConflicts", ""), new("Install.Prepare", "")];
     public System.Collections.ObjectModel.ObservableCollection<RecipeOption> Recipes { get; } = [];
     public System.Collections.ObjectModel.ObservableCollection<VersionOption> Versions { get; } = [];

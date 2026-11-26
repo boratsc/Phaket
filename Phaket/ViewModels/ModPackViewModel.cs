@@ -372,6 +372,7 @@ public partial class ModPackViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         if (ownsGitHubPicker) GitHubPicker?.Dispose();
+        ThunderstoreCatalog.Dispose();
     }
 
     [RelayCommand]

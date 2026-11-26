@@ -111,9 +111,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Accounts.DeviceIdentity.PropertyChanged -= nickChanged;
         ModpackCatalog?.Dispose();
         Profiles?.Dispose();
+        Mods?.Dispose();
+        Graph?.Dispose();
     }
 
     public string GameName => currentGame?.Title ?? LocalizationService.Instance["Shell.NoGame"];
+    // The footer reads both from code, never from the XAML: the version comes from the
+    // csproj (assembly of Phaket, not of the host), the codename is defined here once.
+    public string AppVersion => string.Join(".", typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0");
+    public string AppCodename { get; } = "Czeladzki Saturn";
+    public string VersionText => $"phaket {AppVersion}";
     public string BreadcrumbLibrary => LocalizationService.Instance["Nav.Library"];
     public string BreadcrumbView => LocalizationService.Instance[ActiveNav switch
     {
@@ -206,10 +213,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
         if (value is null) return;
-        // Mods and the game page are per-game but outside IsGameContext, so the picker
-        // rebuilds them instead of leaving the previous game's data on screen (PAK-116).
+        // Every per-game page outside IsGameContext takes its game id in the constructor, so
+        // the picker rebuilds the open one instead of leaving the old game on screen
+        // (PAK-116 mods, PAK-120 the pages opened from the game page).
+        ReopenGamePage(value);
+    }
+
+    private void ReopenGamePage(GameCatalogItem game)
+    {
         if (CurrentPage is ModsViewModel) OpenMods();
-        else if (CurrentPage is GameViewModel) OpenGame(value);
+        else if (CurrentPage is GameViewModel) OpenGame(game);
+        else if (CurrentPage is BackupViewModel) OpenBackup();
+        else if (CurrentPage is InstallViewModel) OpenInstall();
+        else if (CurrentPage is BuildsViewModel) OpenBuilds();
+        else if (CurrentPage is ShareViewModel) OpenShare();
+        else if (CurrentPage is GraphViewModel) OpenGraph();
+        else if (CurrentPage is ReportViewModel) OpenReport();
     }
 
     private void OpenGame(GameCatalogItem game)
@@ -298,6 +317,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public void OpenMods()
     {
         if (currentGame is null) return;
+        Mods?.Dispose();
         Mods = new ModsViewModel(currentGame, () => OpenGame(currentGame));
         CurrentPage = Mods;
         ActiveNav = "mods";

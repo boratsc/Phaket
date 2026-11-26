@@ -18,7 +18,7 @@ using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
-public partial class ModCatalogViewModel : ViewModelBase
+public partial class ModCatalogViewModel : ViewModelBase, IDisposable
 {
     private readonly string gameId, cachePath, appDataRoot;
     private readonly Action? installedChanged;
@@ -30,6 +30,9 @@ public partial class ModCatalogViewModel : ViewModelBase
     internal Func<InstallPreparation, bool, IProgress<InstallProgress>, Task<InstallOutcome>>? ExecuteOverride;
     private readonly ICatalogTransport? transport;
     private readonly SemaphoreSlim gate = new(1, 1);
+    // A page replaced by a game switch stops its own refresh instead of writing into a dead view.
+    private readonly CancellationTokenSource lifetime = new();
+    private bool disposed;
     private IReadOnlyList<ThunderstoreMod> all = [];
     private int selectionGeneration;
     public ModCatalogViewModel(string gameId, string appDataRoot, ICatalogTransport? transport = null, bool autoSync = true, Action? installedChanged = null, GameCatalogItem? game = null)
@@ -48,6 +51,14 @@ public partial class ModCatalogViewModel : ViewModelBase
         if (autoSync) _ = RefreshCommand.ExecuteAsync(null);
     }
     public ObservableCollection<ThunderstoreMod> Mods { get; } = [];
+    // Only the owner (page or pack editor) knows when this view model is detached.
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
     // PAK-101: the browser shows both catalog sources; filtering never hides the source fact.
     [ObservableProperty] private string sourceFilter = "all";
     public bool IsAllSource => SourceFilter == "all";
@@ -137,13 +148,14 @@ public partial class ModCatalogViewModel : ViewModelBase
         await gate.WaitAsync();
         try
         {
+            var token = lifetime.Token;
             var result = await Task.Run(async () => {
                 IReadOnlyList<ThunderstoreMod> mods = []; DateTimeOffset? last = null; string? error = null; bool offline = false;
                 try {
                     using var store = new ModCatalogStore(cachePath);
                     try {
                         using var http = transport is null ? CreateHttp() : null;
-                        await new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), store).SyncAsync(gameId);
+                        await new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), store).SyncAsync(gameId, token);
                     } catch (Exception e) when (e is HttpRequestException or SocketException or TaskCanceledException) { offline = true; error = "Catalog.Offline"; }
                     catch (UriFormatException) { error = "Builds.InvalidEndpoint"; }
                     catch (Exception) { error = "Builds.SyncError"; }
@@ -159,11 +171,12 @@ public partial class ModCatalogViewModel : ViewModelBase
     {
         await gate.WaitAsync();
         try {
+            var token = lifetime.Token;
             var result = await Task.Run(async () => {
                 try {
                     using var store = new ModCatalogStore(cachePath);
                     using var http = transport is null ? CreateHttp() : null;
-                    return await new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), store).GetModAsync(mod.Id);
+                    return await new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), store).GetModAsync(mod.Id, token);
                 } catch (Exception) { return null; }
             });
             await Dispatcher.UIThread.InvokeAsync(() => { if (generation != selectionGeneration) return; Details = result; DetailsStatus = result is null ? LocalizationService.Instance["ModCatalog.DetailsUnavailable"] : ""; });

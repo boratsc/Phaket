@@ -34,6 +34,46 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
+    public void Game_picker_rebuilds_every_per_game_page_for_the_new_game()
+    {
+        // PAK-120: Backup/Install/Builds/Share/Graph/Report took the game id in their
+        // constructor and survived a picker switch with the old one.
+        var vm = TestAccounts.ViewModel();
+        try
+        {
+            var gameA = vm.Library.Games.Single(game => game.Definition.Slug == "among-us");
+            var gameB = vm.Library.Games.Single(game => game.Definition.Slug == "valheim");
+            var pages = new (Action Open, Func<ViewModelBase> Page, Func<GameCatalogItem, string> Title, Func<string> GameId)[]
+            {
+                (vm.OpenBackup, () => vm.Backup!, game => game.Title, () => vm.Backup!.GameId),
+                (vm.OpenInstall, () => vm.Install!, game => game.Title, () => vm.Install!.GameId),
+                (vm.OpenBuilds, () => vm.Builds!, game => game.Title, () => vm.Builds!.Game.Definition.Slug),
+                (vm.OpenShare, () => vm.Share!, game => game.Title, () => vm.SelectedGame!.Definition.Slug),
+                (vm.OpenGraph, () => vm.Graph!, game => game.Title, () => vm.Graph!.Game.Definition.Slug),
+                (vm.OpenReport, () => vm.Report!, game => game.Title, () => vm.Report!.GameId),
+            };
+            foreach (var (open, page, title, gameId) in pages)
+            {
+                vm.SelectedGame = gameA;
+                open();
+                var oldPage = page();
+                Assert.Equal(gameA.Title, title(gameA));
+
+                vm.SelectedGame = gameB;
+
+                Assert.NotSame(oldPage, page());
+                Assert.Equal(gameB.Definition.Slug, gameId());
+                Assert.Equal(gameB.Title, title(gameB));
+                Assert.Equal("library", vm.ActiveNav);
+            }
+        }
+        finally
+        {
+            vm.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
     public void MainWindow_opens_and_exposes_accessible_name()
     {
         var window = new MainWindow(TestAccounts.ViewModel());
@@ -142,6 +182,7 @@ public class MainWindowTests
             Assert.IsType<ModsViewModel>(vm.CurrentPage);
             Assert.NotSame(oldMods, vm.Mods);
             Assert.Equal(gameB.Title, vm.Mods!.GameTitle);
+            Assert.Equal(gameB.Definition.Slug, vm.Mods.GameId);
             var modsView = window.GetVisualDescendants().OfType<Phaket.Views.ModsView>().Single();
             Assert.Contains(modsView.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == gameB.Title);
             using var frame = window.CaptureRenderedFrame();

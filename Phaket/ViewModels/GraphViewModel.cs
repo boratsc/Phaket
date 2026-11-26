@@ -6,19 +6,32 @@ using Phaket.Services;
 
 namespace Phaket.ViewModels;
 
-public sealed class GraphNodeVm(string id, string name, string version, IReadOnlyList<string> dependencies, bool isLoader, bool isGame, bool isBlocked) : ViewModelBase
+public sealed class GraphNodeVm : ViewModelBase, IDisposable
 {
-    public string Id { get; } = id;
-    public string Name { get; private set; } = name;
-    public string Version { get; } = version;
-    public IReadOnlyList<string> Dependencies { get; } = dependencies;
-    public bool IsLoader { get; } = isLoader;
-    public bool IsGame { get; } = isGame;
-    public bool IsBlocked { get; } = isBlocked;
+    private readonly PropertyChangedEventHandler localizationChanged;
+    public GraphNodeVm(string id, string name, string version, IReadOnlyList<string> dependencies, bool isLoader, bool isGame, bool isBlocked)
+    {
+        Id = id;
+        Name = name;
+        Version = version;
+        Dependencies = dependencies;
+        IsLoader = isLoader;
+        IsGame = isGame;
+        IsBlocked = isBlocked;
+        LocalizationService.Instance.PropertyChanged += localizationChanged = (_, _) => OnPropertyChanged(nameof(KindLabel));
+    }
+    public string Id { get; }
+    public string Name { get; }
+    public string Version { get; }
+    public IReadOnlyList<string> Dependencies { get; }
+    public bool IsLoader { get; }
+    public bool IsGame { get; }
+    public bool IsBlocked { get; }
     public bool HasDependencies => Dependencies.Count > 0;
     public string DependencyNames => string.Join(", ", Dependencies);
     public string KindLabel => LocalizationService.Instance[IsGame ? "Graph.Node.Game" : IsLoader ? "Graph.Node.Loader" : "Graph.Node.Mod"];
-
+    // The language switch rebuilds the nodes and a game switch drops them: neither may leak one.
+    public void Dispose() => LocalizationService.Instance.PropertyChanged -= localizationChanged;
 }
 
 public sealed class GraphEdgeVm(GraphNodeVm from, GraphNodeVm to) : ViewModelBase
@@ -43,7 +56,7 @@ public sealed class GraphConflictVm(GraphNodeVm from, GraphNodeVm to) : ViewMode
     public string Pair => $"{From} {FromVersion} ↔ {To} {ToVersion}";
 }
 
-public partial class GraphViewModel : ViewModelBase
+public partial class GraphViewModel : ViewModelBase, IDisposable
 {
     private IReadOnlyList<string>? cycle;
     private IReadOnlyList<string>? cycleNames;
@@ -135,6 +148,7 @@ public partial class GraphViewModel : ViewModelBase
         if (e.PropertyName is not (nameof(LocalizationService.CurrentLanguage) or "Item[]")) return;
         OnPropertyChanged(nameof(GameTitle));
         OnPropertyChanged(nameof(SampleNote));
+        foreach (var node in Nodes) node.Dispose();
         Nodes.Clear();
         Edges.Clear();
         ConflictEdges.Clear();
@@ -147,4 +161,11 @@ public partial class GraphViewModel : ViewModelBase
     }
 
     [RelayCommand] private void Back() => back();
+
+    // The shell rebuilds this page for the new game; the old one must stop listening.
+    public void Dispose()
+    {
+        LocalizationService.Instance.PropertyChanged -= OnLocalizationChanged;
+        foreach (var node in Nodes) node.Dispose();
+    }
 }

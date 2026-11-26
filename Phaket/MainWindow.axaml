@@ -217,8 +217,8 @@
               <Image Source="avares://Phaket/Assets/brand/phaket-sygnet-28.png" Width="28" Height="28" Stretch="Uniform" />
             </Border>
             <StackPanel Classes="footerText" Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-              <TextBlock Text="phaket 0.1.0" FontSize="12" FontWeight="SemiBold" />
-              <TextBlock Text="Czeladzki Saturn" FontSize="11" Foreground="{DynamicResource MutedBrush}" />
+              <TextBlock Text="{Binding VersionText}" FontSize="12" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding AppCodename}" FontSize="11" Foreground="{DynamicResource MutedBrush}" />
             </StackPanel>
           </Grid>
         </Border>
