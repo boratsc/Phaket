@@ -65,6 +65,44 @@
         <TextBlock Classes="muted" Text="{Binding InfoText}" TextWrapping="Wrap" />
       </StackPanel>
     </DataTemplate>
+    <!-- PAK-136: basics step. The update channel records through the same service Settings uses;
+         the detected games are a read-only summary with its own scanning/empty/error state. -->
+    <DataTemplate DataType="{x:Type vm:BasicsStepViewModel}" x:DataType="vm:BasicsStepViewModel">
+      <StackPanel Spacing="10" Margin="4">
+        <TextBlock Classes="sectionTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="2" />
+        <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding ChannelTitle}" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <RadioButton GroupName="OnboardingChannel" IsChecked="{Binding IsStableChannel, Mode=OneWay}"
+                         Command="{Binding SelectChannelCommand}" CommandParameter="stable"
+                         Content="{Binding StableText}" AutomationProperties.Name="{Binding StableText}"
+                         AutomationProperties.AutomationId="onboarding.basics.stable" />
+            <RadioButton GroupName="OnboardingChannel" IsChecked="{Binding IsBetaChannel, Mode=OneWay}"
+                         Command="{Binding SelectChannelCommand}" CommandParameter="beta"
+                         Content="{Binding BetaText}" AutomationProperties.Name="{Binding BetaText}"
+                         AutomationProperties.AutomationId="onboarding.basics.beta" />
+          </StackPanel>
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding ChannelHint}" />
+        </StackPanel>
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding GamesTitle}" FontWeight="SemiBold" />
+          <ItemsControl ItemsSource="{Binding Games}" IsVisible="{Binding HasGames}"
+                        AutomationProperties.Name="{Binding GamesTitle}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DetectedGame">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Classes="quiet" Text="{Binding Platform}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasGames}" Text="{Binding ScanStatus}"
+                     AutomationProperties.LiveSetting="Polite" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
     <!-- PAK-133 empty-registry page; still rendered by builds without registered steps. -->
     <DataTemplate DataType="{x:Type vm:OnboardingViewModel+PlaceholderStep}" x:DataType="vm:OnboardingViewModel+PlaceholderStep">
       <StackPanel Spacing="10" Margin="4">

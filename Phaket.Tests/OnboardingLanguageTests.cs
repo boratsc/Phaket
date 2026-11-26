@@ -41,7 +41,10 @@ public sealed class OnboardingLanguageTests : IDisposable
         var nexusKeys = new Phaket.Core.Nexus.NexusApiKeyStore(new Phaket.Core.Tests.InMemorySecretStore());
         var platforms = new PlatformsStepViewModel(
             new TestAccounts.FakeAccount(), new TestAccounts.FakeAccount(), nexusKeys);
-        var wizard = new OnboardingViewModel(new OnboardingService(settings), new OnboardingFlow(step, platforms));
+        // PAK-136 appended the basics step; an empty fake scan keeps this test offline.
+        var basics = new BasicsStepViewModel(settings, new Phaket.Services.UpdateService(settings),
+            _ => Task.FromResult<IReadOnlyList<DetectedGame>>([]));
+        var wizard = new OnboardingViewModel(new OnboardingService(settings), new OnboardingFlow(step, platforms, basics));
         return (wizard, step);
     }
 
@@ -81,9 +84,9 @@ public sealed class OnboardingLanguageTests : IDisposable
     {
         var (wizard, step) = Wizard();
         Assert.Same(step, wizard.CurrentStep);
-        // Part 135 appended the platforms step, so the counter is live now.
+        // Parts 135/136 appended platforms and basics, so the counter is live now.
         Assert.True(wizard.HasStepCounter);
-        Assert.Equal("Krok 1 z 2", wizard.StepCounterText);
+        Assert.Equal("Krok 1 z 3", wizard.StepCounterText);
         Assert.Equal("Język", step.Title);
 
         var titleChanges = new List<string?>();
@@ -140,7 +143,7 @@ public sealed class OnboardingLanguageTests : IDisposable
 
         // Skip on the first page jumps to the last one and saves nothing there either.
         wizard.SkipCommand.Execute(null);
-        Assert.IsType<PlatformsStepViewModel>(wizard.CurrentStep);
+        Assert.IsType<BasicsStepViewModel>(wizard.CurrentStep);
         wizard.SkipCommand.Execute(null);
         Assert.Null(LanguageStepViewModel.Saved(settings));
         using var doc = JsonDocument.Parse(File.ReadAllText(settings));

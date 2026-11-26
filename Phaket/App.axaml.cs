@@ -28,7 +28,10 @@ public partial class App : Application
             // Nexus key store in the same app data directory), so the wizard and Settings always
             // see and write the same secrets.
             var platformsStep = new ViewModels.PlatformsStepViewModel(SecretStoreFactory.Create(), accounts.Steam, accounts.Epic);
-            var onboardingFlow = new ViewModels.OnboardingFlow(languageStep, platformsStep);
+            // PAK-136: the basics step reuses UpdateService (the very settings.json key Settings
+            // writes) and the read-only library detection already used by the shell.
+            var basicsStep = new ViewModels.BasicsStepViewModel(ViewModels.SettingsViewModel.DefaultSettingsPath);
+            var onboardingFlow = new ViewModels.OnboardingFlow(languageStep, platformsStep, basicsStep);
             var onboarding = new ViewModels.OnboardingViewModel(
                 ViewModels.OnboardingViewModel.CreateService(OnboardingService.DefaultSettingsPath),
                 onboardingFlow);

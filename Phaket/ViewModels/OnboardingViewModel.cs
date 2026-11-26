@@ -99,6 +99,13 @@ public sealed partial class OnboardingViewModel : ViewModelBase
         VisibilityChanged?.Invoke(this, true);
     }
 
+    // Every step shows on arrival; a step that loads state (basics: detection) does it here.
+    private void Activate()
+    {
+        ApplyStep();
+        if (CurrentStep is not null) _ = flow.ActivateAsync(CurrentStep);
+    }
+
     private void ApplyStep()
     {
         var steps = flow.Steps;
@@ -119,7 +126,7 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     private void Back()
     {
         index--;
-        ApplyStep();
+        Activate();
     }
 
     // Leaving a step through Next keeps its choice (the flow saves it in LeaveAsync).
@@ -128,7 +135,7 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     {
         _ = flow.LeaveAsync(CurrentStep!);
         index++;
-        ApplyStep();
+        Activate();
     }
 
     // Skipping is leaving a step without acting on it: nothing blocks the flow, it lands on
@@ -139,7 +146,7 @@ public sealed partial class OnboardingViewModel : ViewModelBase
         if (flow.Steps.Count > 0 && index < flow.Steps.Count - 1)
         {
             index = flow.Steps.Count - 1;
-            ApplyStep();
+            Activate();
             return;
         }
         LeaveFlow(false);

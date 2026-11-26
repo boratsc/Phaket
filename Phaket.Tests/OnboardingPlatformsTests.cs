@@ -47,7 +47,9 @@ public sealed class OnboardingPlatformsTests : IDisposable
         var epic = new TestAccounts.FakeAccount("epic");
         var nexusKeys = new NexusApiKeyStore(secrets);
         var platforms = new PlatformsStepViewModel(steam, epic, nexusKeys);
-        var wizard = new OnboardingViewModel(new OnboardingService(settings), new OnboardingFlow(language, platforms));
+        // PAK-136 appended the basics step: an empty fake scan keeps these platform tests offline.
+        var basics = new BasicsStepViewModel(settings, new UpdateService(settings), _ => Task.FromResult<IReadOnlyList<DetectedGame>>([]));
+        var wizard = new OnboardingViewModel(new OnboardingService(settings), new OnboardingFlow(language, platforms, basics));
         return (wizard, language, platforms, steam, epic, nexusKeys);
     }
 
@@ -55,8 +57,8 @@ public sealed class OnboardingPlatformsTests : IDisposable
     public void The_step_lists_three_platforms_with_status_and_no_saved_state()
     {
         var (wizard, _, platforms, _, _, _) = Wizard();
-        Assert.Equal(["language", "platforms"], wizard.Flow.Steps.Select(step => step.StepId));
-        Assert.Equal(2, wizard.StepCount);
+        Assert.Equal(["language", "platforms", "basics"], wizard.Flow.Steps.Select(step => step.StepId));
+        Assert.Equal(3, wizard.StepCount);
         Assert.Equal("Język", wizard.CurrentStep!.Title);
 
         wizard.NextCommand.Execute(null);
@@ -64,7 +66,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
         Assert.Equal("Platformy", platforms.Title);
         Assert.Equal(2, wizard.StepNumber);
         Assert.True(wizard.CanGoBack);
-        Assert.False(wizard.CanGoNext);
+        Assert.True(wizard.CanGoNext);
         Assert.Equal(["Steam", "Epic Games", "Nexus Mods"], platforms.Platforms.Select(platform => platform.DisplayName));
         Assert.All(platforms.Platforms, platform => Assert.False(platform.IsSignedIn));
         Assert.All(platforms.Platforms, platform => Assert.Null(platform.Status));
@@ -104,15 +106,16 @@ public sealed class OnboardingPlatformsTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Later_skips_the_step_and_writes_nothing_but_the_marker()
+    public void Later_skips_to_the_last_page_and_writes_nothing_but_the_marker()
     {
         var (wizard, _, _, steam, _, _) = Wizard();
         wizard.NextCommand.Execute(null);
         wizard.SkipCommand.Execute(null);
+        // PAK-136: Skip from Platforms now lands on Basics instead of ending the flow.
+        Assert.Equal("basics", wizard.CurrentStep!.StepId);
+        wizard.FinishCommand.Execute(null);
         Assert.Equal(0, steam.LoginCalls);
         using var doc = JsonDocument.Parse(File.ReadAllText(settings));
-        // Leaving from the last page is a confirm: Next already saved the language, Skip
-        // then confirms only the last step (which saves nothing).
         Assert.True(doc.RootElement.GetProperty("onboardingCompleted").GetBoolean());
     }
 
@@ -136,11 +139,12 @@ public sealed class OnboardingPlatformsTests : IDisposable
         wizard.BackCommand.Execute(null);
         Assert.Same(language, wizard.CurrentStep);
         wizard.NextCommand.Execute(null);
+        wizard.NextCommand.Execute(null);
         wizard.FinishCommand.Execute(null);
 
         Assert.False(wizard.IsFirstRun());
         Assert.Equal("pl-PL", LanguageStepViewModel.Saved(settings));
-        Assert.Equal(2, wizard.StepCount);
+        Assert.Equal(3, wizard.StepCount);
     }
 
     [AvaloniaFact]
@@ -152,6 +156,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
         LocalizationService.Instance.CurrentLanguage = "pl-PL";
         wizard.NextCommand.Execute(null);
         await nexusKeys.SaveAsync("synthetic-nexus-key", TestContext.Current.CancellationToken);
+        wizard.NextCommand.Execute(null);
         wizard.FinishCommand.Execute(null);
 
         // A restart re-reads the stores and puts the wizard back on the first step.
@@ -182,6 +187,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(language == "en", current.Platforms[0].IsSignedIn);
             Assert.False(current.Platforms[1].IsSignedIn);
+            // Note: these platform rows are the wizard's; the basics scan is a fake with no games.
             Assert.False(current.Platforms[2].IsSignedIn);
             wizard.NextCommand.Execute(null);
             Assert.Same(current, wizard.CurrentStep);
