@@ -14,21 +14,27 @@ namespace Phaket.Tests;
 
 // PAK-134: the language step is the first registered step. Locale preselects it, a click
 // previews the language across the wizard, and only Next/Finish write it to settings.json.
+// The pinned locale keeps every expectation independent of the machine's locale.
 public sealed class OnboardingLanguageTests : IDisposable
 {
     private readonly string directory = TestAccounts.TempPath();
     private readonly string settings;
     private readonly List<Window> windows = [];
     private readonly string previousLanguage = LocalizationService.Instance.CurrentLanguage;
+    private readonly CultureInfo? previousLocale = LanguageStepViewModel.LocaleOverride;
 
     public OnboardingLanguageTests()
     {
         Directory.CreateDirectory(directory);
         settings = Path.Combine(directory, "settings.json");
+        // The wizard preselects the OS locale; pin it so the expectations never depend on
+        // the machine's locale (CI runs with an English one, dev machines often Polish).
+        LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo("pl-PL");
     }
 
     public void Dispose()
     {
+        LanguageStepViewModel.LocaleOverride = previousLocale;
         LocalizationService.Instance.CurrentLanguage = previousLanguage;
         foreach (var window in windows) window.Close();
         Directory.Delete(directory, true);
@@ -62,21 +68,45 @@ public sealed class OnboardingLanguageTests : IDisposable
         Assert.Equal("pl-PL", LanguageStepViewModel.Detect(CultureInfo.GetCultureInfo("pl-PL")));
         Assert.Null(LanguageStepViewModel.Detect(CultureInfo.GetCultureInfo("de-DE")));
 
-        var previous = CultureInfo.CurrentUICulture;
         try
         {
             // A fresh profile: the OS locale alone decides, and it previews nothing by itself.
-            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+            LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo("en-US");
             LocalizationService.Instance.CurrentLanguage = "pl-PL";
             var preselected = new LanguageStepViewModel(Path.Combine(directory, "fresh.json"));
             Assert.Equal("en", preselected.SelectedLanguage);
             Assert.True(preselected.Options.Single(option => option.Code == "en").IsSelected);
             Assert.Equal("pl-PL", LocalizationService.Instance.CurrentLanguage);
 
-            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("de-DE");
+            LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo("de-DE");
             Assert.Equal("pl-PL", new LanguageStepViewModel(Path.Combine(directory, "fresh2.json")).SelectedLanguage);
         }
-        finally { CultureInfo.CurrentUICulture = previous; }
+        finally { LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo("pl-PL"); }
+    }
+
+    // The same click flow, run once per OS locale: the chosen language, not the machine's, is shown.
+    [AvaloniaFact]
+    public void Clicking_english_previews_english_whatever_the_os_locale_is()
+    {
+        foreach (var osLocale in new[] { "pl-PL", "en" })
+        {
+            LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo(osLocale);
+            var (wizard, step) = Wizard();
+            // The wizard presets from the saved choice before the OS locale; start it fresh.
+            Assert.Null(SavedLanguage());
+            Assert.Equal(osLocale, step.SelectedLanguage);
+            // The preset previews nothing; the click switches the UI and the saved language.
+            LocalizationService.Instance.CurrentLanguage = "pl-PL";
+            Assert.Equal("Krok 1 z 3", wizard.StepCounterText);
+
+            step.Options.Single(option => option.Code == "en").Pick();
+            Assert.Equal("Language", wizard.CurrentStep!.Title);
+            Assert.Equal("Initial setup", wizard.Title);
+
+            wizard.FinishCommand.Execute(null);
+            Assert.Equal("en", SavedLanguage());
+            File.Delete(settings);
+        }
     }
 
     [AvaloniaFact]

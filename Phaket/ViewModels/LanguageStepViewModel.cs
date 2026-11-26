@@ -15,12 +15,17 @@ public sealed partial class LanguageStepViewModel : ObservableObject, IOnboardin
     // Reset, because the wizard is built once and a Finish may have saved a new language since.
     private string preset;
 
+    // The OS locale the step reads. Tests pin it instead of inheriting the machine's locale.
+    internal static CultureInfo? LocaleOverride { get; set; }
+
+    private static CultureInfo UILocale => LocaleOverride ?? CultureInfo.CurrentUICulture;
+
     [ObservableProperty] private string selectedLanguage;
 
     public LanguageStepViewModel(string settingsPath)
     {
         this.settingsPath = settingsPath;
-        preset = Saved(settingsPath) ?? Detect(CultureInfo.CurrentUICulture) ?? LocalizationService.DefaultLanguage;
+        preset = Saved(settingsPath) ?? Detect(UILocale) ?? LocalizationService.DefaultLanguage;
         Options = LocalizationService.Instance.AvailableLanguages
             .Select(code => new LanguageOption(code, Preview))
             .ToArray();
@@ -54,7 +59,7 @@ public sealed partial class LanguageStepViewModel : ObservableObject, IOnboardin
     // Restarting the wizard forgets nothing: the saved language is the preset again.
     public void Reset()
     {
-        preset = Saved(settingsPath) ?? Detect(CultureInfo.CurrentUICulture) ?? LocalizationService.DefaultLanguage;
+        preset = Saved(settingsPath) ?? Detect(UILocale) ?? LocalizationService.DefaultLanguage;
         SelectedLanguage = preset;
     }
 

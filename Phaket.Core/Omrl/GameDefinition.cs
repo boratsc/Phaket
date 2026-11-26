@@ -151,11 +151,16 @@ public static class SourcePolicy
         "BepInEx/BepInEx",
     };
 
-    public static void AllowGitHubRepository(string ownerAndRepo)
+    // allow: false lets a test drop its own probe entry instead of leaving it for other tests.
+    public static void AllowGitHubRepository(string ownerAndRepo, bool allow = true)
     {
         if (!IsValidGitHubRepository(ownerAndRepo))
             throw new ArgumentException("Expected a GitHub owner/repository pair.", nameof(ownerAndRepo));
-        lock (GitHubGate) GitHubRepos.Add(ownerAndRepo);
+        lock (GitHubGate)
+        {
+            if (allow) GitHubRepos.Add(ownerAndRepo);
+            else GitHubRepos.Remove(ownerAndRepo);
+        }
     }
 
     // Catalog artifacts come from the trusted server and are pinned by sha256.

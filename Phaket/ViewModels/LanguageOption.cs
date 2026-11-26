@@ -18,6 +18,9 @@ public sealed partial class LanguageOption : ObservableObject
 
     private readonly Action<string> pick;
 
+    // The same path the radio button's click takes.
+    internal void Pick() => pick(Code);
+
     public string Code { get; }
     public string DisplayName { get; }
     public string AutomationId { get; }

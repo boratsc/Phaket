@@ -46,10 +46,13 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     {
         this.service = service;
         this.flow = flow ?? new Registry();
-        localizationChanged = (_, _) =>
+        localizationChanged = (_, e) =>
         {
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(Subtitle));
+            // The counter is a format string too; re-read it in the same turn, before the
+            // asynchronous Item[] notification reaches any bindings.
+            if (e.PropertyName == "Item[]") StepCounterText = Counter();
         };
         LocalizationService.Instance.PropertyChanged += localizationChanged;
         ApplyStep();
@@ -115,12 +118,14 @@ public sealed partial class OnboardingViewModel : ViewModelBase
         CurrentStep = steps.Count == 0 ? new PlaceholderStep() : steps[index];
         CanGoBack = index > 0;
         CanGoNext = steps.Count > 0 && index < steps.Count - 1;
-        StepCounterText = string.Format(System.Globalization.CultureInfo.CurrentCulture,
-            LocalizationService.Instance["Onboarding.StepCounter"], StepNumber, StepCount);
+        StepCounterText = Counter();
         OnPropertyChanged(nameof(HasStepCounter));
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Subtitle));
     }
+
+    private string Counter() => string.Format(System.Globalization.CultureInfo.CurrentCulture,
+        LocalizationService.Instance["Onboarding.StepCounter"], StepNumber, StepCount);
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private void Back()

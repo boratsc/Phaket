@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -23,6 +24,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
     private readonly string settings;
     private readonly List<Window> windows = [];
     private readonly string previousLanguage = LocalizationService.Instance.CurrentLanguage;
+    private readonly CultureInfo? previousLocale = LanguageStepViewModel.LocaleOverride;
     // Shared by every wizard built here, so a later restart reads the same "signed in" state.
     private readonly InMemorySecretStore secrets = new();
 
@@ -30,10 +32,13 @@ public sealed class OnboardingPlatformsTests : IDisposable
     {
         Directory.CreateDirectory(directory);
         settings = Path.Combine(directory, "settings.json");
+        // Finish saves the preset language, so the OS locale decides it: pin Polish.
+        LanguageStepViewModel.LocaleOverride = CultureInfo.GetCultureInfo("pl-PL");
     }
 
     public void Dispose()
     {
+        LanguageStepViewModel.LocaleOverride = previousLocale;
         LocalizationService.Instance.CurrentLanguage = previousLanguage;
         foreach (var window in windows) window.Close();
         Directory.Delete(directory, true);
