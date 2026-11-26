@@ -12,6 +12,10 @@ public sealed record StubOptions
     public required string WorkDirectory { get; init; }
     public required string LocalAppData { get; init; }
 
+    // PAK-110 (serwer = źródło prawdy): kanał release i manifest Windows. Serwer przyjmuje tylko
+    // channel=release|beta oraz os=win|linux — każda inna wartość to 400 INVALID_PARAMETER.
+    internal const string DefaultManifestUrl = "https://phaket.app/api/releases?channel=release&os=win";
+
     public static StubOptions FromEnvironment() => new()
     {
         ManifestUri = Environment.GetEnvironmentVariable(InstallRunner.ManifestVariable) is { Length: > 0 } url
@@ -22,8 +26,6 @@ public sealed record StubOptions
             ? dir
             : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
     };
-
-    internal const string DefaultManifestUrl = "https://phaket.app/api/releases?channel=release";
 
     // Skąd brać pliki: pola File są nazwami plików, puste/null → katalog manifestu, tak jak u Velopack.
     // Produkcja: downloadBaseUrl z kontraktu PAK-110 (CDN paczek). Nadpisanie dla CI/testów.

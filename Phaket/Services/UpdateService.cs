@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using Velopack;
 using Velopack.Exceptions;
+using Velopack.Logging;
+using Velopack.Sources;
 
 namespace Phaket.Services;
 
@@ -46,9 +48,12 @@ public interface IUpdateSource
 // user's channel preference in settings.json. Velopack itself only runs in installed builds.
 public sealed class UpdateService
 {
-    // DO UZGODNIENIA PRZY DEPLOJU: docelowy adres statycznego feedu na VPS
-    // (releases.{channel}.json + nupkg w jednym katalogu). Nadpisanie: PHAKET_UPDATE_FEED.
-    internal const string DefaultFeedUrl = "https://phaket.app/updates/";
+    // PAK-110 (serwer = źródło prawdy): manifesty leżą w http://host:port/api/releases?channel=<kanał>&os=<win|linux>,
+    // pod którymi Velopack czyta i tak `releases.<kanał>.<os>.json`. Nadpisanie: PHAKET_UPDATE_FEED.
+    internal const string DefaultFeedUrl = "https://phaket.app/api/releases";
+
+    // Serwer przyjmuje tylko kanały release i beta (PhaketServer/Phaket.Api/Releases.cs Channels),
+    // os=win|linux wybiera manifest; obie wartości to też segmenty nazwy pliku manifestu.
 
     private readonly string settingsPath;
     private readonly Func<UpdateChannel, IUpdateSource> sourceFactory;
@@ -63,7 +68,7 @@ public sealed class UpdateService
         // Velopack keeps the channel the installation came from (a beta build is not cut
         // back to stable). An explicit choice also enables deliberate downgrades.
         this.sourceFactory = sourceFactory
-            ?? (channel => new VelopackUpdateSource(ResolveFeedUrl(), channel, ChannelExplicit));
+            ?? (channel => CreateVelopackSource(FeedUrl(channel, OperatingSystem.IsWindows()), channel, ChannelExplicit));
     }
 
     public UpdateChannel Channel { get; private set; }
@@ -80,10 +85,16 @@ public sealed class UpdateService
             ? custom
             : DefaultFeedUrl;
 
-    public static string ChannelName(UpdateChannel channel) => channel == UpdateChannel.Beta ? "beta" : "stable";
+    // Nasz feed: kanał i system wybierają manifest (manifest = katalog kanału z PAK-110).
+    public static string FeedUrl(UpdateChannel channel, bool windows) =>
+        ResolveFeedUrl() + "?channel=" + ChannelName(channel) + "&os=" + (windows ? "win" : "linux");
 
-    public static string FeedChannel(UpdateChannel channel, bool windows) =>
-        (windows ? "win-x64-" : "linux-x64-") + ChannelName(channel);
+    public static string ChannelName(UpdateChannel channel) => channel == UpdateChannel.Beta ? "beta" : "release";
+
+    // Velopack sam czyta tylko własne kształty manifestu (SimpleWebSource dokleja "<os>/"), więc
+    // kontrakt serwera PAK-110 czyta własne źródło. Kanał wybiera już adres manifestu.
+    internal static IUpdateSource CreateVelopackSource(string feedUrl, UpdateChannel channel, bool explicitChannel) =>
+        new VelopackUpdateSource(feedUrl, BuildOptions(channel, explicitChannel, OperatingSystem.IsWindows()));
 
     public static string KeyFor(UpdateError error) => error switch
     {
@@ -112,11 +123,10 @@ public sealed class UpdateService
         }
     }
 
-    // Velopack options for a source. Without an explicit user choice the channel is inherited
-    // from the installation and downgrades stay refused.
+    // Feed contains only the selected channel's packages, so no Velopack channel filter is needed
+    // and the stored preference only decides which manifest URL gets checked.
     internal static UpdateOptions BuildOptions(UpdateChannel channel, bool explicitChannel, bool windows) => new()
     {
-        ExplicitChannel = explicitChannel ? FeedChannel(channel, windows) : null,
         AllowVersionDowngrade = explicitChannel
     };
 
@@ -234,9 +244,9 @@ internal sealed class VelopackUpdateSource : IUpdateSource
     private readonly UpdateManager manager;
     private UpdateInfo? pending;
 
-    public VelopackUpdateSource(string feedUrl, UpdateChannel channel, bool explicitChannel = true)
+    public VelopackUpdateSource(string feedUrl, UpdateOptions options)
     {
-        manager = new UpdateManager(feedUrl, UpdateService.BuildOptions(channel, explicitChannel, OperatingSystem.IsWindows()));
+        manager = new UpdateManager(new ServerFeedSource(feedUrl), options);
     }
 
     public bool IsInstalled => manager.IsInstalled;
@@ -262,5 +272,64 @@ internal sealed class VelopackUpdateSource : IUpdateSource
         if (pending is null) throw new InvalidOperationException("No downloaded update to apply.");
         Trace.WriteLine($"Applying Phaket update {version}.");
         manager.ApplyUpdatesAndRestart(pending.TargetFullRelease);
+    }
+}
+
+// Feed serwera PAK-110: GET /api/releases?channel=<kanał>&os=<win|linux> zwraca
+// {success, latestVersion, downloadBaseUrl, releases[{Version, File, SHA256}]}, gdzie File to
+// nazwa pliku doklejana do downloadBaseUrl. Velopack czyta wyłącznie ten kształt przez to źródło.
+// Pełna nazwa interfejsu: Phaket.Services.IUpdateSource to własna szewka testowa.
+internal sealed class ServerFeedSource(string manifestUrl) : Velopack.Sources.IUpdateSource
+{
+    private readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(2) };
+
+    public async Task<VelopackAssetFeed> GetReleaseFeed(IVelopackLogger logger, string? appId, string channel,
+        Guid? stagingId = null, VelopackAsset? latestLocalRelease = null)
+    {
+        var json = await http.GetStringAsync(manifestUrl).ConfigureAwait(false);
+        return Parse(json);
+    }
+
+    // Osobno, żeby test bez sieci sprawdzał mapowanie kontraktu na VelopackAsset.
+    internal static VelopackAssetFeed Parse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.GetProperty("success").GetBoolean() is false) throw new InvalidDataException("Feed reports failure.");
+        var baseUrl = root.TryGetProperty("downloadBaseUrl", out var b) ? b.GetString() ?? "" : "";
+        var assets = new List<VelopackAsset>();
+        foreach (var release in root.GetProperty("releases").EnumerateArray())
+        {
+            var file = release.GetProperty("File").GetString() ?? "";
+            assets.Add(new VelopackAsset
+            {
+                PackageId = "Phaket",
+                Version = SemanticVersion.Parse(release.GetProperty("Version").GetString() ?? throw new InvalidDataException("Version")),
+                FileName = file.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? file : baseUrl + file,
+                SHA256 = release.TryGetProperty("SHA256", out var sha) ? sha.GetString() : null,
+                Size = release.TryGetProperty("Size", out var size) ? size.GetInt64() : 0,
+            });
+        }
+        return new VelopackAssetFeed { Assets = [.. assets] };
+    }
+
+    public async Task DownloadReleaseEntry(IVelopackLogger logger, VelopackAsset releaseEntry, string localFile,
+        Action<int> progress, CancellationToken cancelToken = default)
+    {
+        using var response = await http.GetAsync(releaseEntry.FileName, HttpCompletionOption.ResponseHeadersRead, cancelToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var source = await response.Content.ReadAsStreamAsync(cancelToken).ConfigureAwait(false);
+        await using var target = File.Create(localFile);
+        var buffer = new byte[81920];
+        long done = 0, total = response.Content.Headers.ContentLength ?? 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer, cancelToken).ConfigureAwait(false)) > 0)
+        {
+            await target.WriteAsync(buffer.AsMemory(0, read), cancelToken).ConfigureAwait(false);
+            done += read;
+            if (total > 0) progress?.Invoke((int)Math.Min(100, done * 100 / total));
+        }
+        progress?.Invoke(100);
     }
 }

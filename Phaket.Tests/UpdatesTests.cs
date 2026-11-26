@@ -56,12 +56,57 @@ public sealed class UpdatesTests
         Directory.CreateTempSubdirectory("phaket-updates-").FullName;
 
     [Fact]
-    public void Velopack_channel_is_os_plus_user_preference()
+    public void Velopack_channel_matches_the_server_contract()
     {
-        Assert.Equal("win-x64-stable", UpdateService.FeedChannel(UpdateChannel.Stable, windows: true));
-        Assert.Equal("win-x64-beta", UpdateService.FeedChannel(UpdateChannel.Beta, windows: true));
-        Assert.Equal("linux-x64-stable", UpdateService.FeedChannel(UpdateChannel.Stable, windows: false));
-        Assert.Equal("linux-x64-beta", UpdateService.FeedChannel(UpdateChannel.Beta, windows: false));
+        // PAK-110: serwer zna tylko release i beta; "stable" → 400 INVALID_PARAMETER.
+        Assert.Equal("release", UpdateService.ChannelName(UpdateChannel.Stable));
+        Assert.Equal("beta", UpdateService.ChannelName(UpdateChannel.Beta));
+        // Niski poziom: kanał wybiera adres manifestu, więc opcje Velopack go nie filtrują;
+// explicit choice dopuszcza tylko świadomy downgrade (PAK-124).
+        Assert.True(UpdateService.BuildOptions(UpdateChannel.Beta, explicitChannel: true, windows: true)
+            .AllowVersionDowngrade);
+        Assert.False(UpdateService.BuildOptions(UpdateChannel.Beta, explicitChannel: false, windows: true)
+            .AllowVersionDowngrade);
+    }
+
+    [Fact]
+    public void Server_feed_maps_the_PAK_110_contract_onto_Velopack_assets()
+    {
+        // Kształt odpowiedzi GET /api/releases (Phaket.Api/Releases.cs): File to nazwa pliku.
+        const string json = """
+            {"success":true,"channel":"release","os":"win","latestVersion":"0.2.0",
+             "downloadBaseUrl":"https://phaket.app/releases/",
+             "manifest":{"Releases":[{"Version":"0.2.0","File":"Phaket-0.2.0-full.nupkg","SHA256":"AA","Size":7}]},
+             "releases":[{"Version":"0.2.0","File":"Phaket-0.2.0-full.nupkg","SHA256":"AA","Size":7}]}
+            """;
+
+        var asset = Assert.Single(ServerFeedSource.Parse(json).Assets);
+
+        Assert.Equal("0.2.0", asset.Version.ToString());
+        Assert.Equal("https://phaket.app/releases/Phaket-0.2.0-full.nupkg", asset.FileName);
+        Assert.Equal("AA", asset.SHA256);
+        Assert.Equal(7, asset.Size);
+    }
+
+    [Fact]
+    public void Feed_url_asks_the_server_for_the_channel_and_os()
+    {
+        string? saved = Environment.GetEnvironmentVariable("PHAKET_UPDATE_FEED");
+        try
+        {
+            Environment.SetEnvironmentVariable("PHAKET_UPDATE_FEED", null);
+            // Kształt GET /api/releases?channel=<release|beta>&os=<win|linux> z PAK-110.
+            Assert.Equal("https://phaket.app/api/releases?channel=release&os=win",
+                UpdateService.FeedUrl(UpdateChannel.Stable, windows: true));
+            Assert.Equal("https://phaket.app/api/releases?channel=beta&os=linux",
+                UpdateService.FeedUrl(UpdateChannel.Beta, windows: false));
+
+            // Nadpisanie testowe/deployowe wskazuje inny feed; serwer doczepia kanał tak samo.
+            Environment.SetEnvironmentVariable("PHAKET_UPDATE_FEED", "https://feed.test/api/releases");
+            Assert.Equal("https://feed.test/api/releases?channel=beta&os=win",
+                UpdateService.FeedUrl(UpdateChannel.Beta, windows: true));
+        }
+        finally { Environment.SetEnvironmentVariable("PHAKET_UPDATE_FEED", saved); }
     }
 
     [Fact]
@@ -231,8 +276,9 @@ public sealed class UpdatesTests
             // A deliberate choice pins the channel; only then a downgrade is allowed.
             Assert.True(service.SetChannel(UpdateChannel.Beta));
             Assert.True(service.ChannelExplicit);
+            // PAK-110: the server knows only release/beta, and Velopack's id is the OS itself
+            // because the download URL comes ready-made from the manifest.
             var pinned = UpdateService.BuildOptions(UpdateChannel.Beta, explicitChannel: true, windows: false);
-            Assert.Equal("linux-x64-beta", pinned.ExplicitChannel);
             Assert.True(pinned.AllowVersionDowngrade);
             Assert.Contains("\"updateChannel\": \"beta\"", File.ReadAllText(path));
             Assert.True(new UpdateService(path, _ => new FakeSource()).ChannelExplicit);
@@ -251,10 +297,12 @@ public sealed class UpdatesTests
             Assert.False(service.ChannelExplicit);
 
             // Stable is the default but not yet a choice; picking it must persist, otherwise
-            // the inherited channel would stay allowed to downgrade silently.
+            // the inherited channel would stay allowed to downgrade silently. On disk it is the
+            // server's channel name (PAK-110: release), the enum stays Stable in code.
             Assert.True(service.SetChannel(UpdateChannel.Stable));
             Assert.True(service.ChannelExplicit);
-            Assert.Contains("\"updateChannel\": \"stable\"", File.ReadAllText(path));
+            Assert.Contains("\"updateChannel\": \"release\"", File.ReadAllText(path));
+            Assert.Equal(UpdateChannel.Stable, UpdateService.LoadChannel(path));
         }
         finally { Directory.Delete(root, true); }
     }

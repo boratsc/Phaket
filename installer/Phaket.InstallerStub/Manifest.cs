@@ -79,14 +79,17 @@ public static class ManifestParser
         }
     }
 
-    /// <summary>Najnowsza paczka *-full.nupkg według kolejności używanej przez Velopack.</summary>
+    /// <summary>Najnowsza paczka instalacyjna według kolejności używanej przez Velopack.</summary>
     public static ReleaseEntry? SelectLatest(Manifest manifest)
     {
         ReleaseEntry? best = null;
         var bestKey = Array.Empty<string>();
         foreach (var entry in manifest.Releases)
         {
-            if (!entry.File.EndsWith("-full.nupkg", StringComparison.OrdinalIgnoreCase)) continue;
+            // Pełne paczki (*-full.nupkg). Feed serwera publikuje tylko je, więc dopuszczamy każdą
+            // inną paczkę .nupkg tego kanału — wybór nie może się rozjechać z nazwami z serwera.
+            if (!entry.File.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)
+                || entry.File.EndsWith("-delta.nupkg", StringComparison.OrdinalIgnoreCase)) continue;
             var key = VersionKey(entry.Version);
             if (best is null || CompareKeys(key, bestKey) > 0) { best = entry; bestKey = key; }
         }

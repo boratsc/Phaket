@@ -1,7 +1,7 @@
 name: Installer stub (PhaketSetup.exe)
 
 # Uruchamianie RĘCZNE i rzadkie — artefakt pod stałym URL-em nie zmienia się przy wydaniach aplikacji.
-# Stub (PAK-114) pobiera z https://phaket.app/api/releases?channel=release najnowszą paczkę, sprawdza
+# Stub (PAK-114) pobiera z https://phaket.app/api/releases?channel=release&os=win najnowszą paczkę, sprawdza
 # SHA-256 i uruchamia Phaket-Setup.exe z feedu (albo seed-install, gdy manifest nie ma Setup.exe).
 # Publish: NativeAOT win-x64, twardy limit rozmiaru 4,9 MB (PublishSizeLimitBytes w csproj).
 # UI: jedno okno Win32 przez P/Invoke (bez WinForms/WinUI/XAML) + fallback konsolowy.

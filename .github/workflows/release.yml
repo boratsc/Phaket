@@ -1,9 +1,14 @@
 # =============================================================================================
 # URUCHOMIENIE TEGO WORKFLOW JEST WYDANIEM I WYMAGA WYRAŹNEJ ZGODY WŁAŚCICIELA.
 # =============================================================================================
+# Źródło prawdy nazw: serwer PAK-110 (PhaketServer/Phaket.Api/Releases.cs). Kontrakt:
+#   GET /api/releases?channel=<release|beta>&os=<win|linux>  →  {success, latestVersion,
+#   downloadBaseUrl, releases[{Version, File, SHA256}]}  czytane z  releases.<channel>.<os>.json
+#   (tylko kanały release/beta; File to sama nazwa pliku, bez ścieżek).
 # Kolejność: build+test obu projektów aplikacji (Linux i Windows) → vpk pack (Setup/Portable na
 # windows-latest, AppImage na ubuntu) → SHA256SUMS.txt → draft GitHub Release z paczkami per OS →
-# deploy po SSH/SCP (nupkg + releases.*.json + Setup/AppImage) → publikacja release.
+# deploy po SSH/SCP (paczki + Phaket-Setup.exe, potem manifest releases.<channel>.<os>.json) →
+# publikacja release.
 # Promocja beta→prod = to samo uruchomienie z channel=release (bez kopiowania plików między kanałami).
 # Bez podpisów kodu (brak certyfikatu, decyzja 25.11.2026) i bez ogłoszeń Discord.
 #
@@ -14,15 +19,15 @@
 #   3. Wklej klucz prywatny jako base64:   base64 -w0 phaket-ci | ... → sekret DEPLOY_SSH_PRIVATE_KEY
 # Variables (… → Variables):
 #   4. DEPLOY_HOST = vps-b99a39c3.vps.ovh.net, DEPLOY_USER = debian
-#   5. (opcjonalnie) FEED_PUBLIC_BASE = publiczny prefiks katalogu paczek, wpisywany do manifestów
-#      serwera (GET /api/releases?channel=release → downloadBaseUrl); domyślnie
-#      https://phaket.app/phaket/releases/<channel>
+#   5. (opcjonalnie) RELEASES_DOWNLOAD_BASE_URL = publiczny prefiks paczek w manifeście serwera;
+#      domyślnie https://phaket.app/releases/ (jak w compose.yaml serwera).
 # Uprawnienia: GITHUB_TOKEN wystarcza do draft release (contents: write); brak sekretów płatnych.
 #
-# Struktura katalogów na serwerze (nginx w /srv/synapsekit-boracik):
-#   /srv/synapsekit-boracik/nginx/html/phaket/releases/<beta|release>/<os>/     ← paczki per OS
-#   /srv/synapsekit-boracik/nginx/html/phaket-velopack/<channel>/releases.<channel>.<os>.json
-# Pliki przenosimy tylko w obrębie katalogu paczek — manifesty muszą wskazywać istniejące pliki.
+# Struktura katalogów na serwerze (volumeny z PhaketServer/compose.yaml):
+#   releases_packages:/usr/share/nginx/html/releases/<os>/                ← paczki i instalatory per OS
+#   releases_manifests:/data/releases/releases.<channel>.<os>.json        ← czytane przez /api/releases
+# Volumeny Dockera nie są katalogami hosta: skrypty scripts/server-deploy.py kopiują pliki przez
+# `docker compose exec/cp` w repozytorium serwera (~/PhaketServer). Plik trafia PRZED manifestem.
 # =============================================================================================
 
 name: Release
@@ -35,7 +40,7 @@ on:
         required: true
         type: string
       channel:
-        description: 'Kanał aktualizacji'
+        description: 'Kanał aktualizacji (serwer zna tylko te dwa)'
         required: true
         type: choice
         options: [beta, release]
@@ -57,8 +62,7 @@ permissions:
 
 env:
   VPK_VERSION: 1.2.161
-  FEED_ROOT: /srv/synapsekit-boracik/nginx/html/phaket/releases
-  MANIFEST_ROOT: /srv/synapsekit-boracik/nginx/html/phaket-velopack
+  SERVER_ROOT: ~/PhaketServer
 
 jobs:
   build-windows:
@@ -90,10 +94,20 @@ jobs:
           .vpk/vpk.exe pack
           -u Phaket -v "${{ inputs.version }}"
           --packDir publish/win-x64 --mainExe Phaket.exe
-          --channel "win-x64-${{ inputs.channel }}"
           --icon Phaket/Assets/brand/phaket-app-icon.ico
           --packTitle Phaket --packAuthors "Bartosz Gradzik"
           --outputDir releases/win-x64 --runtime win-x64
+
+      # Kanał należy do serwera (release/beta), nie do paczki: bez --channel vpk używa "win".
+      # Setup.exe jedzie do feedu pod stałą nazwą, bo stub instalatora (PAK-114) szuka
+      # wpisu "Phaket-Setup.exe" w releases[] i uruchamia go po weryfikacji SHA-256.
+      - name: Name the installer for the feed
+        shell: bash
+        run: |
+          cd releases/win-x64
+          setup=$(find releases/win-x64 -maxdepth 1 -name 'Phaket-*-Setup.exe' -print -quit)
+          [[ -n "$setup" ]] || { echo "vpk nie utworzył Setup.exe" >&2; exit 1; }
+          mv "$setup" Phaket-Setup.exe
 
       - name: SHA256SUMS (Windows)
         shell: bash
@@ -134,7 +148,6 @@ jobs:
           .vpk/vpk pack
           -u Phaket -v "${{ inputs.version }}"
           --packDir publish/linux-x64 --mainExe Phaket
-          --channel "linux-x64-${{ inputs.channel }}"
           --icon Phaket/Assets/brand/phaket-sygnet-512.png
           --categories Utility
           --compression gzip
@@ -184,9 +197,6 @@ jobs:
           pattern: phaket-*
           merge-multiple: true
 
-      - name: Install vpk
-        run: dotnet tool install --tool-path .vpk vpk --version "$VPK_VERSION"
-
       - name: Configure SSH
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -197,50 +207,41 @@ jobs:
           chmod 600 ~/.ssh/deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      # 1) Paczki i instalatory → phaket/releases/<channel>/<os>/  2) manifesty → phaket-velopack/.
-      # Plik trafia PRZED manifestem; przerwany deploy zostawia stary manifest, więc użytkownik
-      # nie dostanie 404 na brakującej paczce.
-      - name: Deploy packages
+      - name: Upload release files to the server volumes
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           CHANNEL: ${{ inputs.channel }}
+          SERVER_ROOT: ${{ env.SERVER_ROOT }}
         run: |
           set -euo pipefail
-          for os in win-x64 linux-x64; do
-            [[ -d "assets/$os" ]] || { echo "Brak artefaktów $os" >&2; exit 1; }
-            ssh -i ~/.ssh/deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p $FEED_ROOT/$CHANNEL/$os"
-            # Bez --delete: feed trzyma poprzednie wersje (delta/rollback), rsync tylko dokłada.
-            rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
-              "assets/$os"/ "$DEPLOY_USER@$DEPLOY_HOST:$FEED_ROOT/$CHANNEL/$os/"
+          ssh -i ~/.ssh/deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "python3 $SERVER_ROOT/scripts/server-deploy.py --channel $CHANNEL --stage-dir $SERVER_ROOT/staging" < /dev/null
+          # Paczki i instalatory (bez --delete: feed trzyma poprzednie wersje), bez SHA256SUMS.txt.
+          for os in win linux; do
+            rsync -az --exclude SHA256SUMS.txt -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
+              "assets/$os-x64"/ "$DEPLOY_USER@$DEPLOY_HOST:$SERVER_ROOT/staging/$os/"
           done
+          # Manifesty z tych samych paczek, które zaraz trafią na serwer (Setup.exe bierze wersję wydania);
+          # kolejność wydań liczy serwer.
+          for os in win linux; do
+            python3 scripts/feed-manifest.py --version "${{ inputs.version }}" \
+              --out "manifests/releases.$CHANNEL.$os.json" staging/$os/*
+          done
+          rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" manifests/ \
+            "$DEPLOY_USER@$DEPLOY_HOST:$SERVER_ROOT/staging/manifests/"
 
-      # Manifesty generujemy z katalogów na serwerze (vpk upload local --regenerate), więc feed
-      # uwzględnia poprzednie wydania kanału i nie gubi historii. downloadBaseUrl wskazuje publiczny
-      # prefiks paczek; Velopack dokłada do niego "<os>/<plik>".
-      - name: Deploy manifests
+      # Plik w wolumenie paczek PRZED manifestem; przerwany deploy zostawia stary manifest, więc
+      # użytkownik nie dostanie 404 na brakującej paczce. --clean czyści katalog staging.
+      - name: Commit release into the server volumes
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           CHANNEL: ${{ inputs.channel }}
-          FEED_PUBLIC_BASE: ${{ vars.FEED_PUBLIC_BASE }}
+          SERVER_ROOT: ${{ env.SERVER_ROOT }}
         run: |
-          set -euo pipefail
-          base="${FEED_PUBLIC_BASE:-https://phaket.app/phaket/releases/$CHANNEL}"
-          remote="$DEPLOY_USER@$DEPLOY_HOST"
-          ssh -i ~/.ssh/deploy -o BatchMode=yes "$remote" "mkdir -p $MANIFEST_ROOT/$CHANNEL"
-          mkdir -p manifests
-
-          for os in win-x64 linux-x64; do
-            feed="$FEED_ROOT/$CHANNEL/$os"
-            mkdir -p "manifests/$os"
-            rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" "$remote:$feed/" "manifests/$os/"
-            .vpk/vpk upload local --outputDir "manifests/$os" --path "manifests/$os" --channel "$CHANNEL-$os" --regenerate
-            python3 scripts/feed-manifest.py --base "$base/$os/" --out "manifests/releases.$CHANNEL.$os.json" \
-              "manifests/$os/releases.$CHANNEL-$os.json"
-            scp -i ~/.ssh/deploy "manifests/releases.$CHANNEL.$os.json" \
-              "$remote:$MANIFEST_ROOT/$CHANNEL/releases.$CHANNEL.$os.json"
-          done
+          ssh -i ~/.ssh/deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "python3 $SERVER_ROOT/scripts/server-deploy.py --channel $CHANNEL --stage-dir $SERVER_ROOT/staging --clean" < /dev/null
 
       - name: Publish GitHub Release
         if: ${{ inputs.publishTarget != 'none' }}

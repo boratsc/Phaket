@@ -47,12 +47,12 @@ public sealed class VersionSelectionTests
     [Fact]
     public void Feed_generated_by_release_script_matches_stub_expectations()
     {
-        // Kształt pliku z scripts/feed-manifest.py: File jako absolutny URL, SHA256 uppercase.
+        // Kształt pliku z serwera (PAK-110): File jest nazwą pliku, adres dokłada downloadBaseUrl.
         const string sha = "3E23E8160039594A33894F6564E1B1348BBD7A0088D42C4ACB73EEAED59C009D";
         var json = $$"""
-        {"success":true,"latestVersion":"0.2.0","downloadBaseUrl":"https://phaket.app/phaket/releases/release/win-x64/",
-         "releases":[{"Version":"0.2.0","File":"https://phaket.app/phaket/releases/release/win-x64/Phaket-0.2.0-full.nupkg","SHA256":"{{sha}}"},
-                     {"Version":"0.1.0","File":"https://phaket.app/phaket/releases/release/win-x64/Phaket-0.1.0-full.nupkg","SHA256":"{{sha}}"}]}
+        {"success":true,"latestVersion":"0.2.0","downloadBaseUrl":"https://phaket.app/releases/release/win/",
+         "releases":[{"Version":"0.2.0","File":"Phaket-0.2.0-full.nupkg","SHA256":"{{sha}}"},
+                     {"Version":"0.1.0","File":"Phaket-0.1.0-full.nupkg","SHA256":"{{sha}}"}]}
         """;
 
         var latest = ManifestParser.SelectLatest(ManifestParser.Parse(json));

@@ -48,6 +48,18 @@ public sealed class ManifestTests
         Assert.Null(ManifestParser.SelectLatest(manifest));
     }
 
+    [Fact]
+    public void Selects_any_full_package_name_the_server_publishes()
+    {
+        // Serwer nie gwarantuje wzorca nazwy pełnej paczki (skrypt nazywa ją sam); stub musi
+        // przyjąć to, co leży w releases[] i odrzucić tylko paczkę delta.
+        var manifest = ManifestParser.Parse(Bytes.Manifest(
+            ("1.0.0", "Phaket-win-x64-1.0.0-delta.nupkg", Sha),
+            ("1.0.0", "Phaket-1.0.0.nupkg", Sha)));
+
+        Assert.Equal("Phaket-1.0.0.nupkg", ManifestParser.SelectLatest(manifest)!.File);
+    }
+
     [Theory]
     [InlineData("../../escape-full.nupkg")]
     [InlineData("sub/dir/Phaket-1.0.0-full.nupkg")]
