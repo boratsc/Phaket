@@ -520,6 +520,8 @@
   "Onboarding.Next": "Next",
   "Onboarding.Skip": "Skip",
   "Onboarding.Finish": "Finish",
+  "Onboarding.Language.Title": "Language",
+  "Onboarding.Language.Description": "Choose the interface language. The choice applies immediately across the whole wizard; Skip saves nothing.",
   "Onboarding.Placeholder.Title": "All set to go",
   "Onboarding.Placeholder.Description": "This window will gather a few starting settings. You can skip it and head straight into the app — Settings are always available in the menu.",
   "Onboarding.Restart.Title": "Initial setup",

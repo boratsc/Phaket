@@ -25,8 +25,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public SteamPromptViewModel SteamPrompt => SteamPromptViewModel.Shared;
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
-    // Shared with the settings page ("run initial setup") and the shell's wizard host.
-    public OnboardingViewModel Onboarding { get; } = new();
+    // Shared with the settings page ("run initial setup") and the shell's wizard host; App
+    // builds the one instance so the wizard steps are registered in exactly one place.
+    public OnboardingViewModel Onboarding { get; }
     public HelpViewModel Help { get; } = new();
     public AccountsViewModel Accounts { get; }
     public ThemeService Theme { get; }
@@ -60,8 +61,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     internal MainWindowViewModel(AccountServices accounts, SettingsViewModel settings, string? appDataRoot = null,
         IModpackApiClient? modpackApi = null, ICommunitiesApiClient? communitiesApi = null,
-        ISignedRequestSigner? signer = null)
+        ISignedRequestSigner? signer = null, OnboardingViewModel? onboarding = null)
     {
+        Onboarding = onboarding ?? new OnboardingViewModel();
         this.appDataRoot = appDataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
         var endpoint = CatalogSettings.Load(CatalogSettings.SettingsFile(this.appDataRoot));
         this.modpackApi = modpackApi ?? new ModpackApiClient(endpoint, this.appDataRoot);

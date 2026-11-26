@@ -11,8 +11,11 @@ public sealed class LocalizationService : INotifyPropertyChanged
 {
     public static LocalizationService Instance { get; } = new();
 
+    // Polish is the product's first language: the fallback when the OS locale is not shipped.
+    public const string DefaultLanguage = "pl-PL";
+
     private readonly Dictionary<string, Dictionary<string, string>> locales = new(StringComparer.Ordinal);
-    private string currentLanguage = "pl-PL";
+    private string currentLanguage = DefaultLanguage;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

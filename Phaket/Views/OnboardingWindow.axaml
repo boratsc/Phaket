@@ -11,7 +11,25 @@
         AutomationProperties.Name="{Binding Title}"
         Background="{DynamicResource AppBackgroundBrush}">
   <Window.DataTemplates>
-    <!-- The placeholder step is the only page until PAK-134+ register their steps. -->
+    <!-- PAK-134: language step. Labels read the localization service directly, so the
+         radio buttons re-render in the newly picked language as soon as it is chosen. -->
+    <DataTemplate DataType="{x:Type vm:LanguageStepViewModel}" x:DataType="vm:LanguageStepViewModel">
+      <StackPanel Spacing="10" Margin="4">
+        <TextBlock Classes="sectionTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="2" />
+        <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+        <ItemsControl ItemsSource="{Binding Options}" AutomationProperties.Name="{Binding Title}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:LanguageOption">
+              <RadioButton GroupName="OnboardingLanguage" Margin="0,4,0,0" IsChecked="{Binding IsSelected}"
+                           AutomationProperties.AutomationId="{Binding AutomationId}">
+                <TextBlock Text="{Binding DisplayName}" />
+              </RadioButton>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </DataTemplate>
+    <!-- PAK-133 empty-registry page; still rendered by builds without registered steps. -->
     <DataTemplate DataType="{x:Type vm:OnboardingViewModel+PlaceholderStep}" x:DataType="vm:OnboardingViewModel+PlaceholderStep">
       <StackPanel Spacing="10" Margin="4">
         <TextBlock Classes="sectionTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="2" />

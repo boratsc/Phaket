@@ -14,7 +14,7 @@ namespace Phaket.ViewModels;
 
 public partial class SettingsViewModel : ViewModelBase
 {
-    private static string DefaultSettingsPath => Path.Combine(
+    internal static string DefaultSettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "settings.json");
 
     internal static string DefaultSecretDirectory => Path.Combine(

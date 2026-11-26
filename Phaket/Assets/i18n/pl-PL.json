@@ -520,6 +520,8 @@
   "Onboarding.Next": "Dalej",
   "Onboarding.Skip": "Pomiń",
   "Onboarding.Finish": "Zakończ",
+  "Onboarding.Language.Title": "Język",
+  "Onboarding.Language.Description": "Wybierz język interfejsu. Wybór działa od razu w całym kreatorze; „Pomiń” niczego nie zapisuje.",
   "Onboarding.Placeholder.Title": "Wszystko gotowe do pracy",
   "Onboarding.Placeholder.Description": "To okno będzie zbierać kilka ustawień startowych. Możesz je pominąć i od razu przejść do aplikacji — Ustawienia są zawsze dostępne w menu.",
   "Onboarding.Restart.Title": "Konfiguracja początkowa",

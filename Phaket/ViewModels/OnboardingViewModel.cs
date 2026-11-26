@@ -6,10 +6,11 @@ namespace Phaket.ViewModels;
 
 // Built once in App and shared by the shell and the settings page, so both see the same
 // start/restart decisions. Labels read the localization keys live, so a language step
-// (PAK-134) changes them without rebuilding anything.
+// (PAK-134) changes them without rebuilding anything. Next and Finish confirm the current
+// step (the flow saves it in LeaveAsync); Skip and closing do not.
 public sealed partial class OnboardingViewModel : ViewModelBase
 {
-    // Nothing registered yet: one calm page saying everything is optional.
+    // Empty-registry fixture: one calm page saying everything is optional (tests keep it).
     public sealed class PlaceholderStep : ObservableObject, IOnboardingStep
     {
         public string StepId => "placeholder";
@@ -29,7 +30,8 @@ public sealed partial class OnboardingViewModel : ViewModelBase
         public Task LeaveAsync(IOnboardingStep step) => Task.CompletedTask;
     }
 
-    // PAK-134 extension point: the language step's own completion and reset hooks go here.
+    // PAK-134: the registry is built in App and shared with the shell, so a step that saves
+    // its own state is confirmed and reset by the wizard itself, not by the first-run marker.
     public static OnboardingService CreateService(string settingsPath) => new(settingsPath);
 
     private readonly OnboardingService service;
@@ -65,6 +67,16 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     public string Title => LocalizationService.Instance["Onboarding.Title"];
     public string Subtitle => LocalizationService.Instance["Onboarding.Subtitle"];
 
+    // confirm: Next/Finish, which keeps the current step's choice; skipping and closing do not.
+    private void LeaveFlow(bool confirm)
+    {
+        if (confirm && flow.Steps.Count > 0) _ = flow.LeaveAsync(CurrentStep!);
+        // Re-arming the current step's preset, so a restarting wizard shows the new saved state.
+        if (flow is LanguageStepActions local) local.Reset();
+        service.Complete();
+        VisibilityChanged?.Invoke(this, false);
+    }
+
     // Raised by the settings entry and when the flow ends; the window layer subscribes once.
     public event EventHandler<bool>? VisibilityChanged;
 
@@ -79,6 +91,7 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     [RelayCommand]
     private void Restart()
     {
+        if (flow is LanguageStepActions local) local.Reset();
         service.Reset();
         VisibilityChanged?.Invoke(this, true);
     }
@@ -106,33 +119,33 @@ public sealed partial class OnboardingViewModel : ViewModelBase
         ApplyStep();
     }
 
+    // Leaving a step through Next keeps its choice (the flow saves it in LeaveAsync).
     [RelayCommand(CanExecute = nameof(CanGoNext))]
     private void Next()
     {
+        _ = flow.LeaveAsync(CurrentStep!);
         index++;
         ApplyStep();
     }
 
-    // Skipping is leaving a step without acting on it: nothing blocks the flow.
+    // Skipping is leaving a step without acting on it: nothing blocks the flow, it lands on
+    // the last page, and no step's choice is saved (Finish there would count as confirming).
     [RelayCommand]
     private void Skip()
     {
-        if (CanGoNext) Next();
-        else Finish();
+        if (flow.Steps.Count > 0 && index < flow.Steps.Count - 1)
+        {
+            index = flow.Steps.Count - 1;
+            ApplyStep();
+            return;
+        }
+        LeaveFlow(false);
     }
 
     [RelayCommand]
-    private void Finish()
-    {
-        service.Complete();
-        VisibilityChanged?.Invoke(this, false);
-    }
+    private void Finish() => LeaveFlow(true);
 
     // Closing the window is a skip: closing the app mid-wizard must not ask again next start.
     [RelayCommand]
-    private void Cancel()
-    {
-        service.Complete();
-        VisibilityChanged?.Invoke(this, false);
-    }
+    private void Cancel() => LeaveFlow(false);
 }
