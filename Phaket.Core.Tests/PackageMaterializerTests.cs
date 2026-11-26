@@ -88,10 +88,10 @@ public sealed class PackageMaterializerTests : IDisposable
     {
         var cache = CreateCache();
         long last = 0, total = -1;
-        var progress = new Progress<(long copied, long total)>(p => { last = p.copied; total = p.total; });
+        // A synchronous IProgress, like the house SyncProgress: Progress<T> posts asynchronously
+        // to the captured sync context and races the assert under parallel test runs.
+        var progress = new SyncTupleProgress(p => { last = p.copied; total = p.total; });
         await PackageMaterializer.MaterializeAsync(cache, Path.Combine(root, "pkg"), progress, new FakeCloner(probe: false), CT);
-        // Progress posts to the sync context; the final state is still observable here.
-        for (var i = 0; i < 50 && total < 0; i++) await Task.Delay(10, CT);
         Assert.Equal(total, last);
     }
 
@@ -300,4 +300,10 @@ public sealed class PackageMaterializerTests : IDisposable
         OperatingSystem.IsWindows()
             ? [Path.GetTempPath()]
             : [Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Path.GetTempPath()];
+
+    // Progress that reports on the calling thread, so a test can assert right after await.
+    private sealed class SyncTupleProgress(Action<(long copied, long total)> report) : IProgress<(long copied, long total)>
+    {
+        public void Report((long copied, long total) value) => report(value);
+    }
 }
