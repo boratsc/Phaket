@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- PAK-114: logika instalatora-stuba jako BIBLIOTEKA (testy na Linuksie bez AOT/Windows).
+       Cienki launcherowy projekt win-x64 z AOT: installer/Phaket.InstallerStub.Win32. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>Phaket.InstallerStub</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.1.0</Version>
+    <Authors>Bartosz Gradzik</Authors>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/boratsc/Phaket</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Phaket.InstallerStub.Tests" />
+  </ItemGroup>
+
+</Project>

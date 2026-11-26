@@ -3,4 +3,7 @@
   <Project Path="Phaket.Core.Tests/Phaket.Core.Tests.csproj" />
   <Project Path="Phaket.Tests/Phaket.Tests.csproj" />
   <Project Path="Phaket/Phaket.csproj" />
+  <Project Path="installer/Phaket.InstallerStub/Phaket.InstallerStub.csproj" />
+  <Project Path="installer/Phaket.InstallerStub.Win32/Phaket.InstallerStub.Win32.csproj" Condition="'$(OS)' == 'Windows_NT'" />
+  <Project Path="installer/Phaket.InstallerStub.Tests/Phaket.InstallerStub.Tests.csproj" />
 </Solution>

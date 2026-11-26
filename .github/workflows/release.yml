@@ -1,30 +1,67 @@
-name: Release installers
+# =============================================================================================
+# URUCHOMIENIE TEGO WORKFLOW JEST WYDANIEM I WYMAGA WYRAŹNEJ ZGODY WŁAŚCICIELA.
+# =============================================================================================
+# Kolejność: build+test obu projektów aplikacji (Linux i Windows) → vpk pack (Setup/Portable na
+# windows-latest, AppImage na ubuntu) → SHA256SUMS.txt → draft GitHub Release z paczkami per OS →
+# deploy po SSH/SCP (nupkg + releases.*.json + Setup/AppImage) → publikacja release.
+# Promocja beta→prod = to samo uruchomienie z channel=release (bez kopiowania plików między kanałami).
+# Bez podpisów kodu (brak certyfikatu, decyzja 25.11.2026) i bez ogłoszeń Discord.
+#
+# ==== Konfiguracja (działanie właściciela repo — workflow NIE zakłada, że to istnieje) ==========
+# Sekrety (Settings → Secrets and variables → Actions → Secrets):
+#   1. Utwórz klucz SSH do deployu:        ssh-keygen -t ed25519 -C phaket-ci -f phaket-ci -N ""
+#   2. Klucz publiczny dodaj na serwerze:  ~debian/.ssh/authorized_keys
+#   3. Wklej klucz prywatny jako base64:   base64 -w0 phaket-ci | ... → sekret DEPLOY_SSH_PRIVATE_KEY
+# Variables (… → Variables):
+#   4. DEPLOY_HOST = vps-b99a39c3.vps.ovh.net, DEPLOY_USER = debian
+#   5. (opcjonalnie) FEED_PUBLIC_BASE = publiczny prefiks katalogu paczek, wpisywany do manifestów
+#      serwera (GET /api/releases?channel=release → downloadBaseUrl); domyślnie
+#      https://phaket.app/phaket/releases/<channel>
+# Uprawnienia: GITHUB_TOKEN wystarcza do draft release (contents: write); brak sekretów płatnych.
+#
+# Struktura katalogów na serwerze (nginx w /srv/synapsekit-boracik):
+#   /srv/synapsekit-boracik/nginx/html/phaket/releases/<beta|release>/<os>/     ← paczki per OS
+#   /srv/synapsekit-boracik/nginx/html/phaket-velopack/<channel>/releases.<channel>.<os>.json
+# Pliki przenosimy tylko w obrębie katalogu paczek — manifesty muszą wskazywać istniejące pliki.
+# =============================================================================================
 
-# Buduje instalatory Velopack (Setup.exe / AppImage) i publikuje je jako artefakty CI.
-# Publikacja feedu na serwer odbywa się poza CI: scripts/publish-feed.sh.
+name: Release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Wersja wydania, np. 0.1.0 lub 0.1.1-beta.1 (wymagana)'
+        required: true
+        type: string
       channel:
         description: 'Kanał aktualizacji'
+        required: true
         type: choice
-        options: [beta, stable]
+        options: [beta, release]
         default: beta
-      version:
-        description: 'Wersja (puste = z Phaket.csproj)'
-        required: false
+      publishTarget:
+        description: 'Co opublikować na końcu'
+        required: true
+        type: choice
+        options: [github-draft+server, github-draft, none]
+        default: none
+
+# Dwa przebiegi naraz nie mogą mieszać tego samego kanału na serwerze.
+concurrency:
+  group: release-${{ inputs.channel }}
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # draft release + upload paczek
 
 env:
   VPK_VERSION: 1.2.161
+  FEED_ROOT: /srv/synapsekit-boracik/nginx/html/phaket/releases
+  MANIFEST_ROOT: /srv/synapsekit-boracik/nginx/html/phaket-velopack
 
 jobs:
-  windows:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,19 +69,12 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Resolve version and channel
-        shell: bash
+      # Build+test PRZED pakowaniem: wydanie nie może powstać z kodu, który nie przechodzi testów.
+      - name: Build and test
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            case "$VERSION" in *-*) CHANNEL=beta ;; *) CHANNEL=stable ;; esac
-          else
-            VERSION="${{ inputs.version }}"
-            [ -z "$VERSION" ] && VERSION=$(dotnet msbuild Phaket/Phaket.csproj -getProperty:Version)
-            CHANNEL="${{ inputs.channel }}"
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+          dotnet restore Phaket.slnx
+          dotnet build Phaket.slnx -c Release --no-restore
+          dotnet test Phaket.slnx -c Release --no-build --no-restore
 
       - name: Install vpk
         shell: bash
@@ -54,24 +84,30 @@ jobs:
         shell: bash
         run: dotnet publish Phaket/Phaket.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
 
-      - name: Pack Setup.exe
+      - name: Pack Setup.exe and Portable.zip
         shell: bash
         run: >
           .vpk/vpk.exe pack
-          -u Phaket -v "$VERSION"
-          -p publish/win-x64 -e Phaket.exe
-          -c "win-x64-$CHANNEL"
-          -i Phaket/Assets/brand/phaket-app-icon.ico
+          -u Phaket -v "${{ inputs.version }}"
+          --packDir publish/win-x64 --mainExe Phaket.exe
+          --channel "win-x64-${{ inputs.channel }}"
+          --icon Phaket/Assets/brand/phaket-app-icon.ico
           --packTitle Phaket --packAuthors "Bartosz Gradzik"
-          -o releases/win-x64 -r win-x64
+          --outputDir releases/win-x64 --runtime win-x64
+
+      - name: SHA256SUMS (Windows)
+        shell: bash
+        run: |
+          cd releases/win-x64
+          sha256sum -- * > SHA256SUMS.txt
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: phaket-win-x64-${{ env.CHANNEL }}
+          name: phaket-win-x64-${{ inputs.channel }}
           path: releases/win-x64
           if-no-files-found: error
 
-  linux:
+  build-linux:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -79,44 +115,135 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Resolve version and channel
-        shell: bash
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            case "$VERSION" in *-*) CHANNEL=beta ;; *) CHANNEL=stable ;; esac
-          else
-            VERSION="${{ inputs.version }}"
-            [ -z "$VERSION" ] && VERSION=$(dotnet msbuild Phaket/Phaket.csproj -getProperty:Version)
-            CHANNEL="${{ inputs.channel }}"
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
-
-      - name: Install vpk and mksquashfs
+      - name: Install vpk and AppImage tooling
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y squashfs-tools
+          sudo apt-get install -y squashfs-tools file
           dotnet tool install --tool-path .vpk vpk --version "$VPK_VERSION"
 
       - name: Publish linux-x64
         shell: bash
         run: dotnet publish Phaket/Phaket.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
 
+      # Velopack 1.2.161: AppImage wymaga --icon; --categories domyślnie Utility (podajemy jawnie);
+      # --compression gzip (domyślne, najszybsze rozpakowanie; xz mniejszy, ale wolniejszy start).
       - name: Pack AppImage
         shell: bash
         run: >
           .vpk/vpk pack
-          -u Phaket -v "$VERSION"
-          -p publish/linux-x64 -e Phaket
-          -c "linux-x64-$CHANNEL"
-          -i Phaket/Assets/brand/phaket-sygnet-512.png
+          -u Phaket -v "${{ inputs.version }}"
+          --packDir publish/linux-x64 --mainExe Phaket
+          --channel "linux-x64-${{ inputs.channel }}"
+          --icon Phaket/Assets/brand/phaket-sygnet-512.png
+          --categories Utility
+          --compression gzip
           --packTitle Phaket --packAuthors "Bartosz Gradzik"
-          -o releases/linux-x64 -r linux-x64
+          --outputDir releases/linux-x64 --runtime linux-x64
+
+      - name: SHA256SUMS (Linux)
+        shell: bash
+        run: |
+          cd releases/linux-x64
+          sha256sum -- * > SHA256SUMS.txt
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: phaket-linux-x64-${{ env.CHANNEL }}
+          name: phaket-linux-x64-${{ inputs.channel }}
           path: releases/linux-x64
           if-no-files-found: error
+
+  draft-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v5
+        with:
+          path: assets
+          pattern: phaket-*
+          merge-multiple: true
+
+      - name: Draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --draft --title "Phaket ${{ inputs.version }}" \
+            --notes "Kanał: ${{ inputs.channel }}. Sumy kontrolne: SHA256SUMS.txt. Instalator: https://phaket.app/download/PhaketSetup.exe (Windows), paczka portable w załącznikach." \
+            assets/*
+
+  deploy:
+    needs: [build-windows, build-linux]
+    if: ${{ inputs.publishTarget != 'none' }}
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v5
+        with:
+          path: assets
+          pattern: phaket-*
+          merge-multiple: true
+
+      - name: Install vpk
+        run: dotnet tool install --tool-path .vpk vpk --version "$VPK_VERSION"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s' "$DEPLOY_SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # 1) Paczki i instalatory → phaket/releases/<channel>/<os>/  2) manifesty → phaket-velopack/.
+      # Plik trafia PRZED manifestem; przerwany deploy zostawia stary manifest, więc użytkownik
+      # nie dostanie 404 na brakującej paczce.
+      - name: Deploy packages
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          for os in win-x64 linux-x64; do
+            [[ -d "assets/$os" ]] || { echo "Brak artefaktów $os" >&2; exit 1; }
+            ssh -i ~/.ssh/deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p $FEED_ROOT/$CHANNEL/$os"
+            # Bez --delete: feed trzyma poprzednie wersje (delta/rollback), rsync tylko dokłada.
+            rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
+              "assets/$os"/ "$DEPLOY_USER@$DEPLOY_HOST:$FEED_ROOT/$CHANNEL/$os/"
+          done
+
+      # Manifesty generujemy z katalogów na serwerze (vpk upload local --regenerate), więc feed
+      # uwzględnia poprzednie wydania kanału i nie gubi historii. downloadBaseUrl wskazuje publiczny
+      # prefiks paczek; Velopack dokłada do niego "<os>/<plik>".
+      - name: Deploy manifests
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          CHANNEL: ${{ inputs.channel }}
+          FEED_PUBLIC_BASE: ${{ vars.FEED_PUBLIC_BASE }}
+        run: |
+          set -euo pipefail
+          base="${FEED_PUBLIC_BASE:-https://phaket.app/phaket/releases/$CHANNEL}"
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh -i ~/.ssh/deploy -o BatchMode=yes "$remote" "mkdir -p $MANIFEST_ROOT/$CHANNEL"
+          mkdir -p manifests
+
+          for os in win-x64 linux-x64; do
+            feed="$FEED_ROOT/$CHANNEL/$os"
+            mkdir -p "manifests/$os"
+            rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" "$remote:$feed/" "manifests/$os/"
+            .vpk/vpk upload local --outputDir "manifests/$os" --path "manifests/$os" --channel "$CHANNEL-$os" --regenerate
+            python3 scripts/feed-manifest.py --base "$base/$os/" --out "manifests/releases.$CHANNEL.$os.json" \
+              "manifests/$os/releases.$CHANNEL-$os.json"
+            scp -i ~/.ssh/deploy "manifests/releases.$CHANNEL.$os.json" \
+              "$remote:$MANIFEST_ROOT/$CHANNEL/releases.$CHANNEL.$os.json"
+          done
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publishTarget != 'none' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v${{ inputs.version }}" --draft=false

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Cienki launcher instalatora-stuba (PAK-114): okno Win32 + wybór UI + log, reszta logiki
+       w Phaket.InstallerStub. Budowany RZADKO, ręcznie (workflow installer-stub.yml) — artefakt
+       leży pod stałym URL-em i nie zmienia się przy wydaniach aplikacji.
+       Twarde wymogi: PublishAot i <5 MB po publish (przekroczenie wywala build). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <PublishSizeLimitBytes>4900000</PublishSizeLimitBytes>
+    <AssemblyName>PhaketSetup</AssemblyName>
+    <RootNamespace>Phaket.InstallerStub.Launcher</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.1.0</Version>
+    <Authors>Bartosz Gradzik</Authors>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/boratsc/Phaket</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Phaket.InstallerStub/Phaket.InstallerStub.csproj" />
+    <InternalsVisibleTo Include="Phaket.InstallerStub.Tests" />
+  </ItemGroup>
+
+</Project>
