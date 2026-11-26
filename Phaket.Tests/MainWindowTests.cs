@@ -74,6 +74,30 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
+    public void Reopening_graph_disposes_the_previous_graph()
+    {
+        var vm = TestAccounts.ViewModel();
+        try
+        {
+            var reference = ReopenGraph(vm);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Assert.False(reference.IsAlive);
+        }
+        finally { vm.Dispose(); }
+
+        static WeakReference ReopenGraph(MainWindowViewModel vm)
+        {
+            vm.OpenGraph();
+            var first = vm.Graph!;
+            vm.OpenGraph();
+            Assert.NotSame(first, vm.Graph);
+            return new WeakReference(first);
+        }
+    }
+
+    [AvaloniaFact]
     public void MainWindow_opens_and_exposes_accessible_name()
     {
         var window = new MainWindow(TestAccounts.ViewModel());

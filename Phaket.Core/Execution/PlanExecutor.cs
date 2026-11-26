@@ -468,7 +468,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
     }
 
     // Copies cached vanilla into the game root, capturing base state per file.
-    // The cache marker is excluded: it is Phaket metadata, not game content.
+    // The cache marker and hash sidecar are excluded: they are Phaket metadata, not game content.
     private IReadOnlyList<string> CopyVanilla(string cacheDir, OwnershipLedger ledger)
     {
         var created = new List<string>();
@@ -489,7 +489,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
 
     private static IReadOnlyList<string> EnumerateVanilla(string cacheDir) =>
         Directory.GetFiles(cacheDir, "*", SearchOption.AllDirectories)
-            .Where(f => Path.GetFileName(f) != VanillaCache.MarkerFileName)
+            .Where(f => Path.GetFileName(f) is not (VanillaCache.MarkerFileName or VanillaCache.HashFileName))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToArray();
 

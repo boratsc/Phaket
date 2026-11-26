@@ -134,6 +134,17 @@ public sealed class Pak51CatalogSigningTests
         finally { s.Dispose(); Directory.Delete(dir, true); }
     }
 
+    [Theory]
+    [InlineData("signature", null)]
+    [InlineData("signature", "")]
+    [InlineData(null, "0123456789abcdef")]
+    [InlineData("", "0123456789abcdef")]
+    public void IncompleteSignatureHeaderPairIsRejected(string? signature, string? keyId)
+    {
+        var error = Assert.Throws<PhaketException>(() => ModCatalogSigning.Verify("{}", signature, keyId));
+        Assert.Equal(ErrorCodes.CatalogSignatureInvalid, error.Error.Code);
+    }
+
     [Fact]
     public async Task StaleSnapshotRevisionIsRejected()
     {

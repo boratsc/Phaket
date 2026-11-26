@@ -16,6 +16,7 @@ public sealed class OnboardingWindowManager
         this.createViewModel = createViewModel;
 
     public bool IsOpen => window is not null;
+    internal Window? CurrentWindow => window;
 
     // Never leave a wizard window behind the shell that owns it.
     public void Close() => window?.Close();

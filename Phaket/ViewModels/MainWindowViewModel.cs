@@ -372,6 +372,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public void OpenGraph()
     {
         if (currentGame is null) return;
+        Graph?.Dispose();
         Graph = new GraphViewModel(currentGame, () => OpenGame(currentGame));
         CurrentPage = Graph;
         ActiveNav = "library";

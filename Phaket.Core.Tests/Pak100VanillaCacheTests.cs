@@ -154,7 +154,15 @@ public sealed class Pak100VanillaCacheTests
         Assert.False(Directory.Exists(Path.Combine(fixture.Root, "pkgs", "game-b", "vanilla")));
         Assert.Equal("vanilla-steam-2026.8.18", File.ReadAllText(Path.Combine(fixture.Root, "game-b", "Among Us.exe")));
         Assert.True(File.Exists(Path.Combine(fixture.Entry("2026.8.18"), VanillaCache.HashFileName))); // hash sidecar written
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "game-a", VanillaCache.MarkerFileName)));
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "game-a", VanillaCache.HashFileName)));
         Assert.False(File.Exists(Path.Combine(fixture.Root, "game-b", VanillaCache.MarkerFileName)));
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "game-b", VanillaCache.HashFileName)));
+        var journal = PlanExecutor.LoadJournal(Path.Combine(fixture.Root, "profiles", "game-b"))!;
+        var plannedWrites = journal.Entries.SelectMany(entry => entry.CreatedFiles ?? []).ToArray();
+        Assert.Contains(plannedWrites, path => Path.GetFileName(path) == "Among Us.exe");
+        Assert.DoesNotContain(plannedWrites, path => Path.GetFileName(path) is VanillaCache.MarkerFileName or VanillaCache.HashFileName);
+        Assert.Equal(VanillaCache.ComputeTreeHash(fixture.Entry("2026.8.18")), VanillaCache.ReadTreeHash(fixture.Entry("2026.8.18")));
     }
 
     [Fact]

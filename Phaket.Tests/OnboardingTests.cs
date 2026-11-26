@@ -290,6 +290,55 @@ public class OnboardingTests : IDisposable
         Assert.False(manager.IsOpen);
     }
 
+    [AvaloniaFact]
+    public void System_window_close_skips_onboarding_and_opens_the_shell_once()
+    {
+        var service = new OnboardingService(settings);
+        var flow = new TrackingFlow();
+        var vm = new OnboardingViewModel(service, flow);
+        int shellOpens = 0;
+        var manager = new OnboardingWindowManager(() => vm);
+        try
+        {
+            manager.Show(() =>
+            {
+                Assert.True(Marker());
+                shellOpens++;
+            });
+            var window = manager.CurrentWindow!;
+
+            // The title-bar X raises Closed without any wizard button or command.
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(Marker());
+            Assert.False(vm.IsFirstRun());
+            Assert.Equal(1, shellOpens);
+            Assert.Equal(0, flow.LeaveCalls);
+            Assert.Equal(0, flow.ResetCalls);
+            Assert.False(manager.IsOpen);
+
+            window.Close();
+            manager.Close();
+            Assert.Equal(1, shellOpens);
+        }
+        finally { manager.Close(); }
+    }
+
+    private sealed class TrackingFlow : IOnboardingFlow
+    {
+        public int LeaveCalls { get; private set; }
+        public int ResetCalls { get; private set; }
+        public IReadOnlyList<IOnboardingStep> Steps { get; } = [new Step("one")];
+        public Task ActivateAsync(IOnboardingStep step) => Task.CompletedTask;
+        public Task LeaveAsync(IOnboardingStep step)
+        {
+            LeaveCalls++;
+            return Task.CompletedTask;
+        }
+        public void Reset() => ResetCalls++;
+    }
+
     private sealed class Step(string id) : IOnboardingStep
     {
         public string StepId => id;

@@ -144,13 +144,14 @@ public static class ModCatalogSigning
     public static string KeyIdOf(byte[] publicKey) =>
         Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(publicKey))[..16];
 
-    // Returns Verified only when signature and key id match a built-in key; no headers is
-    // Unverified; a present-but-bad signature or an unknown key id throws (fail closed).
+    // Returns Verified only when signature and key id match a built-in key; neither header is
+    // Unverified; exactly one header or a present-but-bad signature throws (fail closed).
     public static CatalogTrust Verify(CatalogResponse response) => Verify(response.Body, response.Signature, response.KeyId);
 
     public static CatalogTrust Verify(string? body, string? signature, string? keyId)
     {
-        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(keyId)) return CatalogTrust.Unverified;
+        if (string.IsNullOrEmpty(signature) && string.IsNullOrEmpty(keyId)) return CatalogTrust.Unverified;
+        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(keyId)) throw new PhaketException(ErrorCodes.CatalogSignatureInvalid);
         // An unknown key id is the reported failure even when the signature is also malformed.
         if (!TrustedKeys.TryGetValue(keyId, out var publicKey))
             throw new PhaketException(ErrorCodes.CatalogSignatureUnknownKey, ("keyId", keyId));
