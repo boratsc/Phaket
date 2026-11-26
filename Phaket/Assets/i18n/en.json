@@ -430,6 +430,8 @@
   "Settings.Tools.Title": "Tools",
   "Settings.Tools.Hint": "Phaket downloads the install tools from official GitHub releases and verifies each file with a SHA-256 checksum. The newest version is used by default; you can pin a specific one below.",
   "Settings.Tools.Legendary": "Legendary (Epic Games)",
+  "Settings.Tools.Aurelia": "Aurelia (Steam library, optional)",
+  "Help.ToolsAurelia": "Aurelia (Steam) — GNU GPL v3: https://github.com/Drackrath/Aurelia",
   "Settings.Tools.Depot": "DepotDownloader (Steam)",
   "Settings.Tools.Latest": "Latest (automatic)",
   "Settings.Tools.CheckUpdates": "Check for updates",

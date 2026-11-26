@@ -51,10 +51,17 @@
   "BASE_GAME_TOOL_FAILED": "The game version download tool failed. External tool output: {detail}",
   "EPIC_SIGN_IN_REQUIRED": "This game version needs an Epic sign-in. Sign in to Epic in the Library, then try installing the mod again.",
   "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "The .NET runtime required to run DepotDownloader was not found. Install the .NET runtime and try again.",
-"SAVE_BACKUP_TOO_LARGE": "Your saves take {size} and the backup limit is {limit}. Nothing was copied — raise the limit in Settings or free some space.",
+  "SAVE_BACKUP_TOO_LARGE": "Your saves take {size} and the backup limit is {limit}. Nothing was copied — raise the limit in Settings or free some space.",
   "SAVE_BACKUP_HASH_MISMATCH": "A file in backup {id} does not match what was saved ({path}). Nothing was restored — the backup may be damaged.",
   "SAVE_BACKUP_MANIFEST_INVALID": "The backup {id} cannot be read: its description file is missing or damaged.",
   "SAVE_BACKUP_RESTORE_REFUSED": "The backup would be restored outside the save folder ({path}). Nothing was restored.",
   "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED": "Deleting old backups is permanent. Confirm first that Phaket may remove them.",
-  "DISK_FULL": "Not enough disk space. {requiredMb} MB more is needed."
+  "DISK_FULL": "Not enough disk space. {requiredMb} MB more is needed.",
+  "AURELIA_UNAVAILABLE": "Aurelia is not available ({reason}), so Phaket shows the locally detected Steam games instead.",
+  "AURELIA_FAILED": "Aurelia returned an error, so Phaket shows the locally detected Steam games instead: {detail}",
+  "AURELIA_AUTH_REQUIRED": "Aurelia needs a Steam sign-in for this data. Sign in through Aurelia, or Phaket will keep using the locally detected games.",
+  "AURELIA_OFFLINE": "Aurelia has no network connection, so Phaket shows the locally detected Steam games instead.",
+  "AURELIA_TIMEOUT": "Aurelia did not finish in time, so Phaket shows the locally detected Steam games instead.",
+  "AURELIA_CANCELLED": "The Aurelia operation was cancelled. Phaket shows the locally detected Steam games instead.",
+    "AURELIA_RATE_LIMITED": "Steam is throttling Aurelia's requests. Phaket shows the locally detected Steam games until the limit clears."
 }

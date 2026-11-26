@@ -132,6 +132,7 @@ public partial class SettingsViewModel : ViewModelBase
     // release list and a forced update check for each tool.
     public ToolSettingsSection Legendary { get; }
     public ToolSettingsSection Depot { get; }
+    public ToolSettingsSection Aurelia { get; }
 
     internal string SettingsFile => settingsPath;
 
@@ -175,6 +176,7 @@ public partial class SettingsViewModel : ViewModelBase
             Languages.Add(language);
         Legendary = new ToolSettingsSection(this, toolProvider, toolsRoot, "legendary");
         Depot = new ToolSettingsSection(this, toolProvider, toolsRoot, "depotdownloader");
+        Aurelia = new ToolSettingsSection(this, toolProvider, toolsRoot, "aurelia");
         Load();
         nexus.ConfigureClientId(NexusClientId);
         _ = RefreshStatusAsync();

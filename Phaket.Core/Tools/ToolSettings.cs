@@ -7,7 +7,7 @@ public static class ToolSettings
 {
     public static string? GetPinnedVersion(string tool, string? settingsPath = null)
     {
-        if (tool is not ("legendary" or "depotdownloader")) throw new ArgumentException("Unknown tool", nameof(tool));
+        if (tool is not ("legendary" or "depotdownloader" or "aurelia")) throw new ArgumentException("Unknown tool", nameof(tool));
         settingsPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket", "settings.json");
         try
         {

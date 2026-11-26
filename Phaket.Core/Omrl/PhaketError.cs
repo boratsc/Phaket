@@ -68,7 +68,7 @@ public static class ErrorCodes
     public const string BaseGameToolFailed = "BASE_GAME_TOOL_FAILED";
     public const string EpicSignInRequired = "EPIC_SIGN_IN_REQUIRED";
     public const string DepotDownloaderDotnetMissing = "DEPOTDOWNLOADER_DOTNET_NOT_FOUND";
-// PAK-141: save backups. The limit is checked before anything is copied.
+    // PAK-141: save backups. The limit is checked before anything is copied.
     public const string SaveBackupTooLarge = "SAVE_BACKUP_TOO_LARGE";
     public const string SaveBackupHashMismatch = "SAVE_BACKUP_HASH_MISMATCH";
     public const string SaveBackupManifestInvalid = "SAVE_BACKUP_MANIFEST_INVALID";
@@ -78,6 +78,15 @@ public static class ErrorCodes
     // PAK-146: a package tree is never half-materialized onto a full disk; the worst-case
     // size (sum of cache files) is checked before the first copy.
     public const string DiskFull = "DISK_FULL";
+    // PAK-137: the optional Aurelia driver. AureliaContract exposes argv builders for the
+    // read-only commands only; every Aurelia problem falls back to local detection.
+    public const string AureliaUnavailable = "AURELIA_UNAVAILABLE";
+    public const string AureliaFailed = "AURELIA_FAILED";
+    public const string AureliaAuthRequired = "AURELIA_AUTH_REQUIRED";
+    public const string AureliaOffline = "AURELIA_OFFLINE";
+    public const string AureliaTimeout = "AURELIA_TIMEOUT";
+    public const string AureliaCancelled = "AURELIA_CANCELLED";
+    public const string AureliaRateLimited = "AURELIA_RATE_LIMITED";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)

@@ -430,6 +430,8 @@
   "Settings.Tools.Title": "Narzędzia",
   "Settings.Tools.Hint": "Phaket pobiera narzędzia instalacyjne z oficjalnych wydań GitHub i weryfikuje je sumą SHA-256. Domyślnie używana jest najnowsza wersja; niżej możesz przypiąć konkretną.",
   "Settings.Tools.Legendary": "Legendary (Epic Games)",
+  "Settings.Tools.Aurelia": "Aurelia (biblioteka Steam, opcjonalnie)",
+  "Help.ToolsAurelia": "Aurelia (Steam) — GNU GPL v3: https://github.com/Drackrath/Aurelia",
   "Settings.Tools.Depot": "DepotDownloader (Steam)",
   "Settings.Tools.Latest": "Najnowsza (automatycznie)",
   "Settings.Tools.CheckUpdates": "Sprawdź aktualizacje",

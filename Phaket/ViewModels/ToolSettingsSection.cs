@@ -22,8 +22,13 @@ public partial class ToolSettingsSection : ObservableObject
     private string? pin;
 
     public string Tool { get; }
-    public string TitleKey => "Settings.Tools." + (Tool == "legendary" ? "Legendary" : "Depot");
+    // The Steamy CLI reads an account's library; the other two install game files.
+    public string TitleKey => "Settings.Tools." + (Tool == "legendary" ? "Legendary" : Tool == "aurelia" ? "Aurelia" : "Depot");
     public string Title => Loc(TitleKey);
+
+    // The update check verifies each release against the SHA256SUMS asset that only the prebuilt
+    // releases carry: a beta-source build is installed by hand, so there is nothing to check.
+    public bool CanCheckUpdates => Tool != "aurelia";
 
     // The combo shows display strings; the localized "latest" entry stands for a null pin.
     public ObservableCollection<string> Versions { get; } = [];
@@ -93,7 +98,7 @@ public partial class ToolSettingsSection : ObservableObject
     [RelayCommand(CanExecute = nameof(CanQuery))]
     private Task ReloadReleasesAsync() => LoadReleasesAsync();
 
-    [RelayCommand(CanExecute = nameof(CanQuery))]
+    [RelayCommand(CanExecute = nameof(CanCheck))]
     private async Task CheckUpdatesAsync()
     {
         if (Busy) return;
@@ -113,6 +118,8 @@ public partial class ToolSettingsSection : ObservableObject
     }
 
     private bool CanQuery => !Busy;
+
+    private bool CanCheck => !Busy && CanCheckUpdates;
 
     private async Task LoadReleasesAsync()
     {
@@ -166,7 +173,12 @@ public partial class ToolSettingsSection : ObservableObject
         {
             string root = Path.Combine(toolsRoot, Tool);
             if (!Directory.Exists(root)) return "";
-            string binary = Tool == "legendary" ? "" : OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader";
+            string binary = Tool switch
+            {
+                "legendary" => "",
+                "aurelia" => $"aurelia_{SafeRid()}" + (OperatingSystem.IsWindows() ? ".exe" : ""),
+                _ => OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader"
+            };
             string? newest = Directory.GetDirectories(root).Select(Path.GetFileName)
                 .Where(v => v is not null && !v!.StartsWith('.') &&
                             (binary.Length == 0 || File.Exists(Path.Combine(root, v!, binary))))
@@ -176,6 +188,10 @@ public partial class ToolSettingsSection : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return ""; }
     }
+
+    // Aurelia's release assets are per platform (aurelia_linux_x86_64, aurelia_windows_arm64.exe).
+    private static string SafeRid() =>
+        (OperatingSystem.IsWindows() ? "windows" : "linux") + "_" + (System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x86_64");
 
     // Tags read "0.21.1" or "DepotDownloader_3.4.0": compare the numeric tail, because
     // sorting the strings puts "0.9.0" above "0.21.1".

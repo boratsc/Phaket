@@ -19,6 +19,7 @@
         </Grid>
         <TextBlock Classes="muted" Text="{Binding InstalledText}" TextWrapping="Wrap" />
         <Button Classes="secondary" HorizontalAlignment="Left" Command="{Binding CheckUpdatesCommand}" Padding="10,4"
+                IsVisible="{Binding CanCheckUpdates}"
                 Content="{Binding [Settings.Tools.CheckUpdates], Source={x:Static services:LocalizationService.Instance}}"
                 AutomationProperties.Name="{Binding [Settings.Tools.CheckUpdates], Source={x:Static services:LocalizationService.Instance}}" />
         <TextBlock Text="{Binding ReleasesStatus}" IsVisible="{Binding HasReleasesStatus}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
@@ -113,6 +114,8 @@
           <ContentControl Content="{Binding Legendary}" />
           <Border Height="1" Background="{DynamicResource LineBrush}" />
           <ContentControl Content="{Binding Depot}" />
+          <Border Height="1" Background="{DynamicResource LineBrush}" />
+          <ContentControl Content="{Binding Aurelia}" />
         </StackPanel>
       </Border>
 

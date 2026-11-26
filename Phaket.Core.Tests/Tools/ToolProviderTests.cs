@@ -207,6 +207,69 @@ public sealed class ToolProviderTests
         Assert.Equal(bytes, await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    // PAK-137: Aurelia publishes its checksum only as the SHA256SUMS asset next to the binaries, so
+    // the provider fetches it instead of reading an API digest.
+    [Fact]
+    public async Task AureliaVerifiesAgainstTheChecksumsAsset()
+    {
+        string asset = AureliaAsset;
+        byte[] bytes = "aurelia binary"u8.ToArray();
+        string sums = $"{Digest(bytes)}  {asset}\n{new string('0', 64)}  aurelia_linux_arm64\n";
+        HttpRequestMessage? sumsRequest = null;
+        using var fixture = new Fixture(
+            _ => $"[{AureliaRelease("v0.3.1", asset)}]",
+            request => request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS", StringComparison.Ordinal) ? Encoding.UTF8.GetBytes(sums) : bytes,
+            request => { if (request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS", StringComparison.Ordinal)) sumsRequest = request; });
+
+        string path = await fixture.Provider.EnsureAsync("aurelia", "v0.3.1", ct: TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("https://github.com/Drackrath/Aurelia/releases/download/v0.3.1/SHA256SUMS", sumsRequest?.RequestUri!.ToString());
+        Assert.EndsWith(Path.Combine("v0.3.1", asset), path);
+    }
+
+    [Fact]
+    public async Task AureliaWithoutItsChecksumIsRejected()
+    {
+        string asset = AureliaAsset;
+        // The release has no SHA256SUMS asset: the download must never happen unverified.
+        using var fixture = new Fixture(Releases(ReleaseJson("v0.3.1", asset, [], null)));
+
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("aurelia", ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
+    }
+
+    // A checksum line that is not a 64-hex digest is ignored, so the download stays unverified.
+    [Fact]
+    public async Task AureliaIgnoresAMalformedChecksumLine()
+    {
+        string asset = AureliaAsset;
+        string sums = $"not-a-digest  {asset}\n";
+        using var fixture = new Fixture(
+            _ => $"[{AureliaRelease("v0.3.1", asset)}]",
+            request => request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS", StringComparison.Ordinal) ? Encoding.UTF8.GetBytes(sums) : "aurelia binary"u8.ToArray());
+
+        var ex = await Assert.ThrowsAsync<PhaketException>(() => fixture.Provider.EnsureAsync("aurelia", ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal("TOOL_VERIFICATION_FAILED", ex.Error.Code);
+    }
+
+    // Aurelia names its assets x86_64 (not Depot's x64) and arm64, no archive.
+    private static string AureliaAsset => "aurelia_" + (OperatingSystem.IsWindows() ? "windows" : "linux") + "_" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x86_64") + (OperatingSystem.IsWindows() ? ".exe" : "");
+
+    // A release with the bare binary (no API digest) and the SHA256SUMS asset the provider must read.
+    private static string AureliaRelease(string version, string name) => JsonSerializer.Serialize(new
+    {
+        tag_name = version,
+        assets = new[]
+        {
+            new { name, browser_download_url = $"https://github.com/Drackrath/Aurelia/releases/download/{version}/{name}", digest = (string?)null },
+            new { name = "SHA256SUMS", browser_download_url = $"https://github.com/Drackrath/Aurelia/releases/download/{version}/SHA256SUMS", digest = (string?)null }
+        }
+    });
+
     private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     private static string Release(string version, string name, byte[] bytes, string? digest) => Releases(ReleaseJson(version, name, bytes, digest));
     private static string ReleaseJson(string version, string name, byte[] bytes, string? digest) => JsonSerializer.Serialize(new[] { new { tag_name = version, assets = new[] { new { name, browser_download_url = "https://asset.test/tool", digest = digest == null ? null : "sha256:" + digest } } } });
@@ -245,14 +308,15 @@ public sealed class ToolProviderTests
 
         public Fixture(string releases, byte[]? bytes = null) : this(_ => releases, bytes) { }
         public Fixture(Func<HttpRequestMessage, string> response, byte[]? bytes = null, Action<HttpRequestMessage>? requested = null)
+            : this(response, _ => bytes ?? [], requested) { }
+        public Fixture(Func<HttpRequestMessage, string> response, Func<HttpRequestMessage, byte[]> body, Action<HttpRequestMessage>? requested = null)
         {
             Directory.CreateDirectory(Root);
-            byte[] assetBytes = bytes ?? [];
             client = new HttpClient(new Handler(request =>
             {
                 RequestCount++;
                 if (request.RequestUri!.Host == "api.github.com") return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(response(request), Encoding.UTF8, "application/json") };
-                requested?.Invoke(request); return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(assetBytes) };
+                requested?.Invoke(request); return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body(request)) };
             }));
             Provider = new ToolProvider(Root, client);
         }

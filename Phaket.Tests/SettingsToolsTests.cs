@@ -200,6 +200,32 @@ public class SettingsToolsTests
         File.WriteAllText(Path.Combine(toolsRoot, tool, version, binary), "x");
     }
 
+    // PAK-137: Aurelia's update check stays hidden and disabled — a prebuilt release carries no
+    // SHA-256 the provider could verify, so the button would only promise a download it refuses.
+    [AvaloniaFact]
+    public async Task Aurelia_section_offers_no_update_check_and_its_binary_name_is_per_platform()
+    {
+        var loc = LocalizationService.Instance;
+        loc.CurrentLanguage = "pl-PL";
+        using var h = Create();
+        Assert.False(h.Vm.Aurelia.CanCheckUpdates);
+        Assert.False(h.Vm.Aurelia.CheckUpdatesCommand.CanExecute(null));
+        Assert.Equal(loc["Settings.Tools.Aurelia"], h.Vm.Aurelia.Title);
+
+        // The installed folder counts only when the platform asset is there.
+        string rid = (OperatingSystem.IsWindows() ? "windows" : "linux") + "_" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x86_64");
+        string binary = "aurelia_" + rid + (OperatingSystem.IsWindows() ? ".exe" : "");
+        System.IO.Directory.CreateDirectory(Path.Combine(h.ToolsRoot, "aurelia", "v0.3.1"));
+        System.IO.Directory.CreateDirectory(Path.Combine(h.ToolsRoot, "aurelia", "v0.3.0"));
+        File.WriteAllText(Path.Combine(h.ToolsRoot, "aurelia", "v0.3.1", binary), "x");
+        h.Vm.Aurelia.OnDropDownOpened();
+        if (h.Vm.Aurelia.ReloadReleasesCommand.ExecutionTask is { } load) await load;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("v0.3.1", h.Vm.Aurelia.InstalledVersion);
+        await Task.CompletedTask;
+    }
+
     [AvaloniaFact]
     public void Installed_version_is_read_from_the_tools_folders()
     {
@@ -280,15 +306,17 @@ public class SettingsToolsTests
             Assert.True(h.Vm.IsToolsSection);
             var combos = window.GetVisualDescendants().OfType<ComboBox>()
                 .Where(c => c.DataContext is ToolSettingsSection).ToArray();
-            Assert.Equal(2, combos.Length);
+            // Legendary, DepotDownloader and the optional Aurelia (PAK-137).
+            Assert.Equal(3, combos.Length);
             foreach (var combo in combos)
             {
                 var section = (ToolSettingsSection)combo.DataContext!;
                 Assert.Equal(section.Title, AutomationProperties.GetName(combo));
                 Assert.True(combo.Focusable);
             }
+            // The update check is hidden for Aurelia: its releases carry no SHA-256 for ToolProvider here.
             var checks = window.GetVisualDescendants().OfType<Button>()
-                .Where(b => Equals(b.Content as string, loc["Settings.Tools.CheckUpdates"])).ToArray();
+                .Where(b => Equals(b.Content as string, loc["Settings.Tools.CheckUpdates"]) && b.IsEffectivelyVisible).ToArray();
             Assert.Equal(2, checks.Length);
             Assert.All(checks, b => Assert.Equal(loc["Settings.Tools.CheckUpdates"], AutomationProperties.GetName(b)));
             System.IO.Directory.CreateDirectory("/tmp/opencode/phaket-render");

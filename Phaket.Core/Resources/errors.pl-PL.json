@@ -51,10 +51,17 @@
   "BASE_GAME_TOOL_FAILED": "Narzędzie pobierania wersji gry zakończyło się błędem. Wyjście narzędzia zewnętrznego: {detail}",
   "EPIC_SIGN_IN_REQUIRED": "Ta wersja gry wymaga zalogowania do Epic. Zaloguj się do Epic w Bibliotece, a następnie spróbuj ponownie zainstalować mod.",
   "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "Nie znaleziono środowiska .NET potrzebnego do uruchomienia DepotDownloader. Zainstaluj .NET Runtime i spróbuj ponownie.",
-"SAVE_BACKUP_TOO_LARGE": "Twoje zapisy gry zajmują {size}, a limit kopii to {limit}. Nic nie zostało skopiowane — podnieś limit w Ustawieniach lub zwolnij miejsce.",
+  "SAVE_BACKUP_TOO_LARGE": "Twoje zapisy gry zajmują {size}, a limit kopii to {limit}. Nic nie zostało skopiowane — podnieś limit w Ustawieniach lub zwolnij miejsce.",
   "SAVE_BACKUP_HASH_MISMATCH": "Plik {path} w kopii {id} nie zgadza się z zapisanym. Niczego nie przywrócono — kopia mogła się uszkodzić.",
   "SAVE_BACKUP_MANIFEST_INVALID": "Nie można odczytać kopii {id}: brakuje jej opisu lub jest uszkodzony.",
   "SAVE_BACKUP_RESTORE_REFUSED": "Kopia trafiłaby poza folder zapisów gry ({path}). Niczego nie przywrócono.",
   "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED": "Usuwanie starych kopii jest nieodwracalne. Najpierw potwierdź, że Phaket może je usunąć.",
-  "DISK_FULL": "Za mało miejsca na dysku. Potrzeba jeszcze {requiredMb} MB."
+  "DISK_FULL": "Za mało miejsca na dysku. Potrzeba jeszcze {requiredMb} MB.",
+  "AURELIA_UNAVAILABLE": "Aurelia nie jest dostępna ({reason}), więc Phaket pokazuje gry Steam wykryte lokalnie.",
+  "AURELIA_FAILED": "Aurelia zwróciła błąd, więc Phaket pokazuje gry Steam wykryte lokalnie: {detail}",
+  "AURELIA_AUTH_REQUIRED": "Aurelia wymaga zalogowania do Steam, aby pokazać te dane. Zaloguj się przez Aurelię albo Phaket będzie dalej korzystać z gier wykrytych lokalnie.",
+  "AURELIA_OFFLINE": "Aurelia nie ma połączenia z siecią, więc Phaket pokazuje gry Steam wykryte lokalnie.",
+  "AURELIA_TIMEOUT": "Aurelia nie zakończyła pracy na czas, więc Phaket pokazuje gry Steam wykryte lokalnie.",
+  "AURELIA_CANCELLED": "Operacja Aurelii została anulowana. Phaket pokazuje gry Steam wykryte lokalnie.",
+    "AURELIA_RATE_LIMITED": "Steam ogranicza zapytania Aurelii. Phaket pokazuje gry Steam wykryte lokalnie do czasu ustąpienia ograniczenia."
 }

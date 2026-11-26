@@ -24,8 +24,8 @@ public sealed class ToolProvider
 
     public async Task<IReadOnlyList<string>> ListReleasesAsync(string tool, CancellationToken ct = default)
     {
-        if (tool is not ("legendary" or "depotdownloader")) throw new ArgumentException("Unknown tool", nameof(tool));
-        string repo = tool == "legendary" ? "legendary-gl/legendary" : "SteamRE/DepotDownloader";
+        if (tool is not ("legendary" or "depotdownloader" or "aurelia")) throw new ArgumentException("Unknown tool", nameof(tool));
+        string repo = Repo(tool);
         using var response = await http.GetAsync($"https://api.github.com/repos/{repo}/releases", ct);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
@@ -35,7 +35,7 @@ public sealed class ToolProvider
 
     public async Task<string> EnsureAsync(string tool, string? pinnedVersion = null, bool forceRefresh = false, CancellationToken ct = default)
     {
-        if (tool is not ("legendary" or "depotdownloader")) throw new ArgumentException("Unknown tool", nameof(tool));
+        if (tool is not ("legendary" or "depotdownloader" or "aurelia")) throw new ArgumentException("Unknown tool", nameof(tool));
         await Gate.WaitAsync(ct);
         try
         {
@@ -49,8 +49,7 @@ public sealed class ToolProvider
             JsonDocument json;
             try
             {
-                string repo = tool == "legendary" ? "legendary-gl/legendary" : "SteamRE/DepotDownloader";
-                using var response = await http.GetAsync($"https://api.github.com/repos/{repo}/releases", ct); response.EnsureSuccessStatusCode();
+                using var response = await http.GetAsync($"https://api.github.com/repos/{Repo(tool)}/releases", ct); response.EnsureSuccessStatusCode();
                 json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -64,8 +63,14 @@ public sealed class ToolProvider
                 string rid = (OperatingSystem.IsWindows() ? "win" : "linux") + "-" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64");
                 // Upstream names its archives DepotDownloader-windows|linux-<arch>.zip; the
                 // inner binary is native, not the framework-dependent DepotDownloader.dll.
-                string assetName = tool == "legendary" ? (OperatingSystem.IsWindows() ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe" : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64") : $"DepotDownloader-{(OperatingSystem.IsWindows() ? "windows" : "linux")}-{(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64")}.zip";
-                var candidates = json.RootElement.EnumerateArray().SelectMany(r => r.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).Select(a => (Version:r.GetProperty("tag_name").GetString()!, Url:a.GetProperty("browser_download_url").GetString()!, Digest:a.TryGetProperty("digest", out var d) ? d.GetString() : null)));
+                string assetName = tool switch
+                {
+                    "legendary" => (OperatingSystem.IsWindows() ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe" : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64"),
+                    // PAK-137: Aurelia's release assets are bare binaries, x86_64/arm64, no archive.
+                    "aurelia" => $"aurelia_{(OperatingSystem.IsWindows() ? "windows" : "linux")}_{(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x86_64")}" + (OperatingSystem.IsWindows() ? ".exe" : ""),
+                    _ => $"DepotDownloader-{(OperatingSystem.IsWindows() ? "windows" : "linux")}-{(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64")}.zip"
+                };
+                var candidates = json.RootElement.EnumerateArray().SelectMany(r => r.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).Select(a => (Version: r.GetProperty("tag_name").GetString()!, Url: a.GetProperty("browser_download_url").GetString(), Digest: a.TryGetProperty("digest", out var d) ? d.GetString() : null, Assets: r.GetProperty("assets").EnumerateArray().Select(s => s.Clone()).ToArray())));
                 var releases = candidates.Where(x => pinnedVersion == null || x.Version == pinnedVersion);
                 (string Version,string Url,string? Digest) release = default;
                 string? expected = null;
@@ -73,9 +78,9 @@ public sealed class ToolProvider
                 {
                     var digest = candidate.Digest?.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) == true ? candidate.Digest[7..] : null;
                     if (tool == "depotdownloader") digest = DepotHashes.TryGetValue((candidate.Version, rid), out var hash) ? hash : digest;
-                    if (tool == "legendary" && string.IsNullOrEmpty(digest)) continue;
-                    if (tool == "depotdownloader" && string.IsNullOrEmpty(digest)) continue;
-                    release = candidate; expected = digest; break;
+                    if (tool == "aurelia") digest = await AureliaDigestAsync(candidate.Assets, assetName, ct);
+                    if (string.IsNullOrEmpty(digest)) continue;
+                    release = (candidate.Version, candidate.Url!, digest); expected = digest; break;
                 }
                 if (release.Url is null) throw new PhaketException(pinnedVersion != null ? "TOOL_UNVERIFIED_VERSION" : "TOOL_VERIFICATION_FAILED");
                 var old = installed.FirstOrDefault(x => x.Version == release.Version).Path;
@@ -106,7 +111,7 @@ public sealed class ToolProvider
                 if (release.Version!.IndexOfAny(['/', '\\']) >= 0 || release.Version.Contains("..", StringComparison.Ordinal))
                     throw new PhaketException("TOOL_VERIFICATION_FAILED");
                 Directory.CreateDirectory(toolRoot); string staging = Path.Combine(toolRoot, ".stage-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(staging);
-                 try { if (tool == "legendary") { var staged = Path.Combine(staging, Path.GetFileName(executable)); await File.WriteAllBytesAsync(staged, bytes, ct); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staged, UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute); } else { try { Extract(bytes, staging); } catch (InvalidDataException) { throw new PhaketException("TOOL_VERIFICATION_FAILED"); } }
+                 try { if (tool is "legendary" or "aurelia") { var staged = Path.Combine(staging, Path.GetFileName(executable)); await File.WriteAllBytesAsync(staged, bytes, ct); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staged, UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute|UnixFileMode.GroupRead|UnixFileMode.GroupExecute|UnixFileMode.OtherRead|UnixFileMode.OtherExecute); } else { try { Extract(bytes, staging); } catch (InvalidDataException) { throw new PhaketException("TOOL_VERIFICATION_FAILED"); } }
                     var stagedExe = Path.Combine(staging, Path.GetFileName(executable));
                     if (!File.Exists(stagedExe)) throw new PhaketException("TOOL_VERIFICATION_FAILED");
                     // The archive is native and loses its mode when written; without +x it cannot run.
@@ -126,7 +131,7 @@ public sealed class ToolProvider
     // The binary inside a versioned folder, without touching the network.
     public string? ResolveInstalled(string tool)
     {
-        if (tool is not ("legendary" or "depotdownloader")) throw new ArgumentException("Unknown tool", nameof(tool));
+        if (tool is not ("legendary" or "depotdownloader" or "aurelia")) throw new ArgumentException("Unknown tool", nameof(tool));
         string toolRoot = Path.Combine(root, tool);
         if (!Directory.Exists(toolRoot)) return null;
         try
@@ -141,11 +146,47 @@ public sealed class ToolProvider
     }
 
     private static string ExecutablePath(string toolRoot, string tool, string version) =>
-        Path.Combine(toolRoot, version, tool == "legendary"
-            ? (OperatingSystem.IsWindows()
-                ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe"
-                : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64")
-            : OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader");
+        Path.Combine(toolRoot, version, ToolBinary(tool));
+
+    // The binary name inside a versioned tool folder.
+    private static string ToolBinary(string tool) => tool switch
+    {
+        "legendary" => OperatingSystem.IsWindows()
+            ? RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_windows_arm64.exe" : "legendary_windows_x64.exe"
+            : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "legendary_linux_arm64" : "legendary_linux_x64",
+        "aurelia" => $"aurelia_{(OperatingSystem.IsWindows() ? "windows" : "linux")}_{(RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x86_64")}" + (OperatingSystem.IsWindows() ? ".exe" : ""),
+        _ => OperatingSystem.IsWindows() ? "DepotDownloader.exe" : "DepotDownloader"
+    };
+
+    private static string Repo(string tool) => tool switch
+    {
+        "legendary" => "legendary-gl/legendary",
+        "aurelia" => "Drackrath/Aurelia",
+        _ => "SteamRE/DepotDownloader"
+    };
+
+    // Aurelia publishes no API digest, only a SHA256SUMS asset next to the binaries; the assets come
+    // from the release list already fetched. Without a checksum the candidate stays unverified and
+    // the loop rejects it (no digest-free download).
+    private async Task<string?> AureliaDigestAsync(JsonElement[] assets, string assetName, CancellationToken ct)
+    {
+        string? url = assets.Where(a => a.GetProperty("name").GetString() == "SHA256SUMS")
+            .Select(a => a.GetProperty("browser_download_url").GetString()).FirstOrDefault();
+        if (url is null) return null;
+        try
+        {
+            using var response = await http.GetAsync(url, ct);
+            return response.IsSuccessStatusCode ? DigestFromSums(await response.Content.ReadAsStringAsync(ct), assetName) : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { return null; }
+    }
+
+    // One line of a sha256sum file: "<sha256>  <file>" ('*' marks binary mode). The hex is checked
+    // here so a bogus file cannot reach the comparison as garbage.
+    private static string? DigestFromSums(string sums, string assetName) =>
+        sums.Split('\n').Select(line => line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Where(parts => parts.Length == 2 && parts[1].TrimStart('*') == assetName && parts[0].Length == 64 && parts[0].All(Uri.IsHexDigit))
+            .Select(parts => parts[0]).FirstOrDefault();
 
     private static void Extract(byte[] bytes, string target)
     {
