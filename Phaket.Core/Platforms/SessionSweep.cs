@@ -1,3 +1,5 @@
+using Phaket.Core.Execution;
+
 namespace Phaket.Core.Platforms;
 
 // Orphaned tool-session directories (crashed or killed runs) hold store tokens, so they must not
@@ -9,6 +11,10 @@ internal static class SessionSweep
 {
     public static void SweepOrphans(string root, TimeSpan maxAge)
     {
+        // Launch records are app state, not sessions under a tool config root: only refresh them here.
+        if (Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) == Path.TrimEndingDirectorySeparator(PhaketRoot()))
+            ProcessTracker.SweepStore(Path.Combine(root, "processes.json"));
+
         var cutoff = DateTimeOffset.UtcNow - maxAge;
         DirectoryInfo info;
         try { info = new DirectoryInfo(root); }
@@ -29,4 +35,7 @@ internal static class SessionSweep
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
     }
+
+    private static string PhaketRoot() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
 }
