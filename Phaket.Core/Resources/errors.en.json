@@ -63,5 +63,7 @@
   "AURELIA_OFFLINE": "Aurelia has no network connection, so Phaket shows the locally detected Steam games instead.",
   "AURELIA_TIMEOUT": "Aurelia did not finish in time, so Phaket shows the locally detected Steam games instead.",
   "AURELIA_CANCELLED": "The Aurelia operation was cancelled. Phaket shows the locally detected Steam games instead.",
-    "AURELIA_RATE_LIMITED": "Steam is throttling Aurelia's requests. Phaket shows the locally detected Steam games until the limit clears."
+    "AURELIA_RATE_LIMITED": "Steam is throttling Aurelia's requests. Phaket shows the locally detected Steam games until the limit clears.",
+  "STEAM_SHORTCUT_CONSENT_REQUIRED": "Phaket needs your consent to add the shortcut to your Steam folder. Nothing was saved without it.",
+  "STEAM_SHORTCUTS_CORRUPT": "The Steam shortcut file ({path}) cannot be read. Phaket left it unchanged so your other shortcuts stay safe. Start Steam so it repairs the file, then try again."
 }

@@ -63,5 +63,7 @@
   "AURELIA_OFFLINE": "Aurelia nie ma połączenia z siecią, więc Phaket pokazuje gry Steam wykryte lokalnie.",
   "AURELIA_TIMEOUT": "Aurelia nie zakończyła pracy na czas, więc Phaket pokazuje gry Steam wykryte lokalnie.",
   "AURELIA_CANCELLED": "Operacja Aurelii została anulowana. Phaket pokazuje gry Steam wykryte lokalnie.",
-    "AURELIA_RATE_LIMITED": "Steam ogranicza zapytania Aurelii. Phaket pokazuje gry Steam wykryte lokalnie do czasu ustąpienia ograniczenia."
+    "AURELIA_RATE_LIMITED": "Steam ogranicza zapytania Aurelii. Phaket pokazuje gry Steam wykryte lokalnie do czasu ustąpienia ograniczenia.",
+  "STEAM_SHORTCUT_CONSENT_REQUIRED": "Phaket potrzebuje Twojej zgody na dopisanie skrótu do katalogu Steam. Bez zgody nic nie zostało zapisane.",
+  "STEAM_SHORTCUTS_CORRUPT": "Nie można odczytać pliku skrótów Steam ({path}). Phaket go nie zmienił, żeby nie usunąć innych skrótów. Uruchom Steam, aby naprawił plik, i spróbuj ponownie."
 }
