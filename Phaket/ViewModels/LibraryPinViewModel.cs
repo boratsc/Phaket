@@ -22,17 +22,6 @@ public partial class LibraryViewModel
     [ObservableProperty] private bool hasPinUpdateWarning;
     [ObservableProperty] private string pinUpdateMessage = "";
 
-    // A modded installation is pinned from the moment the mod is installed: the
-    // build it was installed against is the only one the loader is known to work with.
-    internal void PinInstalledRecipe(InstalledRecipe entry, GameCatalogItem game)
-    {
-        if (entry.IsPinned) return;
-        var installation = game.Installations.FirstOrDefault(i => SteamAdapter.SameInstallation(i, entry.GameRoot))
-            ?? (game.Detected is { } detected && SteamAdapter.SameInstallation(detected, entry.GameRoot) ? detected : null);
-        var (build, manifest) = installation is null ? (null, null) : VersionPin.Identity(installation.Manifest);
-        registry.Pin(entry, build, manifest);
-    }
-
     // Re-reads every pinned recipe and shows one friendly banner when a store
     // updated a game under its mods. Runs after each scan, never in the background.
     private void RefreshPinStatus()

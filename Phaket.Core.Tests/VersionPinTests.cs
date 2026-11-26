@@ -119,7 +119,7 @@ public class VersionPinTests
             Assert.IsType<PinStatus.VersionChanged>(VersionPin.Check(Entry(home, "", "111"), current));
             // A pin without any recorded identity cannot claim a change.
             Assert.IsType<PinStatus.Ok>(VersionPin.Check(Entry(home, "", ""), current));
-            var missing = Assert.IsType<PinStatus.Missing>(VersionPin.Check(Entry(home, "12345678", null), null));
+            var missing = Assert.IsType<PinStatus.Missing>(VersionPin.Check(Entry(home, "12345678", ""), null));
             Assert.True(missing.NeedsAttention);
         }
         finally { Directory.Delete(home, recursive: true); }
