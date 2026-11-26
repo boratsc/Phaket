@@ -480,7 +480,8 @@ public sealed class PlanExecutor : IPlanExecutorHost
             // Base-game files are intentionally outside writableAreas (recipes must
             // not write them); the boundary here is the per-version vanilla cache,
             // which EnumerateVanilla never leaves. No RevalidateWrite on purpose.
-            AtomicCopy(file, target);
+            // PAK-146: reflink where the filesystem supports it, full copy otherwise.
+            PackageMaterializer.CopyOne(file, target);
             created.Add(target);
         }
         ledger.Save(ledgerPath);

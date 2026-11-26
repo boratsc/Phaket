@@ -68,13 +68,16 @@ public static class ErrorCodes
     public const string BaseGameToolFailed = "BASE_GAME_TOOL_FAILED";
     public const string EpicSignInRequired = "EPIC_SIGN_IN_REQUIRED";
     public const string DepotDownloaderDotnetMissing = "DEPOTDOWNLOADER_DOTNET_NOT_FOUND";
-    // PAK-141: save backups. The limit is checked before anything is copied.
+// PAK-141: save backups. The limit is checked before anything is copied.
     public const string SaveBackupTooLarge = "SAVE_BACKUP_TOO_LARGE";
     public const string SaveBackupHashMismatch = "SAVE_BACKUP_HASH_MISMATCH";
     public const string SaveBackupManifestInvalid = "SAVE_BACKUP_MANIFEST_INVALID";
     public const string SaveBackupRestoreRefused = "SAVE_BACKUP_RESTORE_REFUSED";
     // Deleting old backups is irreversible; it only runs with the user's explicit consent.
     public const string SaveBackupPruneConsentRequired = "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED";
+    // PAK-146: a package tree is never half-materialized onto a full disk; the worst-case
+    // size (sum of cache files) is checked before the first copy.
+    public const string DiskFull = "DISK_FULL";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)
