@@ -214,7 +214,9 @@ public static class RecipeValidator
         if (condition.All is { } all) foreach (var c in all) ValidateCondition(c, depth + 1, add);
         if (condition.Any is { } any) foreach (var c in any) ValidateCondition(c, depth + 1, add);
         if (condition.Not is { } not) ValidateCondition(not, depth + 1, add);
-        if (condition.GameVersion is { } range && !VersionRange.TryParse([range], out _))
+        // PAK-98: same label normalization as the constraint and the planner, so a
+        // condition written with the SusModder dbValue ("=2026-8-18") validates.
+        if (condition.GameVersion is { } range && !VersionRange.TryParse([GameVersionLabel.NormalizeRange(range)], out _))
             add(ErrorCodes.InvalidVersionRange, [("range", range)]);
         if (condition.BuildId is { } buildRange && !ConditionEvaluator.TryParseBuildRange(buildRange, out _, out _))
             add(ErrorCodes.InvalidVersionRange, [("range", buildRange)]);

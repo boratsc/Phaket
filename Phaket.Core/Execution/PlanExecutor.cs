@@ -12,7 +12,10 @@ namespace Phaket.Core.Execution;
 public sealed record PlanExecutionContext(
     string GameRoot, string ProfileRoot, string StagingRoot, string PackageRoot,
     GameDefinition Game, string RecipeId, string ProfileId, string? StateRoot = null,
-    IBaseGameSource? BaseGameSource = null);
+    IBaseGameSource? BaseGameSource = null,
+    // PAK-100: root of the ONE vanilla cache shared by every package of a game+version;
+    // null falls back to LocalApplicationData (VanillaCache.DefaultRoot).
+    string? VanillaCacheRoot = null);
 
 public enum DivergencePolicy { Fail, Restore, Skip }
 
@@ -130,7 +133,7 @@ public sealed class PlanExecutor : IPlanExecutorHost
             if (operation.Kind == "game.provision" && existing is null)
                 EnsureProvisionCache(operation.Parameters ?? new Dictionary<string, string>());
             var intent = new OperationIntent(operation.OpId, operation.Kind, operation.TargetPath,
-                operation.Sha256, operation.Parameters?.GetValueOrDefault("key"));
+                operation.Sha256, ProvisionLedgerKey(operation));
             var entry = existing ?? new JournalEntry(intent, null, false, false);
 
             // For extracts, journal the full planned write list BEFORE any write
@@ -378,16 +381,26 @@ public sealed class PlanExecutor : IPlanExecutorHost
         return missing;
     }
 
-    // game.provision: the vanilla cache directory for this exact store+version.
+    // game.provision: the shared vanilla cache directory for this game+store+version.
     private string ProvisionCacheDir(PlannedOperation operation)
     {
         var parameters = operation.Parameters ?? new Dictionary<string, string>();
         var store = parameters.GetValueOrDefault("store") ?? "";
         var version = parameters.GetValueOrDefault("version") ?? "";
-        return VanillaCache.DirectoryFor(context.PackageRoot, store, version);
+        return VanillaCache.DirectoryFor(CacheRoot, context.Game.Slug, store, version);
     }
 
-    // Fetches the exact pinned vanilla into the per-version cache when missing.
+    // PAK-100: without an explicit root the cache is per user, not per mod package.
+    private string CacheRoot => string.IsNullOrWhiteSpace(context.VanillaCacheRoot)
+        ? VanillaCache.DefaultRoot : context.VanillaCacheRoot;
+
+    // The key under which the provisioned entry is journaled. Leaving the cache means dropping
+    // the vanilla:// source of every game.provision entry — never the vanilla files themselves
+    // (a rollback must never delete the user's base game).
+    private string ProvisionLedgerKey(PlannedOperation operation) =>
+        operation.Kind == "game.provision" ? "" : operation.SourceRef ?? "";
+
+    // Fetches the exact pinned vanilla into the shared per-version cache when missing.
     // Sources are official tooling only (DepotDownloader / legendary) via the host
     // runner — never a private mirror, never the user's Steam library.
     private void EnsureProvisionCache(IReadOnlyDictionary<string, string> parameters)
@@ -397,26 +410,47 @@ public sealed class PlanExecutor : IPlanExecutorHost
         var version = parameters.GetValueOrDefault("version")
             ?? throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "game.provision missing version"));
         var manifestId = parameters.GetValueOrDefault("manifestId");
-        var cacheDir = VanillaCache.DirectoryFor(context.PackageRoot, store, version);
-        var marker = VanillaCache.ReadMarker(cacheDir);
-        if (marker is not null && marker.Store == store
-            && (manifestId is null || marker.ManifestId == manifestId)
-            && Directory.Exists(cacheDir))
-            return;
+        var cacheDir = VanillaCache.DirectoryFor(CacheRoot, context.Game.Slug, store, version);
+        // Two parallel installs of the same game+version fetch once; the second waits and
+        // then finds the promoted cache instead of downloading its own copy.
+        using var gate = VanillaCache.Lock(VanillaCache.LockPath(CacheRoot, context.Game.Slug, store, version));
+        if (HasCachedVanilla(cacheDir, store, version, manifestId)) return;
         if (context.BaseGameSource is null)
             throw new PhaketException(ErrorCodes.ArtifactMissing, ("artifact", $"vanilla {store} {version}"));
-        System.IO.Directory.CreateDirectory(cacheDir);
-        // The runner downloads the tool and may ask the user for Steam credentials, so it
-        // is async; the executor itself is synchronous and hosts run it off the UI thread
-        // (ModInstallService executes inside Task.Run), which keeps the dialog responsive.
-        var source = context.BaseGameSource;
-        var prepared = Task.Run(() => source.TryPrepareAsync(store, version, manifestId, cacheDir), CancellationToken.None)
-            .GetAwaiter().GetResult();
-        if (!prepared.Success)
-            throw new PhaketException(prepared.ErrorCode ?? ErrorCodes.ArtifactMissing,
-                (prepared.Parameters ?? new Dictionary<string, string>()).Select(p => (p.Key, p.Value)).ToArray());
-        VanillaCache.WriteMarker(cacheDir, new VanillaCacheMarker(store, version, manifestId,
-            "host-runner", DateTimeOffset.UtcNow));
+        // The tool fills a staging directory; only a completed fetch is promoted into the
+        // cache, so a failed or killed download never leaves a tree another install trusts.
+        var staging = VanillaCache.StagingDirectoryFor(CacheRoot, context.Game.Slug, store, version);
+        try
+        {
+            System.IO.Directory.CreateDirectory(staging);
+            // The runner downloads the tool and may ask the user for Steam credentials, so it
+            // is async; the executor itself is synchronous and hosts run it off the UI thread
+            // (ModInstallService executes inside Task.Run), which keeps the dialog responsive.
+            var source = context.BaseGameSource;
+            var prepared = Task.Run(() => source.TryPrepareAsync(store, version, manifestId, staging), CancellationToken.None)
+                .GetAwaiter().GetResult();
+            if (!prepared.Success)
+                throw new PhaketException(prepared.ErrorCode ?? ErrorCodes.ArtifactMissing,
+                    (prepared.Parameters ?? new Dictionary<string, string>()).Select(p => (p.Key, p.Value)).ToArray());
+            VanillaCache.WriteMarker(staging, new VanillaCacheMarker(store, version, manifestId,
+                "host-runner", DateTimeOffset.UtcNow));
+            VanillaCache.Promote(staging, cacheDir);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(staging)) System.IO.Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    // Exact store+version (and manifest when pinned) — the marker check is unchanged by PAK-100,
+    // plus the content hash recorded at fetch time.
+    private static bool HasCachedVanilla(string cacheDir, string store, string version, string? manifestId)
+    {
+        if (!System.IO.Directory.Exists(cacheDir)) return false;
+        if (VanillaCache.ReadMarker(cacheDir) is not { } marker
+            || marker.Store != store || marker.Version != version || (manifestId is not null && marker.ManifestId != manifestId))
+            return false;
+        return VanillaCache.ReadTreeHash(cacheDir) is { } recorded && recorded == VanillaCache.ComputeTreeHash(cacheDir);
     }
 
     private IReadOnlyList<string>? PlanProvisionWrites(PlannedOperation operation)

@@ -20,7 +20,9 @@ public sealed record PlannerContext(
     IReadOnlyList<ResourceOwner>? ExistingOwners = null,
     // Resolves "latest" for game.provision from the build catalog (store -> version
     // label). Null means no catalog: "latest" then fails with GAME_BUILD_UNAVAILABLE.
-    Func<string, string?>? LatestGameVersion = null);
+    Func<string, string?>? LatestGameVersion = null,
+    // PAK-100: root of the shared vanilla cache; null falls back to VanillaCache.DefaultRoot.
+    string? VanillaCacheRoot = null);
 
 // Expands a validated recipe against concrete installation facts into a dry
 // OperationPlan. Never mutates the filesystem; reads are limited to source
@@ -39,6 +41,10 @@ public static class OperationPlanner
             || (condition.All?.Any(ConditionUsesGameVersion) ?? false)
             || (condition.Any?.Any(ConditionUsesGameVersion) ?? false)
             || ConditionUsesGameVersion(condition.Not));
+
+    // PAK-100: without an explicit root the cache is per user, not per mod package.
+    private static string CacheRoot(PlannerContext context) => string.IsNullOrWhiteSpace(context.VanillaCacheRoot)
+        ? VanillaCache.DefaultRoot : context.VanillaCacheRoot;
 
     public static OperationPlan Plan(Recipe recipe, PlannerContext context, IReadOnlyDictionary<string, string>? stepOwnership = null)
     {
@@ -150,16 +156,21 @@ public static class OperationPlanner
                 }
                 sourceRef = $"vanilla://{provisionStore}/{provisionVersion}";
                 targetPath = context.GameRoot;
-                // A cached vanilla for this exact version means no download is needed.
-                var cacheDir = VanillaCache.DirectoryFor(context.PackageRoot, provisionStore, provisionVersion);
+                // A cached vanilla for this game+store+version means no download is needed.
+                var cacheDir = VanillaCache.DirectoryFor(CacheRoot(context),
+                    context.Game.Slug, provisionStore, provisionVersion);
                 var marker = VanillaCache.ReadMarker(cacheDir);
                 var manifestId = step.With.TryGetValue("manifestId", out var manifestElement)
                     && manifestElement.ValueKind == System.Text.Json.JsonValueKind.String
                     ? manifestElement.GetString() : context.Facts.ManifestId;
                 // The executor provisions by manifest; carry the resolved id in the op.
                 if (manifestId is not null) parameters["manifestId"] = manifestId;
-                if (marker is null || marker.Store != provisionStore
+                // PAK-100: a hash mismatch in the shared cache reads as "not cached", so the plan
+                // still asks for the download that will replace it (same check as the executor).
+                if (marker is null || marker.Store != provisionStore || marker.Version != provisionVersion
                     || (manifestId is not null && marker.ManifestId != manifestId)
+                    || VanillaCache.ReadTreeHash(cacheDir) is not { } recorded
+                    || recorded != VanillaCache.ComputeTreeHash(cacheDir)
                     || !Directory.Exists(cacheDir))
                     requiresDownload = true;
             }

@@ -249,7 +249,11 @@ public sealed class ModpackInstallService : IModpackInstallService
                             preparation.Target.Sandbox ? Path.Combine(preparation.SandboxRoot, "game") : Path.GetFullPath(preparation.Target.GameRoot),
                             preparation.PlanProfileRoots is { Count: > 0 } roots ? roots[index] : preparation.ProfileRoot,
                             preparation.StagingRoot, preparation.PackageRoots[index], GameDefinitions.LoadAll().First(g => g.Slug == preparation.GameId),
-                            operationPlan.RecipeRef.Id, profileId, preparation.StateRoot);
+                            operationPlan.RecipeRef.Id, profileId, preparation.StateRoot) with
+                        {
+                            // PAK-100: journal rollback reads the vanilla from the same shared cache.
+                            VanillaCacheRoot = Path.Combine(appDataRoot, "vanilla-cache"),
+                        };
                         registry.Add(new InstalledRecipe(operationPlan.RecipeRef.Id, operationPlan.RecipeRef.Version,
                             pack.GameId, preparation.Target.Store, executionContext.GameRoot, executionContext.ProfileRoot,
                             executionContext.StagingRoot, preparation.StateRoot, preparation.SandboxRoot.Length == 0 ? null : preparation.SandboxRoot,

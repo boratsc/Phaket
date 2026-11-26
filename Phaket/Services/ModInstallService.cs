@@ -308,7 +308,8 @@ public sealed class ModInstallService
                 Arch: arch, BuildId: buildId);
             var planProfileRoot = Path.Combine(profileRoot, plans.Count.ToString("D4", System.Globalization.CultureInfo.InvariantCulture));
             Directory.CreateDirectory(planProfileRoot);
-            var context = new PlannerContext("install", "mod-profile", gameRoot, planProfileRoot, stagingRoot, modPackages, definition, facts);
+            var context = new PlannerContext("install", "mod-profile", gameRoot, planProfileRoot, stagingRoot, modPackages, definition, facts,
+                VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"));
             var plan = OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership));
             // Thunderstore v1 publishes no sha256. The hash computed above only pins the bytes
             // already downloaded, so the plan and the registry state that no hash was obtained.
@@ -453,7 +454,8 @@ public sealed class ModInstallService
                     plan.RecipeRef.Id, "mod-profile", preparation.StateRoot,
                     baseGameSource ?? new ToolBaseGameSource(steamCredentials: steamCredentials,
                         steamPrompt: steamPrompt, epicTokens: epicTokens,
-                        mobileConfirmation: steamMobileConfirmation));
+                        mobileConfirmation: steamMobileConfirmation),
+                    VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"));
                 activeAttempt = (plan, ctx, i);
                 activeAttemptCompleted = false;
                 var journal = new InstallOrchestrator(new PlanExecutor(ctx)).Run(plan, progress, ct,

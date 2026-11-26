@@ -61,6 +61,35 @@ public sealed class Pak96VersionLabelTests
         Assert.False(ConditionEvaluator.Evaluate(new RecipeCondition { GameVersion = "=2026.9.29" }, facts));
     }
 
+    // PAK-98: the validator normalized the constraint but not the `when` condition, so a
+    // condition written with the dbValue form failed while the same text in constraints passed.
+    [Fact]
+    public void LegacyDashedConditionValidatesLikeTheConstraint()
+    {
+        var generated = Dll("2026-8-18");
+        var recipe = generated with
+        {
+            Target = generated.Target with { Constraints = new TargetConstraints { GameVersion = "=2026-8-18" } },
+            When = new RecipeCondition { GameVersion = "=2026-8-18" },
+        };
+
+        Assert.DoesNotContain(ErrorCodes.InvalidVersionRange,
+            RecipeValidator.Validate(recipe, AmongUs).Select(e => e.Code));
+
+        using var fixture = new ExecutorFixture();
+        Assert.NotEmpty(Plan(recipe, "2026.8.18", fixture).Operations);
+        // The step condition alone rules the step out — an empty plan, not a version error.
+        Assert.Empty(Plan(recipe, "2026.9.29", fixture).Operations);
+
+        // The condition range itself is what must not be rejected: an impossible date in it still is.
+        Assert.DoesNotContain(ErrorCodes.InvalidVersionRange,
+            RecipeValidator.Validate(recipe with { When = new RecipeCondition { GameVersion = "=2026.9.29" } }, AmongUs)
+                .Select(e => e.Code));
+        Assert.Contains(ErrorCodes.InvalidVersionRange,
+            RecipeValidator.Validate(recipe with { When = new RecipeCondition { GameVersion = "=2026-99-99" } }, AmongUs)
+                .Select(e => e.Code));
+    }
+
     private static Recipe Dll(string amongVersion) =>
         RecipeGenerator.GenerateCatalogPackage("Submerged", "1.0.0", "dll", ModUrl, new string('a', 64), 1024,
             "x86", amongVersion, ["BepInEx/plugins/Submerged/Submerged.dll"], AmongUs).Recipe;

@@ -49,6 +49,9 @@ public class TownOfUsMiraTests
         return (game, profile, staging, packages, state);
     }
 
+    // PAK-100: the vanilla cache is per game+version, outside every package directory.
+    private static string Cache(string root) => Path.Combine(root, "vanilla-cache");
+
     private static void PutFakePacks(string packages)
     {
         ExecutorFixture.MakeZip(Path.Combine(packages, "loader-x86.zip"),
@@ -179,9 +182,11 @@ public class TownOfUsMiraTests
             BaseGameToolArguments.Legendary("963137e4c29d4c79a81323b8fab03a40",
                 "963137e4c29d4c79a81323b8fab03a40_2026.8.18.manifest", "/t"));
         Assert.Throws<PhaketException>(() => BaseGameToolArguments.Legendary("app", null!, "/t"));
-        var dir = VanillaCache.DirectoryFor("/pkg", "steam", "2026.8.18");
-        Assert.Equal(Path.Combine("/pkg", "vanilla", "steam", "2026.8.18"), dir);
-        Assert.Throws<PhaketException>(() => VanillaCache.DirectoryFor("/pkg", "steam", "../escape"));
+        var dir = VanillaCache.DirectoryFor("/cache", "among-us", "steam", "2026.8.18");
+        Assert.Equal(Path.Combine("/cache", "among-us", "steam", "2026.8.18", "2026.8.18"), dir);
+        Assert.Throws<PhaketException>(() => VanillaCache.DirectoryFor("/cache", "among-us", "steam", "../escape"));
+        // An empty root would put the cache in the working directory instead of app data.
+        Assert.Throws<PhaketException>(() => VanillaCache.DirectoryFor(" ", "among-us", "steam", "2026.8.18"));
     }
 
     [Fact]
@@ -198,11 +203,13 @@ public class TownOfUsMiraTests
 
             OperationPlan Plan() => OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, definition,
                 new PlanFacts("linux", "steam", "2026.8.18", OperationCatalog.Capabilities, _ => false,
-                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054)));
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054),
+                VanillaCacheRoot: Cache(root)));
 
             var plan1 = Plan();
             Assert.True(plan1.RequiresDownload);
-            var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state, source));
+            var executor = new PlanExecutor(new PlanExecutionContext(game, profile, staging, packages, definition, recipe.Id, "p", state, source,
+                VanillaCacheRoot: Cache(root)));
             var journal = new InstallOrchestrator(executor).Run(plan1, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(JournalState.Completed, journal.State);
             Assert.Equal(1, source.Calls);
@@ -287,14 +294,16 @@ public class TownOfUsMiraTests
                 new Dictionary<string, string> { ["bepinex"] = "6.0.700" }, Arch: "x86", BuildId: 24302054);
 
             // No vanilla cache yet -> the plan still reports a pending download.
-            Assert.True(OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), Facts())).RequiresDownload);
+            Assert.True(OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), Facts(),
+                VanillaCacheRoot: Cache(root))).RequiresDownload);
 
             // Seed the per-version vanilla cache -> nothing left to download.
-            var cache = VanillaCache.DirectoryFor(packages, "steam", "2026.8.18");
+            var cache = VanillaCache.DirectoryFor(Cache(root), "among-us", "steam", "2026.8.18");
             Directory.CreateDirectory(cache);
             File.WriteAllText(Path.Combine(cache, "Among Us.exe"), "vanilla");
             VanillaCache.WriteMarker(cache, new VanillaCacheMarker("steam", "2026.8.18", null, "test", DateTimeOffset.UtcNow));
-            var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), Facts()));
+            var plan = OperationPlanner.Plan(recipe, new PlannerContext("i", "p", game, profile, staging, packages, Definition(), Facts(),
+                VanillaCacheRoot: Cache(root)));
             Assert.False(plan.RequiresDownload);
             Assert.Contains("provision-vanilla-steam", plan.Operations.Select(o => o.OpId));
         }
