@@ -20,4 +20,7 @@ public interface IOnboardingFlow
     // Called when a step becomes current (load its state) and when the user leaves it.
     Task ActivateAsync(IOnboardingStep step);
     Task LeaveAsync(IOnboardingStep step);
+
+    // Called by the wizard on restart, so every step re-arms its own state in one place.
+    void Reset();
 }

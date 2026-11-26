@@ -1,13 +1,14 @@
 namespace Phaket.ViewModels;
 
-// PAK-134: the flow App composes. It owns the step list, so a step's own state is saved
-// when Next/Finish confirms it and reset when the wizard is restarted; parts 135/136 append
-// their step here without touching the shell.
-public sealed class LanguageStepActions : IOnboardingFlow
+// PAK-135: the flow App composes. It owns the step list, so a step's own state is saved
+// when Next/Finish confirms it and reset when the wizard is restarted; part 136 appends
+// its step here without touching the shell.
+public sealed class OnboardingFlow : IOnboardingFlow
 {
     private readonly List<IOnboardingStep> steps;
 
-    public LanguageStepActions(LanguageStepViewModel language) => steps = [language];
+    public OnboardingFlow(LanguageStepViewModel language, PlatformsStepViewModel platforms) =>
+        steps = [language, platforms];
 
     public IReadOnlyList<IOnboardingStep> Steps => steps;
 
@@ -23,7 +24,10 @@ public sealed class LanguageStepActions : IOnboardingFlow
     public void Reset()
     {
         foreach (var step in steps)
+        {
             if (step is LanguageStepViewModel language) language.Reset();
+            if (step is PlatformsStepViewModel platforms) platforms.Reset();
+        }
     }
 
     // The first-run marker itself is written by OnboardingService.

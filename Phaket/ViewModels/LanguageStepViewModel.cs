@@ -11,8 +11,9 @@ public sealed partial class LanguageStepViewModel : ObservableObject, IOnboardin
     public const string SettingsKey = "language";
 
     private readonly string settingsPath;
-    // Where a re-run starts: the saved choice, else the UI locale, else pl-PL.
-    private readonly string preset;
+    // Where a re-run starts: the saved choice, else the UI locale, else pl-PL. Re-read on
+    // Reset, because the wizard is built once and a Finish may have saved a new language since.
+    private string preset;
 
     [ObservableProperty] private string selectedLanguage;
 
@@ -51,7 +52,11 @@ public sealed partial class LanguageStepViewModel : ObservableObject, IOnboardin
     public void Save() => Services.SettingsFile.TryUpdate(settingsPath, node => node[SettingsKey] = SelectedLanguage);
 
     // Restarting the wizard forgets nothing: the saved language is the preset again.
-    public void Reset() => SelectedLanguage = preset;
+    public void Reset()
+    {
+        preset = Saved(settingsPath) ?? Detect(CultureInfo.CurrentUICulture) ?? LocalizationService.DefaultLanguage;
+        SelectedLanguage = preset;
+    }
 
     public static string? Saved(string settingsPath)
     {

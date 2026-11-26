@@ -37,7 +37,11 @@ public sealed class OnboardingLanguageTests : IDisposable
     private (OnboardingViewModel Wizard, LanguageStepViewModel Step) Wizard()
     {
         var step = new LanguageStepViewModel(settings);
-        var wizard = new OnboardingViewModel(new OnboardingService(settings), new LanguageStepActions(step));
+        // Part 135 made the language step share the flow with the platforms step.
+        var nexusKeys = new Phaket.Core.Nexus.NexusApiKeyStore(new Phaket.Core.Tests.InMemorySecretStore());
+        var platforms = new PlatformsStepViewModel(
+            new TestAccounts.FakeAccount(), new TestAccounts.FakeAccount(), nexusKeys);
+        var wizard = new OnboardingViewModel(new OnboardingService(settings), new OnboardingFlow(step, platforms));
         return (wizard, step);
     }
 
@@ -77,7 +81,9 @@ public sealed class OnboardingLanguageTests : IDisposable
     {
         var (wizard, step) = Wizard();
         Assert.Same(step, wizard.CurrentStep);
-        Assert.False(wizard.HasStepCounter);
+        // Part 135 appended the platforms step, so the counter is live now.
+        Assert.True(wizard.HasStepCounter);
+        Assert.Equal("Krok 1 z 2", wizard.StepCounterText);
         Assert.Equal("Język", step.Title);
 
         var titleChanges = new List<string?>();
@@ -132,7 +138,9 @@ public sealed class OnboardingLanguageTests : IDisposable
         Assert.Equal("en", step.SelectedLanguage);
         Assert.Equal("Initial setup", windowTitle);
 
-        // Skip (the only reachable leave on a one-step wizard that is not Next) saves nothing.
+        // Skip on the first page jumps to the last one and saves nothing there either.
+        wizard.SkipCommand.Execute(null);
+        Assert.IsType<PlatformsStepViewModel>(wizard.CurrentStep);
         wizard.SkipCommand.Execute(null);
         Assert.Null(LanguageStepViewModel.Saved(settings));
         using var doc = JsonDocument.Parse(File.ReadAllText(settings));

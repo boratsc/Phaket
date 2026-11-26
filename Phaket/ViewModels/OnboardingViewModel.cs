@@ -28,6 +28,7 @@ public sealed partial class OnboardingViewModel : ViewModelBase
 
         public Task ActivateAsync(IOnboardingStep step) => Task.CompletedTask;
         public Task LeaveAsync(IOnboardingStep step) => Task.CompletedTask;
+        public void Reset() { }
     }
 
     // PAK-134: the registry is built in App and shared with the shell, so a step that saves
@@ -71,8 +72,8 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     private void LeaveFlow(bool confirm)
     {
         if (confirm && flow.Steps.Count > 0) _ = flow.LeaveAsync(CurrentStep!);
-        // Re-arming the current step's preset, so a restarting wizard shows the new saved state.
-        if (flow is LanguageStepActions local) local.Reset();
+        // Re-arming every step's preset, so a restarting wizard shows the new saved state.
+        if (confirm) flow.Reset();
         service.Complete();
         VisibilityChanged?.Invoke(this, false);
     }
@@ -91,8 +92,10 @@ public sealed partial class OnboardingViewModel : ViewModelBase
     [RelayCommand]
     private void Restart()
     {
-        if (flow is LanguageStepActions local) local.Reset();
+        if (flow.Steps.Count > 0) index = 0;
+        flow.Reset();
         service.Reset();
+        ApplyStep();
         VisibilityChanged?.Invoke(this, true);
     }
 

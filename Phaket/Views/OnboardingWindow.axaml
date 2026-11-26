@@ -29,6 +29,42 @@
         </ItemsControl>
       </StackPanel>
     </DataTemplate>
+    <!-- PAK-135: platforms step. One row per platform; the row's own status keeps the page
+         live instead of a page-level counter. "Later" is the wizard's Skip. -->
+    <DataTemplate DataType="{x:Type vm:PlatformsStepViewModel}" x:DataType="vm:PlatformsStepViewModel">
+      <StackPanel Spacing="10" Margin="4">
+        <TextBlock Classes="sectionTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="2" />
+        <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+        <ItemsControl ItemsSource="{Binding Platforms}" AutomationProperties.Name="{Binding Title}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PlatformSignInViewModel">
+              <Border Classes="card" Margin="0,4,0,0">
+                <StackPanel Spacing="6">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="secondary" Command="{Binding SignInCommand}"
+                            IsVisible="{Binding CanSignIn}" Content="{Binding LoginText}"
+                            AutomationProperties.Name="{Binding LoginText}"
+                            AutomationProperties.AutomationId="{Binding AutomationId}" />
+                  </Grid>
+                  <StackPanel Spacing="6" IsVisible="{Binding HasKey}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding CanSignIn}">
+                      <TextBox Text="{Binding KeyInput}" PasswordChar="•" PlaceholderText="{Binding PasteText}"
+                               AutomationProperties.Name="{Binding PasteText}" />
+                      <Button Grid.Column="1" Classes="secondary" Command="{Binding PasteKeyCommand}"
+                              Content="{Binding PasteText}" AutomationProperties.Name="{Binding PasteText}" />
+                    </Grid>
+                  </StackPanel>
+                  <TextBlock Classes="muted" IsVisible="{Binding HasStatus}" Text="{Binding Status}" TextWrapping="Wrap"
+                             AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="muted" Text="{Binding InfoText}" TextWrapping="Wrap" />
+      </StackPanel>
+    </DataTemplate>
     <!-- PAK-133 empty-registry page; still rendered by builds without registered steps. -->
     <DataTemplate DataType="{x:Type vm:OnboardingViewModel+PlaceholderStep}" x:DataType="vm:OnboardingViewModel+PlaceholderStep">
       <StackPanel Spacing="10" Margin="4">
