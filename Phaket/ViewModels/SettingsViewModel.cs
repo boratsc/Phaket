@@ -135,6 +135,12 @@ public partial class SettingsViewModel : ViewModelBase
 
     internal string SettingsFile => settingsPath;
 
+    // Wizard entry (PAK-133); wired by the shell, which owns the window that shows it.
+    public OnboardingViewModel? Onboarding { get; set; }
+
+    [RelayCommand]
+    private void RunOnboarding() => Onboarding?.RestartCommand.Execute(null);
+
     [ObservableProperty]
     private string selectedLanguage = LocalizationService.Instance.CurrentLanguage;
 

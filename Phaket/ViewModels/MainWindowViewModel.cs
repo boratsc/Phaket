@@ -25,6 +25,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public SteamPromptViewModel SteamPrompt => SteamPromptViewModel.Shared;
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
+    // Shared with the settings page ("run initial setup") and the shell's wizard host.
+    public OnboardingViewModel Onboarding { get; } = new();
     public HelpViewModel Help { get; } = new();
     public AccountsViewModel Accounts { get; }
     public ThemeService Theme { get; }
@@ -68,6 +70,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Library = new LibraryViewModel(OpenGame, accounts, () => Navigate("account"));
         RecipeStudio = new RecipeStudioViewModel();
         Settings = settings;
+        Settings.Onboarding = Onboarding;
         Theme = new ThemeService(settings.SettingsFile);
         Library.ScanCommand.Execute(null);
         currentGame = Library.Games.FirstOrDefault();

@@ -8,13 +8,22 @@ namespace Phaket;
 
 public partial class MainWindow : Window
 {
+    private readonly Views.OnboardingWindowManager onboardingWindow;
+
     public MainWindow() : this(new ViewModels.MainWindowViewModel()) { }
 
     internal MainWindow(ViewModels.MainWindowViewModel viewModel)
     {
         InitializeComponent();
         DataContext = viewModel;
-        Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
+        onboardingWindow = new Views.OnboardingWindowManager(() => viewModel.Onboarding);
+        viewModel.Onboarding.VisibilityChanged += OnOnboardingVisibilityChanged;
+        Closed += (_, _) =>
+        {
+            viewModel.Onboarding.VisibilityChanged -= OnOnboardingVisibilityChanged;
+            onboardingWindow.Close();
+            (DataContext as IDisposable)?.Dispose();
+        };
         SizeChanged += (_, args) =>
         {
             double width = args.NewSize.Width;
@@ -47,6 +56,12 @@ public partial class MainWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // Settings asks for the wizard again (PAK-133); the shell stays behind it.
+    private void OnOnboardingVisibilityChanged(object? sender, bool open)
+    {
+        if (open) onboardingWindow.Show();
+    }
 
     private void OnDragRegionPointerPressed(object? sender, PointerPressedEventArgs e)
     {

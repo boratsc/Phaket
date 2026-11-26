@@ -512,5 +512,17 @@
   "Communities.ComingSoon": "Communities will be available in the next development wave.",
   "Downloads.Title": "Downloads",
   "Downloads.Subtitle": "Track downloads and installation progress.",
-  "Downloads.ComingSoon": "The download queue will be available in the next development wave."
+  "Downloads.ComingSoon": "The download queue will be available in the next development wave.",
+  "Onboarding.Title": "Initial setup",
+  "Onboarding.Subtitle": "A few quick settings to get started. Everything can be skipped and changed later in Settings.",
+  "Onboarding.StepCounter": "Step {0} of {1}",
+  "Onboarding.Back": "Back",
+  "Onboarding.Next": "Next",
+  "Onboarding.Skip": "Skip",
+  "Onboarding.Finish": "Finish",
+  "Onboarding.Placeholder.Title": "All set to go",
+  "Onboarding.Placeholder.Description": "This window will gather a few starting settings. You can skip it and head straight into the app — Settings are always available in the menu.",
+  "Onboarding.Restart.Title": "Initial setup",
+  "Onboarding.Restart.Hint": "Walk through the starting settings again: language, platforms and basics.",
+  "Onboarding.Restart.Action": "Run initial setup"
 }

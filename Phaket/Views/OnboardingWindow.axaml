@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Phaket.ViewModels"
+        xmlns:services="using:Phaket.Services"
+        x:Class="Phaket.Views.OnboardingWindow"
+        x:DataType="vm:OnboardingViewModel"
+        Title="{Binding Title}"
+        Width="760" Height="540" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Icon="avares://Phaket/Assets/brand/phaket-app-icon.ico"
+        AutomationProperties.Name="{Binding Title}"
+        Background="{DynamicResource AppBackgroundBrush}">
+  <Window.DataTemplates>
+    <!-- The placeholder step is the only page until PAK-134+ register their steps. -->
+    <DataTemplate DataType="{x:Type vm:OnboardingViewModel+PlaceholderStep}" x:DataType="vm:OnboardingViewModel+PlaceholderStep">
+      <StackPanel Spacing="10" Margin="4">
+        <TextBlock Classes="sectionTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="2" />
+        <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+      </StackPanel>
+    </DataTemplate>
+  </Window.DataTemplates>
+  <Grid RowDefinitions="Auto,*,Auto" Margin="32,28,32,24">
+    <StackPanel Grid.Row="0" Spacing="6">
+      <TextBlock Classes="pageTitle" Text="{Binding Title}" AutomationProperties.HeadingLevel="1" />
+      <TextBlock Classes="pageSubtitle" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+      <TextBlock Classes="quiet" IsVisible="{Binding HasStepCounter}" Text="{Binding StepCounterText}"
+                 AutomationProperties.Name="{Binding StepCounterText}" />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="card" Margin="0,20">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ContentControl Content="{Binding CurrentStep}" Focusable="False" />
+      </ScrollViewer>
+    </Border>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+      <Button Classes="secondary" Command="{Binding BackCommand}" IsVisible="{Binding CanGoBack}"
+              Content="{Binding [Onboarding.Back], Source={x:Static services:LocalizationService.Instance}}"
+              AutomationProperties.Name="{Binding [Onboarding.Back], Source={x:Static services:LocalizationService.Instance}}" />
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+        <Button Classes="secondary" Command="{Binding SkipCommand}"
+                Content="{Binding [Onboarding.Skip], Source={x:Static services:LocalizationService.Instance}}"
+                AutomationProperties.Name="{Binding [Onboarding.Skip], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Classes="primary" Command="{Binding NextCommand}" IsVisible="{Binding CanGoNext}"
+                Content="{Binding [Onboarding.Next], Source={x:Static services:LocalizationService.Instance}}"
+                AutomationProperties.Name="{Binding [Onboarding.Next], Source={x:Static services:LocalizationService.Instance}}" />
+        <Button Classes="primary" Command="{Binding FinishCommand}" IsVisible="{Binding !CanGoNext}"
+                Content="{Binding [Onboarding.Finish], Source={x:Static services:LocalizationService.Instance}}"
+                AutomationProperties.Name="{Binding [Onboarding.Finish], Source={x:Static services:LocalizationService.Instance}}" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

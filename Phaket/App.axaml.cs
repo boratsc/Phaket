@@ -22,11 +22,29 @@ public partial class App : Application
             DeviceIdentityServices.SetCurrent(identity);
             var accounts = new AccountServices();
             var settings = new ViewModels.SettingsViewModel();
+            var onboarding = new ViewModels.OnboardingViewModel(
+                ViewModels.OnboardingViewModel.CreateService(OnboardingService.DefaultSettingsPath));
+            var onboardingWindow = new Views.OnboardingWindowManager(() => onboarding);
+            settings.Onboarding = onboarding;
+            onboarding.VisibilityChanged += (_, open) =>
+            {
+                if (open) onboardingWindow.Show();
+            };
             // The shell owns the one and only profile publisher (Accounts.ProfilePublisher);
             // building another one here would leak a second HttpClient for the same identity.
-            desktop.MainWindow = new MainWindow(new ViewModels.MainWindowViewModel(accounts, settings, signer: identity.CommunitySigner));
+            var shell = new MainWindow(new ViewModels.MainWindowViewModel(accounts, settings, signer: identity.CommunitySigner));
+            // First start: the wizard comes first; any exit out of it (finish, skip, close)
+            // writes onboardingCompleted and then opens the shell.
+            if (onboarding.IsFirstRun()) onboardingWindow.Show(() => LaunchShell(shell));
+            else LaunchShell(shell);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void LaunchShell(MainWindow shell)
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime) lifetime.MainWindow = shell;
+        shell.Show();
     }
 }

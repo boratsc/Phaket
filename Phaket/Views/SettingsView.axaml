@@ -71,6 +71,18 @@
                     AutomationProperties.Name="{Binding [Shell.Theme], Source={x:Static services:LocalizationService.Instance}}" />
           </Grid>
         </Border>
+        <Border Classes="card" IsVisible="{Binding Onboarding, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="5">
+              <TextBlock Classes="sectionTitle" Text="{Binding [Onboarding.Restart.Title], Source={x:Static services:LocalizationService.Instance}}" />
+              <TextBlock Classes="muted" Text="{Binding [Onboarding.Restart.Hint], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="secondary" VerticalAlignment="Center"
+                    Command="{Binding RunOnboardingCommand}"
+                    Content="{Binding [Onboarding.Restart.Action], Source={x:Static services:LocalizationService.Instance}}"
+                    AutomationProperties.Name="{Binding [Onboarding.Restart.Action], Source={x:Static services:LocalizationService.Instance}}" />
+          </Grid>
+        </Border>
       </StackPanel>
 
       <Border Classes="card" IsVisible="{Binding IsCatalogSection}">

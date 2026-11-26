@@ -512,5 +512,17 @@
   "Communities.ComingSoon": "Społeczności będą dostępne w kolejnej fali prac.",
   "Downloads.Title": "Pobieranie",
   "Downloads.Subtitle": "Śledź postęp pobierania i instalacji.",
-  "Downloads.ComingSoon": "Kolejka pobierania będzie dostępna w kolejnej fali prac."
+  "Downloads.ComingSoon": "Kolejka pobierania będzie dostępna w kolejnej fali prac.",
+  "Onboarding.Title": "Konfiguracja początkowa",
+  "Onboarding.Subtitle": "Kilka szybkich ustawień na start. Wszystko można pominąć i zmienić później w Ustawieniach.",
+  "Onboarding.StepCounter": "Krok {0} z {1}",
+  "Onboarding.Back": "Wstecz",
+  "Onboarding.Next": "Dalej",
+  "Onboarding.Skip": "Pomiń",
+  "Onboarding.Finish": "Zakończ",
+  "Onboarding.Placeholder.Title": "Wszystko gotowe do pracy",
+  "Onboarding.Placeholder.Description": "To okno będzie zbierać kilka ustawień startowych. Możesz je pominąć i od razu przejść do aplikacji — Ustawienia są zawsze dostępne w menu.",
+  "Onboarding.Restart.Title": "Konfiguracja początkowa",
+  "Onboarding.Restart.Hint": "Przejdź ponownie przez ustawienia startowe: język, platformy i podstawy.",
+  "Onboarding.Restart.Action": "Uruchom konfigurację początkową"
 }
