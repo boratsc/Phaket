@@ -197,7 +197,19 @@ public partial class ModpackCatalogViewModel : ViewModelBase, IDisposable
         foreach (var code in pendingPlan.Warnings)
             InstallPlanWarnings.Add(code == "GITHUB_HASH_UNVERIFIED"
                 ? LocalizationService.Instance[code]
-                : LocalizationService.Instance["ModInstall.WarningOther"] + " " + code);
+                : code.StartsWith("MOD_COMPATIBILITY_UNTESTED|", StringComparison.Ordinal)
+                    ? UntestedWarning(code)
+                    : LocalizationService.Instance["ModInstall.WarningOther"] + " " + code);
+    }
+
+    // PAK-97: an NT pair travels as "MOD_COMPATIBILITY_UNTESTED|<full>|<dll>".
+    private static string UntestedWarning(string code)
+    {
+        var parts = code.Split('|');
+        return parts.Length == 3
+            ? Phaket.Core.Omrl.ErrorMessages.Format("MOD_COMPATIBILITY_UNTESTED", LocalizationService.Instance.CurrentLanguage,
+                new Dictionary<string, string> { ["full"] = parts[1], ["dll"] = parts[2] })
+            : code;
     }
 
     partial void OnStatusKeyChanged(string? value) => OnPropertyChanged(nameof(HasStatus));
@@ -669,6 +681,8 @@ public partial class ModpackCatalogViewModel : ViewModelBase, IDisposable
         ErrorCodes.ArtifactSizeMismatch => "Catalog.InstallSizeMismatch",
         ErrorCodes.ModSourceHostNotAllowed => "Catalog.InstallHostNotAllowed",
         ErrorCodes.ArtifactDownloadUnavailable => "Catalog.InstallPinnedAssetUnavailable",
+        // PAK-97: a blocked full×dll pair carries Core's own bilingual message.
+        ErrorCodes.ModCompatibilityBlocked => ErrorCodes.ModCompatibilityBlocked,
         _ => error.StartsWith("Catalog.", StringComparison.Ordinal) ? error : "Catalog.InstallFailed"
     };
 

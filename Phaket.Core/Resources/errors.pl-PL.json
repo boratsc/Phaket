@@ -19,6 +19,8 @@
   "MOD_SOURCE_HOST_NOT_ALLOWED": "Host pobierania {host} nie jest dozwolony dla tego źródła moda.",
   "MOD_ARTIFACT_UNAVAILABLE": "Żaden wariant moda {artifact} nie pasuje do tej instalacji (architektura: {arch}, sklep: {store}). Wybierz inną wersję moda lub inną instalację.",
   "MOD_ARTIFACT_HASH_UNDECLARED": "Artefakt moda {artifact} nie ma zadeklarowanej sumy SHA-256, więc nie można go zweryfikować. Instalacja wstrzymana — zgłoś to w katalogu modów.",
+  "MOD_COMPATIBILITY_BLOCKED": "Mod {full} i dll {dll} są oznaczone w tabeli zgodności jako niedziałające razem. Usuń jedno z nich z planu.",
+  "MOD_COMPATIBILITY_UNTESTED": "Mod {full} i dll {dll} nie były testowane razem. Instalacja zostanie wykonana, ale połączenie może nie działać.",
   "ARCHIVE_INVALID": "Nie można odczytać archiwum {artifact} jako prawidłowego pliku ZIP.",
   "ARCHIVE_FORMAT_UNSUPPORTED": "Archiwum {artifact} używa nieobsługiwanego formatu {format}. Wybierz plik ZIP.",
   "PLAN_NOT_ACCEPTED": "Przed zmianą plików należy przejrzeć i zatwierdzić plan instalacji.",

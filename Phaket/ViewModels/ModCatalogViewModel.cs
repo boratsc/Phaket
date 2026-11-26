@@ -290,6 +290,7 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
                         "BUILD_UNKNOWN" => loc["ModInstall.WarningBuildUnknown"],
                         "loader-overwrite-unknown" => loc["ModInstall.WarningLoaderOverwriteUnknown"],
                         "THUNDERSTORE_HASH_UNVERIFIED" => ErrorMessages.Format("THUNDERSTORE_HASH_UNVERIFIED", loc.CurrentLanguage),
+                        _ when warning.StartsWith("MOD_COMPATIBILITY_UNTESTED|", StringComparison.Ordinal) => UntestedWarning(loc, warning),
                         _ => loc["ModInstall.WarningOther"] + " " + warning
                     };
                     PlanWarnings.Add(text);
@@ -383,6 +384,15 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
         if (SelectedMod is null || !Uri.TryCreate(SelectedMod.PackageUrl, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
         try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
         catch (Exception) { DetailsStatus = LocalizationService.Instance["ModCatalog.OpenFailed"]; }
+    }
+    // PAK-97: "NT" carries the pair names after the code; the message keeps them in the
+    // language-independent order the resolver produced.
+    private static string UntestedWarning(LocalizationService loc, string warning)
+    {
+        var parts = warning.Split('|');
+        return parts.Length == 3
+            ? ErrorMessages.Format("MOD_COMPATIBILITY_UNTESTED", loc.CurrentLanguage, new Dictionary<string, string> { ["full"] = parts[1], ["dll"] = parts[2] })
+            : warning;
     }
 }
 

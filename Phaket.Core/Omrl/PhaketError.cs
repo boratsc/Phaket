@@ -26,6 +26,8 @@ public static class ErrorCodes
     // The catalog artifact carries no declared SHA-256. The observed hash is never promoted
     // to a pin: without a server-declared hash there is nothing to trust (no TOFU).
     public const string ModArtifactHashUndeclared = "MOD_ARTIFACT_HASH_UNDECLARED";
+    // PAK-97: the plan combines a SusModder full mod with a dll the upstream matrix marks "does not work".
+    public const string ModCompatibilityBlocked = "MOD_COMPATIBILITY_BLOCKED";
     public const string ArchiveInvalid = "ARCHIVE_INVALID";
     public const string ArchiveFormatUnsupported = "ARCHIVE_FORMAT_UNSUPPORTED";
     public const string PlanNotAccepted = "PLAN_NOT_ACCEPTED";

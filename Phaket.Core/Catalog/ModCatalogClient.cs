@@ -64,6 +64,8 @@ public sealed record ModArtifact(string Url, string? Arch = null, IReadOnlyList<
     string? Sha256 = null, long? SizeBytes = null, string? Source = null, string? AssetName = null);
 public sealed record ModIndexPage(long Revision, DateTimeOffset GeneratedAt,
     IReadOnlyList<ThunderstoreMod> Mods, string? NextCursor);
+// PAK-97: upstream SusModder full×dll pair status as the server serves it (F, W, NT, NW).
+public sealed record ModCompatibility(string FullId, string DllId, string Status);
 public sealed record ThunderstoreModDetails(ThunderstoreMod Mod, IReadOnlyList<ThunderstoreVersion> Versions,
     DateTimeOffset FetchedAt);
 
@@ -82,7 +84,7 @@ public sealed class ModCatalogStore : IDisposable
         // packaging, amongVersion, arch, artifacts, license) need no ALTER TABLE,
         // and caches written before them deserialize with nulls.
         using var cmd = db.CreateCommand();
-        cmd.CommandText = "CREATE TABLE IF NOT EXISTS mods(id TEXT PRIMARY KEY, game_id TEXT NOT NULL, full_name TEXT NOT NULL, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_details(id TEXT PRIMARY KEY,data TEXT NOT NULL,fetched_at TEXT NOT NULL);";
+        cmd.CommandText = "CREATE TABLE IF NOT EXISTS mods(id TEXT PRIMARY KEY, game_id TEXT NOT NULL, full_name TEXT NOT NULL, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_details(id TEXT PRIMARY KEY,data TEXT NOT NULL,fetched_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mod_compat(game_id TEXT NOT NULL, full_id TEXT NOT NULL, dll_id TEXT NOT NULL, status TEXT NOT NULL, PRIMARY KEY(game_id, full_id, dll_id));";
         cmd.ExecuteNonQuery();
     }
     public long Revision => long.TryParse(Meta("revision"), out var n) ? n : 0;
@@ -96,7 +98,14 @@ public sealed class ModCatalogStore : IDisposable
     private string? Meta(string key) { using var c=db.CreateCommand(); c.CommandText="SELECT value FROM mod_meta WHERE key=$k"; c.Parameters.AddWithValue("$k",key); return c.ExecuteScalar() as string; }
     private static void Set(SqliteConnection db, SqliteTransaction tx, string key, string value) { using var c=db.CreateCommand(); c.Transaction=tx; c.CommandText="INSERT INTO mod_meta VALUES($k,$v) ON CONFLICT(key) DO UPDATE SET value=excluded.value"; c.Parameters.AddWithValue("$k",key); c.Parameters.AddWithValue("$v",value); c.ExecuteNonQuery(); }
     public IReadOnlyList<ThunderstoreMod> GetMods(string gameId) { using var c=db.CreateCommand(); c.CommandText="SELECT data FROM mods WHERE game_id=$g ORDER BY full_name"; c.Parameters.AddWithValue("$g",gameId); using var r=c.ExecuteReader(); var items=new List<ThunderstoreMod>(); while(r.Read()) items.Add(JsonSerializer.Deserialize<ThunderstoreMod>(r.GetString(0), JsonOptions)!); return items; }
-    internal void Replace(string gameId,IEnumerable<ThunderstoreMod> mods,long revision,string? etag) { using var tx=db.BeginTransaction(); using(var c=db.CreateCommand()){c.Transaction=tx;c.CommandText="DELETE FROM mods WHERE game_id=$game";c.Parameters.AddWithValue("$game",gameId);c.ExecuteNonQuery();} foreach(var m in mods) Upsert(m,tx); Set(db,tx,"revision",revision.ToString()); Set(db,tx,$"rev:{gameId}",revision.ToString()); if(etag is not null) { Set(db,tx,"etag",etag); Set(db,tx,$"etag:{gameId}",etag); } Set(db,tx,$"snapshotted:{gameId}","true"); Set(db,tx,"lastSync",DateTimeOffset.UtcNow.ToString("O")); tx.Commit(); }
+    // PAK-97: raw matrix rows for the game; an absent pair means "unknown", never "untested".
+    public IReadOnlyList<ModCompatibility> GetCompatibility(string gameId) { using var c=db.CreateCommand(); c.CommandText="SELECT full_id,dll_id,status FROM mod_compat WHERE game_id=$g ORDER BY full_id,dll_id"; c.Parameters.AddWithValue("$g",gameId); using var r=c.ExecuteReader(); var items=new List<ModCompatibility>(); while(r.Read()) items.Add(new(r.GetString(0),r.GetString(1),r.GetString(2))); return items; }
+    internal void Replace(string gameId,IEnumerable<ThunderstoreMod> mods,long revision,string? etag,IEnumerable<ModCompatibility>? compatibility=null) { using var tx=db.BeginTransaction(); using(var c=db.CreateCommand()){c.Transaction=tx;c.CommandText="DELETE FROM mods WHERE game_id=$game";c.Parameters.AddWithValue("$game",gameId);c.ExecuteNonQuery();}
+        // PAK-97: the matrix is replaced with the snapshot it belongs to; a page set that
+        // carried no matrix clears the game's pairs rather than serving stale ones.
+        using(var c=db.CreateCommand()){c.Transaction=tx;c.CommandText="DELETE FROM mod_compat WHERE game_id=$game";c.Parameters.AddWithValue("$game",gameId);c.ExecuteNonQuery();}
+        foreach(var pair in compatibility ?? []) using(var c=db.CreateCommand()){c.Transaction=tx;c.CommandText="INSERT OR REPLACE INTO mod_compat VALUES($game,$full,$dll,$status)";c.Parameters.AddWithValue("$game",gameId);c.Parameters.AddWithValue("$full",pair.FullId);c.Parameters.AddWithValue("$dll",pair.DllId);c.Parameters.AddWithValue("$status",pair.Status);c.ExecuteNonQuery();}
+        foreach(var m in mods) Upsert(m,tx); Set(db,tx,"revision",revision.ToString()); Set(db,tx,$"rev:{gameId}",revision.ToString()); if(etag is not null) { Set(db,tx,"etag",etag); Set(db,tx,$"etag:{gameId}",etag); } Set(db,tx,$"snapshotted:{gameId}","true"); Set(db,tx,"lastSync",DateTimeOffset.UtcNow.ToString("O")); tx.Commit(); }
     internal void Apply(IEnumerable<ThunderstoreMod> mods,IEnumerable<string> tombstones,long revision) { using var tx=db.BeginTransaction(); foreach(var id in tombstones){using var c=db.CreateCommand();c.Transaction=tx;c.CommandText="DELETE FROM mods WHERE id=$id";c.Parameters.AddWithValue("$id",id);c.ExecuteNonQuery();} foreach(var m in mods) Upsert(m,tx); Set(db,tx,"revision",revision.ToString()); Set(db,tx,"rev:among-us",revision.ToString()); Set(db,tx,"rev:valheim",revision.ToString()); Set(db,tx,"lastSync",DateTimeOffset.UtcNow.ToString("O")); tx.Commit(); }
     private void Upsert(ThunderstoreMod m,SqliteTransaction tx) { using var c=db.CreateCommand(); c.Transaction=tx;c.CommandText="INSERT INTO mods VALUES($id,$game,$name,$data) ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id,full_name=excluded.full_name,data=excluded.data"; c.Parameters.AddWithValue("$id",m.Id);c.Parameters.AddWithValue("$game",m.GameId);c.Parameters.AddWithValue("$name",m.FullName);c.Parameters.AddWithValue("$data",JsonSerializer.Serialize(m, JsonOptions));c.ExecuteNonQuery(); }
     internal ThunderstoreModDetails? GetDetails(string id) { using var c=db.CreateCommand(); c.CommandText="SELECT data,fetched_at FROM mod_details WHERE id=$id"; c.Parameters.AddWithValue("$id",id); using var r=c.ExecuteReader(); return r.Read()? JsonSerializer.Deserialize<ThunderstoreModDetails>(r.GetString(0), JsonOptions)! with { FetchedAt=DateTimeOffset.Parse(r.GetString(1)) }:null; }
@@ -139,6 +148,9 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
         if(delta.StatusCode==410) { await Snapshot(gameId,cancellationToken); return; }
         if(delta.StatusCode==200 && delta.Body is not null)
         {
+            // shortcut: /mods/changes carries no compatibility matrix (PAK-97 contract), so the
+            // matrix refreshes only on a full snapshot; a status change waits for the next
+            // incremental full refresh/etag miss. Add a matrix field to changes to close it.
             using var doc=JsonDocument.Parse(delta.Body); var root=doc.RootElement;
             if(root.GetProperty("reset").GetBoolean()) { await Snapshot(gameId,cancellationToken); return; }
             var upserts=new List<ThunderstoreMod>(); var deleted=new List<string>();
@@ -152,13 +164,21 @@ public sealed class ModCatalogClient(ICatalogTransport transport, ModCatalogStor
     private async Task Snapshot(string gameId,CancellationToken ct)
     {
         string? cursor=null,etag=null; long revision=0; var all=new List<ThunderstoreMod>();
+        // PAK-97: pairs arrive once per full index (the contract has no separate matrix
+        // endpoint); every page repeats or extends them, so later pages win per pair.
+        var compatibility=new Dictionary<(string Full,string Dll),ModCompatibility>();
         // PAK-128: the server allows 500 rows per page; 100 pages were ~5x the requests
         // needed and tripped the per-IP limiter (429) during a full sync.
         do { var path=$"/mods/index?game={Uri.EscapeDataString(gameId)}&limit=500"+(cursor is null?"":$"&cursor={Uri.EscapeDataString(cursor)}"); var res=await transport.GetAsync(path,cursor is null?store.GameETag(gameId):null,ct);
             if(res.StatusCode==304) { if(cursor is null) store.MarkSynced(); return; } if(res.StatusCode!=200||res.Body is null) throw new HttpRequestException($"mod catalog snapshot failed: {res.StatusCode}");
             using var doc=JsonDocument.Parse(res.Body); var root=doc.RootElement; revision=root.GetProperty("revision").GetInt64(); etag=res.ETag;
             all.AddRange(root.GetProperty("mods").EnumerateArray().Select(x=>x.Deserialize<ThunderstoreMod>(JsonOptions)!)); cursor=root.TryGetProperty("nextCursor",out var next)&&next.ValueKind!=JsonValueKind.Null?next.GetString():null;
+            if(root.TryGetProperty("compatibility",out var matrix)&&matrix.ValueKind==JsonValueKind.Array)
+                foreach(var row in matrix.EnumerateArray())
+                    if(row.TryGetProperty("fullId",out var full)&&row.TryGetProperty("dllId",out var dll)&&row.TryGetProperty("status",out var status)
+                        && full.GetString() is { Length: > 0 } fullId && dll.GetString() is { Length: > 0 } dllId && status.GetString() is { Length: > 0 } raw)
+                        compatibility[(fullId,dllId)]=new(fullId,dllId,raw);
         } while(cursor is not null);
-        store.Replace(gameId,all,revision,etag);
+        store.Replace(gameId,all,revision,etag,compatibility.Values);
     }
 }

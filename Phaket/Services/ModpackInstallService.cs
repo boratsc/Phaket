@@ -101,21 +101,29 @@ public sealed class ModpackInstallService : IModpackInstallService
                 // A Thunderstore package may share the SusModder namespace/name, so a
                 // SusModder item only ever resolves inside the SusModder catalog rows.
                 var susModder = mods.Where(mod => string.Equals(mod.Source, "susmodder", StringComparison.OrdinalIgnoreCase)).ToArray();
+                // PAK-97: every SusModder item is resolved to its catalog row first, so the
+                // plan's full×dll pairs are known before any package is downloaded. NW blocks
+                // the plan, NT becomes a plan warning; one signal of each kind suffices.
+                var resolved = catalogItems.Select(item => (Item: item, Found: item.Source == "susmodder"
+                    ? item.ModId is { Length: > 0 } externalId
+                        ? susModder.FirstOrDefault(mod => string.Equals(mod.ExternalId, externalId, StringComparison.Ordinal))
+                        : susModder.FirstOrDefault(mod => string.Equals(mod.FullName, item.Name, StringComparison.OrdinalIgnoreCase))
+                    : item.ModId is not null && byId.TryGetValue(item.ModId, out var byIdFound) ? byIdFound : null)).ToArray();
+                var planItems = resolved
+                    .Where(pair => pair.Found is { Packaging: "full" or "dll" } && !string.IsNullOrWhiteSpace(pair.Found.ExternalId))
+                    .Select(pair => (Id: pair.Found!.ExternalId!, Name: pair.Found.FullName, Packaging: pair.Found.Packaging!)).ToArray();
+                var findings = ModCompatibilityResolver.Check(db.GetCompatibility(pack.GameId), planItems);
+                if (findings.FirstOrDefault(item => item.Signal == ModCompatibilitySignal.Block) is { } blocked)
+                    throw new PhaketException(ErrorCodes.ModCompatibilityBlocked, ("full", blocked.FullName), ("dll", blocked.DllName));
+                if (findings.FirstOrDefault(item => item.Signal == ModCompatibilitySignal.Warn) is { } untested)
+                    warnings.Add($"MOD_COMPATIBILITY_UNTESTED|{untested.FullName}|{untested.DllName}");
                 var install = new ModInstallService(appDataRoot, client, packageTransport ?? new HttpPackageTransport(),
                     catalogTransport: catalogTransport);
                 for (int i = 0; i < catalogItems.Length; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var item = catalogItems[i];
-                    ThunderstoreMod? found = null;
-                    if (item.Source == "susmodder")
-                        // The external id is authoritative when the server sent one; the full
-                        // name is only the fallback for an item that pins no id.
-                        found = item.ModId is { Length: > 0 } externalId
-                            ? susModder.FirstOrDefault(mod => string.Equals(mod.ExternalId, externalId, StringComparison.Ordinal))
-                            : susModder.FirstOrDefault(mod => string.Equals(mod.FullName, item.Name, StringComparison.OrdinalIgnoreCase));
-                    else if (item.ModId is not null && byId.TryGetValue(item.ModId, out var byIdFound))
-                        found = byIdFound;
+                    var found = resolved[i].Found;
                     if (found is null)
                         return Block(item.Source == "susmodder" ? "Catalog.InstallSusModderUnavailable" : "Catalog.InstallPlanFailed");
                     var preparation = await install.PrepareAsync(pack.GameId, found.FullName, item.Version,
@@ -371,11 +379,13 @@ public sealed class ModpackInstallService : IModpackInstallService
         ErrorCodes.ArtifactSizeMismatch => "Catalog.InstallSizeMismatch",
         ErrorCodes.ModSourceHostNotAllowed => "Catalog.InstallHostNotAllowed",
         ErrorCodes.ModSourceInvalid => "Catalog.InstallPinnedAssetUnavailable",
+        // PAK-97: an NW full×dll pair blocks the plan with Core's own (bilingual) message.
+        ErrorCodes.ModCompatibilityBlocked => ErrorCodes.ModCompatibilityBlocked,
         ErrorCodes.ArtifactDownloadUnavailable => "Catalog.InstallPinnedAssetUnavailable",
         _ => code.StartsWith("Catalog.", StringComparison.Ordinal) ? code : "Catalog.InstallPlanFailed"
     };
 
     internal static string GetMappedErrorForTest(string code) => MapCoreError(code);
 
-    private static ModpackInstallPlan Block(string key) => new("", [], [], key);
+    private static ModpackInstallPlan Block(string key) => new("", [], [], BlockReason: key);
 }

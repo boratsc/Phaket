@@ -11,7 +11,8 @@ public interface IModVersionSource
 public sealed record PinnedMod(string FullName, string Version, string DownloadUrl, long? FileSize,
     IReadOnlyList<string> Dependencies,
     IReadOnlyList<ModArtifact>? Artifacts = null, string? Packaging = null, string? AmongVersion = null,
-    string? Arch = null, string? Sha256 = null, string? Source = null, string? Availability = null);
+    string? Arch = null, string? Sha256 = null, string? Source = null, string? Availability = null,
+    string? ExternalId = null);
 
 public sealed record ResolutionResult(IReadOnlyList<PinnedMod> Pinned, IReadOnlyList<ConflictProposal> Conflicts);
 public sealed record ConflictProposal(string Package, IReadOnlyList<string> Versions,
@@ -58,7 +59,8 @@ public sealed class DependencyResolver(IModVersionSource source)
             stack.RemoveAt(stack.Count - 1);
             states[name] = 2;
             ordered.Add(new(name, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray(),
-                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability));
+                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability,
+                DetailsExternalId(details)));
         }
 
         await Visit(rootFullName, rootVersion, "ROOT");
@@ -126,12 +128,17 @@ public sealed class DependencyResolver(IModVersionSource source)
             stack.RemoveAt(stack.Count - 1);
             states[fullName] = 2;
             ordered.Add(new(fullName, match.VersionNumber, match.DownloadUrl, match.FileSize, dependencies.Select(d => $"{d.FullName}-{d.Version}").ToArray(),
-                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability));
+                match.Artifacts, match.Packaging, match.AmongVersion, match.Arch, match.Sha256, match.Source, match.Availability,
+                DetailsExternalId(details)));
         }
 
         await Visit(rootFullName, rootVersion, "ROOT");
         return ordered;
     }
+
+    // PAK-97: the details row names the mod whose artifacts this version came from; that
+    // row's external id keys the full×dll matrix.
+    private static string? DetailsExternalId(ThunderstoreModDetails details) => details.Mod?.ExternalId;
 
     private static (string FullName, string Version) ParseDependency(string value)
     {
