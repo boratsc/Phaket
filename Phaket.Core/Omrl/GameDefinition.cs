@@ -58,7 +58,9 @@ public sealed record GameDefinition(
     SavesIsolation? SavesIsolation = null,
     // Where the GAME really keeps saves per OS (Linux: ~/.config/unity3d/...), separate from
     // SavePaths, which is Phaket's own copy under the profile. Null = the game is Windows-only.
-    SaveLocationsByOs? SaveLocations = null)
+    SaveLocationsByOs? SaveLocations = null,
+    // PAK-146 C: optional future live-verified override. Omission stays conservative.
+    ParallelLaunch? ParallelLaunch = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
@@ -99,6 +101,8 @@ public sealed record GameDefinition(
 
     public SavesIsolationMode SavesIsolationFor(string os) =>
         (SavesIsolation ?? new SavesIsolation()).For(os);
+
+    public ParallelLaunchDeclaration? ParallelLaunchFor(string os) => ParallelLaunch?.For(os);
 }
 
 // Builds launcher-facing strings from declarative requirements. Values that could
@@ -161,6 +165,7 @@ public static class GameDefinitionLoader
         public IReadOnlyList<string>? SavePaths { get; init; }
         public SavesIsolation? SavesIsolation { get; init; }
         public SaveLocationsByOs? SaveLocations { get; init; }
+        public ParallelLaunch? ParallelLaunch { get; init; }
     }
 
     private sealed record DetectionDto
@@ -181,7 +186,7 @@ public static class GameDefinitionLoader
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
             dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
             dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths, ValidatedIsolation(dto.SavesIsolation),
-            ValidatedLocations(dto.SaveLocations));
+            ValidatedLocations(dto.SaveLocations), ValidatedParallelLaunch(dto.ParallelLaunch));
     }
 
     // Only the two systems the rest of the definition names; anything else is a typo, not data.
@@ -212,6 +217,30 @@ public static class GameDefinitionLoader
                     ("detail", $"saves isolation env keys for {os} are missing or outside the allowed set"));
         }
         return isolation;
+    }
+
+    private static ParallelLaunch? ValidatedParallelLaunch(ParallelLaunch? parallel)
+    {
+        if (parallel?.Os is null) return parallel;
+        foreach (var (os, declaration) in parallel.Os)
+        {
+            if (os is not ("windows" or "linux"))
+                throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"unknown parallel launch os: {os}"));
+            if (declaration.Status is not ("supported" or "not-supported"))
+                throw new PhaketException(ErrorCodes.ValidationFailed,
+                    ("detail", $"unsupported parallel launch status for {os}: {declaration.Status}"));
+            if (declaration.Status == "supported")
+            {
+                if (declaration.Reason is not null)
+                    throw new PhaketException(ErrorCodes.ValidationFailed,
+                        ("detail", $"supported parallel launch for {os} must not declare a reason"));
+                continue;
+            }
+            if (!ParallelLaunchReason.IsNotSupportedCode(declaration.Reason ?? ""))
+                throw new PhaketException(ErrorCodes.ValidationFailed,
+                    ("detail", $"unsupported parallel launch reason for {os}: {declaration.Reason}"));
+        }
+        return parallel;
     }
 }
 

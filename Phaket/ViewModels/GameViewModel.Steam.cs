@@ -213,6 +213,7 @@ public partial class GameViewModel
     {
         var root = LaunchRoot;
         var managed = ManagedGameRoot();
+        var parallelLaunch = new ParallelLaunchContext(Game.Definition, "steam", HostOs);
         // Exists only when this page really wrote the shortcut; a stale record is a store id.
         var shortcutAppId = HasSteamShortcut ? RecordedAppId : 0;
         try
@@ -236,12 +237,18 @@ public partial class GameViewModel
                 // Through Steam: the shortcut runs the package, the store id the vanilla game.
                 // Either way Steam starts it, so the saves are the user's own (SavesShared).
                 started = Launch.LaunchShortcut(shortcutAppId != 0 ? shortcutAppId.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
-                    Game.SteamAppId, Game.ProfileName);
+                    Game.SteamAppId, Game.ProfileName, parallelLaunch);
             else
                 started = Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName,
-                    HelperArguments ?? null, plan.Isolation.Environment, plan.Isolation.SavesShared);
+                    HelperArguments ?? null, plan.Isolation.Environment, plan.Isolation.SavesShared, parallelLaunch);
             LastLaunch = started;
-            if (!started.Started) { StatusMessage = Loc["Game.LaunchFailed"]; return; }
+            if (!started.Started)
+            {
+                StatusMessage = started.BlockedByParallelPolicy
+                    ? started.ParallelLaunchReason!.Message(Loc.CurrentLanguage)
+                    : Loc["Game.LaunchFailed"];
+                return;
+            }
             // Saves that cannot be kept beside the game are said once and the game still starts.
             IsSavesSharedNoticeVisible = started.SavesShared;
             StatusMessage = Loc["Game.Launched"];

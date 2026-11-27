@@ -97,6 +97,12 @@ public static class ErrorCodes
     public const string SteamShortcutConsentRequired = "STEAM_SHORTCUT_CONSENT_REQUIRED";
     // shortcuts.vdf could not be read; it is never replaced, because other tools' shortcuts live there.
     public const string SteamShortcutsCorrupt = "STEAM_SHORTCUTS_CORRUPT";
+    // PAK-146 C: a second instance is blocked by the declarative parallel-launch matrix.
+    public const string ParallelLaunchSharedSaves = "PARALLEL_LAUNCH_SHARED_SAVES";
+    public const string ParallelLaunchSteamSingleInstance = "PARALLEL_LAUNCH_STEAM_SINGLE_INSTANCE";
+    public const string ParallelLaunchEpicSingleInstance = "PARALLEL_LAUNCH_EPIC_SINGLE_INSTANCE";
+    public const string ParallelLaunchPortConflict = "PARALLEL_LAUNCH_PORT_CONFLICT";
+    public const string ParallelLaunchUnverified = "PARALLEL_LAUNCH_UNVERIFIED";
 }
 
 public sealed record PhaketError(string Code, IReadOnlyDictionary<string, string> Parameters)

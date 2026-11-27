@@ -67,5 +67,10 @@
   "AURELIA_CANCELLED": "The Aurelia operation was cancelled. Phaket shows the locally detected Steam games instead.",
     "AURELIA_RATE_LIMITED": "Steam is throttling Aurelia's requests. Phaket shows the locally detected Steam games until the limit clears.",
   "STEAM_SHORTCUT_CONSENT_REQUIRED": "Phaket needs your consent to add the shortcut to your Steam folder. Nothing was saved without it.",
-  "STEAM_SHORTCUTS_CORRUPT": "The Steam shortcut file ({path}) cannot be read. Phaket left it unchanged so your other shortcuts stay safe. Start Steam so it repairs the file, then try again."
+  "STEAM_SHORTCUTS_CORRUPT": "The Steam shortcut file ({path}) cannot be read. Phaket left it unchanged so your other shortcuts stay safe. Start Steam so it repairs the file, then try again.",
+  "PARALLEL_LAUNCH_SHARED_SAVES": "You cannot run two versions of this game at the same time: they share saves and one will break the other. Close the other version and try again.",
+  "PARALLEL_LAUNCH_STEAM_SINGLE_INSTANCE": "You cannot run two versions of this game at the same time through Steam: Steam only runs one instance. Close the other version and try again.",
+  "PARALLEL_LAUNCH_EPIC_SINGLE_INSTANCE": "You cannot run two versions of this game at the same time through Epic Games: Epic Games only runs one instance. Close the other version and try again.",
+  "PARALLEL_LAUNCH_PORT_CONFLICT": "You cannot run two versions of this game at the same time: they need the same port. Close the other version and try again.",
+  "PARALLEL_LAUNCH_UNVERIFIED": "This combination has not been checked yet. We do not promise that two versions will work together."
 }

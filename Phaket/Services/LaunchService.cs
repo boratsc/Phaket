@@ -1,14 +1,19 @@
 using System.Diagnostics;
 using Phaket.Core.Execution;
+using Phaket.Core.Launch;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 using Phaket.Core.Platforms.SteamShortcuts;
 
 namespace Phaket.Services;
 
-public sealed record LaunchOutcome(bool Started, bool Tracked, bool SavesShared = false)
+public sealed record LaunchOutcome(bool Started, bool Tracked, bool SavesShared = false,
+    ParallelLaunchReason? ParallelLaunchReason = null)
 {
     public static LaunchOutcome Failed { get; } = new(false, false);
+
+    public bool BlockedByParallelPolicy => ParallelLaunchReason is not null;
+    public string? ParallelLaunchReasonCode => ParallelLaunchReason?.Code;
 
     // Diagnostic detail for a refused start; null for a successful start. Never shown to users.
     internal string? Failure { get; init; }
@@ -68,12 +73,14 @@ public sealed class LaunchService
     // not redirect is flagged by the caller as savesShared, because it then writes into the
     // user's real profile.
     public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId,
-        string? sessionLabel, string? directArguments, IReadOnlyDictionary<string, string>? environment, bool savesShared)
+        string? sessionLabel, string? directArguments, IReadOnlyDictionary<string, string>? environment, bool savesShared,
+        ParallelLaunchContext? parallelLaunch = null)
     {
         // A launcher-installed game runs by name (Steam hands over the exe path with the game's
         // working directory); only a rooted executable can be checked for existence here.
         if (string.IsNullOrWhiteSpace(executable) || (Path.IsPathRooted(executable) && !File.Exists(executable)))
             return LaunchOutcome.Failed with { Failure = $"missing executable '{executable}'" };
+        if (BlockedByParallelPolicy(parallelLaunch, appId) is { } blocked) return blocked;
         int pid;
         Process? process = null;
         try
@@ -127,14 +134,44 @@ public sealed class LaunchService
     // a launch that goes through it ALWAYS shares saves with the base game — never claim the
     // package's redirect here. A steam:// launch leaves no PID of ours: nothing to track or stop.
     // The same diagnostic Failure travels back when Steam refuses the request.
-    public LaunchOutcome LaunchShortcut(string? shortcutAppId, string? storeAppId, string? sessionLabel) =>
-        LaunchGame(shortcutAppId ?? storeAppId ?? "")
+    public LaunchOutcome LaunchShortcut(string? shortcutAppId, string? storeAppId, string? sessionLabel,
+        ParallelLaunchContext? parallelLaunch = null)
+    {
+        if (BlockedByParallelPolicy(parallelLaunch, shortcutAppId ?? storeAppId, viaSteamProtocol: true) is { } blocked)
+            return blocked;
+        return LaunchGame(shortcutAppId ?? storeAppId ?? "")
             ? new LaunchOutcome(true, false, SavesShared: true)
             : LaunchOutcome.Failed with
             {
                 Failure = $"steam:// launch refused for '{shortcutAppId ?? storeAppId}'",
                 SavesShared = true,
             };
+    }
+
+    // Only the second instance is refused. The first launch of a game with shared saves still
+    // starts; Unknown is not silently promoted to Supported and is not a hard block either.
+    private LaunchOutcome? BlockedByParallelPolicy(ParallelLaunchContext? context, string? appId,
+        bool viaSteamProtocol = false)
+    {
+        if (context is null) return null;
+        HashSet<string> ids = context.Definition.StoreIds?.Values.ToHashSet(StringComparer.Ordinal) ?? [];
+        ids.Add(context.Definition.Slug);
+        if (!string.IsNullOrWhiteSpace(appId)) ids.Add(appId);
+        var active = trackers.Load().Any(record => trackers.IsAlive(record) &&
+            ((!string.IsNullOrWhiteSpace(record.AppId) && ids.Contains(record.AppId))
+             || (string.IsNullOrWhiteSpace(record.AppId)
+                 && string.Equals(record.SessionLabel, context.Definition.Slug, StringComparison.OrdinalIgnoreCase))));
+        if (!active) return null;
+
+        var decision = ParallelLaunchMatrix.Evaluate(context, viaSteamProtocol);
+        if (decision.Status != ParallelLaunchSupportStatus.NotSupported || decision.Reason is not { } reason)
+            return null;
+        return LaunchOutcome.Failed with
+        {
+            ParallelLaunchReason = reason,
+            Failure = $"parallel policy: {reason.Code}",
+        };
+    }
 
     // The newest record of this app, or null when Phaket never launched the game directly.
     public ProcessRecord? Tracked(string? appId) =>

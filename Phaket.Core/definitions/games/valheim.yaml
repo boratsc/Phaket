@@ -57,3 +57,10 @@ savesIsolation:
     windows:
       mode: shared
       reason: unity-locallow-known-folder
+# PAK-146 C: Windows follows the shared-saves rule. Linux direct launch stays absent (Unknown)
+# until a real two-instance test verifies it; steam:// is always steam-single-instance.
+parallelLaunch:
+  os:
+    windows:
+      status: not-supported
+      reason: shared-saves

@@ -67,5 +67,10 @@
   "AURELIA_CANCELLED": "Operacja Aurelii została anulowana. Phaket pokazuje gry Steam wykryte lokalnie.",
     "AURELIA_RATE_LIMITED": "Steam ogranicza zapytania Aurelii. Phaket pokazuje gry Steam wykryte lokalnie do czasu ustąpienia ograniczenia.",
   "STEAM_SHORTCUT_CONSENT_REQUIRED": "Phaket potrzebuje Twojej zgody na dopisanie skrótu do katalogu Steam. Bez zgody nic nie zostało zapisane.",
-  "STEAM_SHORTCUTS_CORRUPT": "Nie można odczytać pliku skrótów Steam ({path}). Phaket go nie zmienił, żeby nie usunąć innych skrótów. Uruchom Steam, aby naprawił plik, i spróbuj ponownie."
+  "STEAM_SHORTCUTS_CORRUPT": "Nie można odczytać pliku skrótów Steam ({path}). Phaket go nie zmienił, żeby nie usunąć innych skrótów. Uruchom Steam, aby naprawił plik, i spróbuj ponownie.",
+  "PARALLEL_LAUNCH_SHARED_SAVES": "Nie można uruchomić dwóch wersji tej gry naraz: dzielą zapisy i jedna zepsuje drugą. Zamknij drugą wersję i spróbuj ponownie.",
+  "PARALLEL_LAUNCH_STEAM_SINGLE_INSTANCE": "Nie można uruchomić dwóch wersji tej gry naraz przez Steam: Steam działa tylko w jednej instancji. Zamknij drugą wersję i spróbuj ponownie.",
+  "PARALLEL_LAUNCH_EPIC_SINGLE_INSTANCE": "Nie można uruchomić dwóch wersji tej gry naraz przez Epic Games: Epic Games działa tylko w jednej instancji. Zamknij drugą wersję i spróbuj ponownie.",
+  "PARALLEL_LAUNCH_PORT_CONFLICT": "Nie można uruchomić dwóch wersji tej gry naraz: potrzebują tego samego portu. Zamknij drugą wersję i spróbuj ponownie.",
+  "PARALLEL_LAUNCH_UNVERIFIED": "Ta kombinacja nie została jeszcze sprawdzona. Nie obiecujemy, że dwie wersje zadziałają razem."
 }
