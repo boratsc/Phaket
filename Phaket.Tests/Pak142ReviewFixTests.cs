@@ -274,8 +274,11 @@ public sealed class Pak142ReviewFixTests
         var emptySteam = new NoSteam();
         try
         {
-            // A Steam library whose appmanifest says the game moved to a newer build.
-            var steamRoot = Path.Combine(home, ".local", "share", "Steam");
+            // Build the library the way the scanner looks for it on THIS OS: a Linux layout
+            // under the temp home is invisible to the Windows Program Files root.
+            var steamRoot = OperatingSystem.IsWindows()
+                ? Path.Combine("C:\\Program Files (x86)", "Steam")
+                : Path.Combine(home, ".local", "share", "Steam");
             var steamApps = Path.Combine(steamRoot, "steamapps");
             var gameRoot = Path.Combine(steamApps, "common", "Among Us");
             Directory.CreateDirectory(gameRoot);

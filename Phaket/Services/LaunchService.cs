@@ -47,7 +47,9 @@ public sealed class LaunchService
     // A store launcher (Steam -applaunch) hands over to a child and exits; its record is
     // dropped again so "stop" never targets the launcher. Nothing waits here (the UI must
     // not freeze) and Stop re-verifies identity anyway.
-    public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId, string? sessionLabel)
+    // directArguments is a test seam that lets a fixture pass `cmd /c ...` on Windows without
+    // giving up the real OpenProcess/GetProcessTimes tracking; the app never sets it.
+    public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId, string? sessionLabel, string? directArguments = null)
     {
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return LaunchOutcome.Failed;
         int pid;
@@ -56,6 +58,7 @@ public sealed class LaunchService
             pid = Process.Start(new ProcessStartInfo
             {
                 FileName = executable,
+                Arguments = directArguments ?? "",
                 WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(executable)!,
                 UseShellExecute = false,
             })?.Id ?? 0;

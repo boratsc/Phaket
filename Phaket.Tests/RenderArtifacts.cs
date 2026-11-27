@@ -10,7 +10,8 @@ namespace Phaket.Tests;
 // browsing the folder.
 internal static class RenderArtifacts
 {
-    public const string Directory = "/tmp/opencode/phaket-render";
+    public static readonly string Directory =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "phaket-render");
     private static readonly string Run = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static int counter;
 

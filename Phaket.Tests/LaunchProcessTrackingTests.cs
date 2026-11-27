@@ -7,26 +7,31 @@ namespace Phaket.Tests;
 // PAK-143 integration: a direct launch is recorded with PID + start time and can be
 // stopped; steam:// leaves no record; the view model stops fail-closed.
 // Tests only ever spawn and stop their own helper process, never a real game.
-// shortcut: the helper is a POSIX shell script, so these tests run on Linux/macOS only;
-// add a long-running Windows helper when CI covers Windows for PAK-143.
-[System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+// The helper is a POSIX `sleep` or a Windows `cmd /c ping -n 300`; both paths of ProcessTracker
+// (pidfd/signal and OpenProcess/GetProcessTimes/TerminateProcess) are exercised for real.
 public class LaunchProcessTrackingTests : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-track-").FullName;
     private string Store => Path.Combine(root, "processes.json");
 
-    private static string HelperScript()
+    // Helper: a long-running child of ours. cmd's `ping` waits ~1 s per count and needs no
+    // shell, so it dies with TerminateProcess just like the POSIX `sleep`.
+    private static string HelperArgs() => OperatingSystem.IsWindows() ? "/c ping -n 300 127.0.0.1 >nul" : "";
+
+    private static (string executable, string arguments) Helper()
     {
+        if (OperatingSystem.IsWindows()) return ("cmd.exe", HelperArgs());
         var script = Path.Combine(Path.GetTempPath(), $"phaket-launch-helper-{Guid.NewGuid():N}.sh");
         File.WriteAllText(script, "#!/bin/sh\nsleep 300\n");
         File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return script;
+        return (script, "");
     }
 
     // Launch and wait until the record is readable: under load the child may not be in /proc yet.
     private static Phaket.Core.Execution.ProcessRecord LaunchAndTrack(LaunchService service, string appId)
     {
-        service.LaunchExecutable(HelperScript(), null, appId, "fixture");
+        var (executable, arguments) = Helper();
+        service.LaunchExecutable(executable, null, appId, "fixture", arguments);
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (true)
         {
@@ -57,7 +62,8 @@ public class LaunchProcessTrackingTests : IDisposable
     public void DirectLaunchWritesARecordWithPidAndStartTime()
     {
         var service = new LaunchService(Store);
-        var outcome = service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
+        var (executable, arguments) = Helper();
+        var outcome = service.LaunchExecutable(executable, null, "among-us", "fixture", arguments);
         var record = Assert.Single(new Phaket.Core.Execution.ProcessTracker(Store).Load());
         try
         {

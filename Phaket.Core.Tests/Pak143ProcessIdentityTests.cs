@@ -209,8 +209,6 @@ public sealed class Pak143ProcessTrackerTests
     }
 }
 
-// shortcut: helpers use POSIX `sleep`, so the tracker tests run on Linux/macOS only; add a
-// long-running Windows helper when CI covers Windows for PAK-143.
 internal static class Helpers
 {
     internal sealed class Helper(Process process) : IDisposable
@@ -230,9 +228,13 @@ internal static class Helpers
         }
     }
 
+    // The helper keeps running for minutes and dies with Kill: `sleep` on POSIX, cmd's `ping`
+    // on Windows (each count waits ~1 s), so both identity paths are exercised for real.
     internal static Helper Spawn()
     {
-        var process = Process.Start(new ProcessStartInfo("sleep", "300") { UseShellExecute = false })!;
+        var process = OperatingSystem.IsWindows()
+            ? Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 300 127.0.0.1 >nul") { UseShellExecute = false })!
+            : Process.Start(new ProcessStartInfo("sleep", "300") { UseShellExecute = false })!;
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline && !ProcessIdentity.TryGetProcessIdentity(process.Id).found)
             Thread.Sleep(10);
