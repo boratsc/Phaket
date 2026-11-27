@@ -50,8 +50,6 @@ public sealed class ModInstallService
     private readonly ProfileStore profiles;
     private readonly IBaseGameSource? baseGameSource;
     private readonly ICatalogTransport? catalogTransport;
-    // Test seam: the page's own download/execute must reach the fixture bytes, not the network.
-    internal static IPackageTransport? PackageTransportOverride { get; set; }
     // PAK-102: a full-package install provisions the pinned vanilla through DepotDownloader.
     // Steam auth comes from the same store and dialog as the library install; without them
     // the provision refuses with an actionable message instead of blocking on a prompt.
@@ -75,7 +73,7 @@ public sealed class ModInstallService
     {
         this.appDataRoot = appDataRoot;
         this.catalog = catalog;
-        this.packageTransport = packageTransport ?? PackageTransportOverride ?? new HttpPackageTransport();
+        this.packageTransport = packageTransport ?? new HttpPackageTransport();
         this.receiptTransport = receiptTransport;
         this.profiles = profiles ?? new ProfileStore(Path.Combine(appDataRoot, "profiles"));
         this.baseGameSource = baseGameSource;
