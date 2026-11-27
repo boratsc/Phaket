@@ -184,6 +184,51 @@ public sealed class SaveBackupHardeningTests
         Assert.True(File.Exists(Path.Combine(f.Saves, "profile.json")));
     }
 
+    // A file-less profile (a copy that did not fit the limit) is a real row of the list and a
+    // real candidate for rotation; only a restore refuses it. Listing must never drop it, or
+    // the list would hide existing copies and the space limit would stop seeing them.
+    [Fact]
+    public async Task ProfileRecordIsListedPrunedAndRefusedOnRestore()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var profile = await SaveBackupService.RecordAsync(f.Request(), f.Backups, limitBytes: 1, Ct);
+        Assert.Equal(SaveBackupService.ProfileSchemaVersion, profile.SchemaVersion);
+        Assert.Empty(profile.Files);
+
+        var listed = await service.ListBackupsAsync(f.Backups, f.GameFolder, Ct);
+        Assert.Equal(profile.Id, Assert.Single(listed).Id);
+
+        // A profile counts for rotation exactly like a full copy: it is deleted and reported.
+        var remaining = await service.PruneAsync(f.Backups, f.GameFolder, keepCount: 0, keepBytes: 0, consent: true, ct: Ct);
+        Assert.Empty(remaining);
+        Assert.Empty(await service.ListBackupsAsync(f.Backups, f.GameFolder, Ct));
+        Assert.False(Directory.Exists(f.BackupDirectory(profile.Id)));
+    }
+
+    // A profile is refused as a copy when its schema is not the profile one: only that schema
+    // may restore without files, so a forged or damaged file-less copy cannot wipe the folder.
+    [Fact]
+    public async Task FileLessCopyOfAnUnknownKindIsRefusedOnRestore()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        var folder = f.BackupDirectory(manifest.Id);
+        var fileLess = manifest with
+        {
+            Files = [],
+            Locations = manifest.Locations.Select(l => l with { Files = [] }).ToArray(),
+        };
+        fileLess = fileLess with { StateHash = fileLess.ComputeStateHash() };
+        File.WriteAllText(Path.Combine(folder, "manifest.json"), SaveBackupManifest.Format(fileLess));
+
+        var error = await Assert.ThrowsAsync<PhaketException>(() => service.RestoreAsync(folder, f.Saves, Ct));
+
+        AssertCode(ErrorCodes.SaveBackupRestoreRefused, error);
+        Assert.Equal("slot-one", Read(f, Path.Combine("Profiles", "slot1.dat")));
+    }
+
     // 4. A wrong root is refused even with consent, and nothing outside it is deleted.
     [Fact]
     public async Task PruneWithAWrongRootAndConsentDeletesNothing()

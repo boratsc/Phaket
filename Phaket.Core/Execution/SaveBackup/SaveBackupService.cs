@@ -76,9 +76,11 @@ public sealed class SaveBackupService
         if (limitBytes <= 0)
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "backup limit must be positive"));
         var locations = request.Locations.Distinct(PathComparer).Select(Path.GetFullPath).ToArray();
-        // A link as the save location itself would copy a tree the caller never approved.
+        // A link as the save location itself would copy a tree the caller never approved. A
+        // missing location is not a link: it is recorded as "did not exist", and its absence is
+        // what lets RecordAsync fall back to a file-less profile when the copy does not fit.
         foreach (var location in locations)
-            if (!IsPlainDirectory(location))
+            if (IsLinkedDirectory(location))
                 throw new PhaketException(ErrorCodes.SaveBackupRestoreRefused, ("path", location));
 
         // Stat everything first: the limit is decided before a single byte is copied.
@@ -436,6 +438,14 @@ public sealed class SaveBackupService
         if (!Directory.Exists(path)) return false;
         try { return new DirectoryInfo(path).LinkTarget is null; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    // Only an existing directory that is a link; a missing path is not one.
+    private static bool IsLinkedDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return false;
+        try { return new DirectoryInfo(path).LinkTarget is not null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return true; }
     }
 
     private static bool SamePath(string a, string b) =>
