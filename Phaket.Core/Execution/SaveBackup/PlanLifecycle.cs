@@ -76,6 +76,13 @@ public sealed class PlanLifecycle : IPlanLifecycle
             return (PlanApproval.ProfileOnTooLarge, Last = Store(request, root,
                 await SaveBackupService.RecordAsync(request, root, limit, ct).ConfigureAwait(false)));
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or PhaketException)
+        {
+            // A copy that could not be made must not block the install: the user's files stay
+            // where they are, and the executor still restores the tree from its base copies.
+            System.Diagnostics.Trace.TraceWarning("phaket: save backup failed for {0}: {1}", context.GameRoot, e.Message);
+            return (PlanApproval.Accept, null);
+        }
     }
 
     public Task FinishAsync(OperationPlan plan, ExecutionJournal journal, CancellationToken ct = default)
@@ -106,11 +113,14 @@ public sealed class PlanLifecycle : IPlanLifecycle
     private static SaveBackupRef Store(SaveBackupRequest request, string root, SaveBackupManifest manifest) =>
         new(manifest, Path.Combine(root, SaveBackupService.BackupFolderName(request.GameId, request.InstallationId), manifest.Id));
 
-    // Distinct existing save locations; null when the definition has none (behaviour
-    // before PAK-141) or none of them exists yet.
+    // Distinct save locations — Phaket's profile copies plus where the game itself keeps its
+    // saves on this OS; null when the definition has none (behaviour before PAK-141) or no
+    // chance of them exists yet.
     public SaveBackupRequest? SaveBackupRequest()
     {
+        var os = OperatingSystem.IsWindows() ? "windows" : "linux";
         var locations = (context.Game.SavePaths ?? [])
+            .Concat(context.Game.SaveLocations?.For(os) ?? [])
             .Select(path => ResolveSavePath(path, context.ProfileRoot))
             .Where(path => path is not null && Directory.Exists(path))
             .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
@@ -124,12 +134,14 @@ public sealed class PlanLifecycle : IPlanLifecycle
         return new SaveBackupRequest(title, $"{context.ProfileId}-{StableKey(stateKey)}", locations);
     }
 
-    // A definition path: "profile://..." under the profile root, otherwise absolute.
-    // Anything else is not a path grant and is ignored.
+    // A definition path: "profile://..." under the profile root, "~/..." in the user's home
+    // (where the game itself keeps saves), otherwise absolute. Anything else is ignored.
     public static string? ResolveSavePath(string path, string profileRoot)
     {
+        var resolved = GameDefinition.ResolveLocation(path,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         if (!VirtualUri.TryParse(path, out var scheme, out var rest))
-            return Path.IsPathRooted(path) ? Path.GetFullPath(path) : null;
+            return Path.IsPathRooted(path) ? Path.GetFullPath(path) : resolved is null ? null : Path.GetFullPath(resolved);
         if (scheme != "profile") return null;
         try
         {

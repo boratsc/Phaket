@@ -186,7 +186,7 @@ public static class GameDefinitionLoader
     private static SaveLocationsByOs? ValidatedLocations(SaveLocationsByOs? locations)
     {
         if (locations is null) return null;
-        foreach (var (os, paths) in locations.Os)
+        foreach (var (os, _) in locations.Os ?? new Dictionary<string, IReadOnlyList<string>>())
             if (os is not ("windows" or "linux"))
                 throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"unknown save locations os: {os}"));
         return locations;

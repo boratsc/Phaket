@@ -81,6 +81,10 @@ public sealed class Pak146SavesIsolationTests : IDisposable
         Assert.Equal(SavesIsolationMode.EnvRedirect, definition.SavesIsolationFor("linux").Mode);
         Assert.Equal(SavesIsolationMode.Shared, definition.SavesIsolationFor("windows").Mode);
         Assert.NotEmpty(definition.SavePaths!);
+        // Where the game really keeps saves: Linux only (Windows LocalLow cannot be redirected).
+        Assert.NotEmpty(definition.SaveSourcesFor("linux")!);
+        Assert.Empty(definition.SaveSourcesFor("windows")!);
+        Assert.All(definition.SaveSourcesFor("linux")!, path => Assert.StartsWith("~/", path));
     }
 
     [Fact]
@@ -236,36 +240,65 @@ public sealed class Pak146SavesIsolationTests : IDisposable
         Assert.False(File.Exists(Path.Combine(home, "linked/secret.dat")));
     }
 
-    // The whole flow the app calls: definition + profile save root + package tree.
+    // The whole flow the app calls: the definition's real save folder is the source, the profile
+// copy Phaket keeps is not, and a package on Windows shares the user's saves (no seed at all).
     [Fact]
-    public void PackageFlowSeedsFromDeclaredSavePathsAndVanillaKeepsThemShared()
+    public void PackageFlowSeedsFromTheGamesRealSaveFolderAndVanillaKeepsThemShared()
     {
         var profileRoot = Path.Combine(root, "profile");
-        var steamSaves = SaveTree("profile/steam/945360", ("playerPrefs", "vanilla"));
+        var profileCopy = SaveTree("profile/steam/945360", ("playerPrefs", "stale-copy"));
+        var real = SaveTree("home/.config/unity3d/Innersloth/Among Us", ("playerPrefs", "vanilla"), ("gameData", "data"));
         var definition = Definition(new SavesIsolation(new Dictionary<string, SavesIsolationMode>
         {
             ["linux"] = Env("HOME", "XDG_DATA_HOME"),
             ["windows"] = Shared("unity-locallow-known-folder"),
         }), "profile://steam/945360");
 
+        var linuxSources = (definition with
+        {
+            SaveLocations = new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["linux"] = [Path.Combine(root, "home/.config/unity3d/Innersloth/Among Us")],
+            }),
+        }).SaveSourcesFor("linux");
         var package = Path.Combine(root, "package");
         var isolated = PackageSavesIsolation.Prepare(new PackageSavesIsolation.Request(
-            "linux", definition.SavesIsolationFor("linux"), package, definition.SavePaths, profileRoot));
+            "linux", definition.SavesIsolationFor("linux"), package, linuxSources, profileRoot));
         Assert.False(isolated.Isolation.SavesShared);
         Assert.Equal(PackageSavesSeed.SeedStatus.Seeded, isolated.Seed!.Status);
-        var seeded = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config", "playerPrefs");
-        Assert.True(File.Exists(seeded));
-        Assert.True(File.Exists(Path.Combine(steamSaves, "playerPrefs")));
+        // Two files of the real folder, none of the profile copy: the copy is never the source.
+        Assert.Equal(2, isolated.Seed.FilesCopied);
+        Assert.Equal("vanilla", File.ReadAllText(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config", "playerPrefs")));
+        Assert.True(File.Exists(Path.Combine(real, "playerPrefs")));
+        // A Phaket profile copy ("profile://...") is not where the game reads its progress.
+        Assert.Empty(PackageSavesIsolation.SaveSources(["profile://steam/945360"]));
+        Assert.True(File.Exists(Path.Combine(profileCopy, "playerPrefs")));
 
         var vanilla = PackageSavesIsolation.Prepare(new PackageSavesIsolation.Request(
-            "linux", definition.SavesIsolationFor("linux"), null, definition.SavePaths, profileRoot));
+            "linux", definition.SavesIsolationFor("linux"), null, linuxSources, profileRoot));
         Assert.True(vanilla.Isolation.SavesShared);
         Assert.Null(vanilla.Seed);
 
         var windows = PackageSavesIsolation.Prepare(new PackageSavesIsolation.Request(
-            "windows", definition.SavesIsolationFor("windows"), package, definition.SavePaths, profileRoot));
+            "windows", definition.SavesIsolationFor("windows"), package, definition.SaveSourcesFor("windows"), profileRoot));
         Assert.True(windows.Isolation.SavesShared);
         Assert.Null(windows.Seed);
+    }
+
+    // "~/..." is the only way a definition names a home-relative folder; nothing else qualifies.
+    [Fact]
+    public void SaveLocationsResolveFromHomeAndRefuseRelativePaths()
+    {
+        var home = Directory.CreateTempSubdirectory("phaket-home-").FullName;
+        try
+        {
+            Assert.Equal(Path.Combine(home, ".config", "unity3d"),
+                GameDefinition.ResolveLocation("~/.config/unity3d", home));
+            Assert.Equal(Path.Combine(home, "saves"), GameDefinition.ResolveLocation("~/saves", home));
+            Assert.Null(GameDefinition.ResolveLocation("profile://steam/945360", home));
+            Assert.Null(GameDefinition.ResolveLocation("relative/saves", home));
+        }
+        finally { Directory.Delete(home, true); }
     }
 
     // No SavePaths: nothing to seed, the launch still runs with the redirect.

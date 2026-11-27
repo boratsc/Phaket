@@ -22,6 +22,17 @@ public class GameLaunchIsolationTests : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-iso-").FullName;
 
+    // The steam:// requests the run made; set only through the app's own launcher seam.
+    private static readonly List<string> Called = [];
+
+    // Records the launch request and reports success without starting anything.
+    private sealed class SteamLauncherSpy : IDisposable
+    {
+        private readonly Func<string, bool>? previous = LaunchService.SteamLauncher;
+        public SteamLauncherSpy() => LaunchService.SteamLauncher = uri => { Called.Add(uri); return true; };
+        public void Dispose() => LaunchService.SteamLauncher = previous;
+    }
+
     private string Store => Path.Combine(root, "processes.json");
     // One app data root per test: the install registry lives there, as it does in the app.
     private readonly string appData = Path.Combine(Directory.CreateTempSubdirectory("phaket-iso-appdata-").FullName, "phaket");
@@ -31,7 +42,8 @@ public class GameLaunchIsolationTests : IDisposable
     public GameLaunchIsolationTests() => SteamRoot = Path.Combine(root, "steam");
 
     // What the library scan produces for a detected install; the fixture's exe makes it installed.
-    private GameCatalogItem Item(string gameRoot, string linuxMode = "env")
+    // A package seeded from "~/.config/unity3d" carries that real folder in its definition.
+    private GameCatalogItem Item(string gameRoot, string linuxMode = "env", IReadOnlyList<string>? saveLocations = null)
     {
         var definition = new GameDefinition("among-us", ["BepInEx/**"],
             StoreIds: new Dictionary<string, string> { ["steam"] = "945360" },
@@ -42,7 +54,9 @@ public class GameLaunchIsolationTests : IDisposable
                 ["linux"] = linuxMode == "env"
                     ? new SavesIsolationMode("env", ["HOME", "XDG_CONFIG_HOME"])
                     : new SavesIsolationMode("shared", Reason: "unity-locallow-known-folder"),
-            }));
+            }),
+            SaveLocations: saveLocations is null ? null
+                : new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>> { ["linux"] = saveLocations }));
         // What the library scan produces for a detected install; the fixture's exe makes it installed.
         if (!Directory.Exists(gameRoot))
             throw new InvalidOperationException($"the installation folder must exist: {gameRoot}");
@@ -156,13 +170,19 @@ public class GameLaunchIsolationTests : IDisposable
 
     // The page says the same sentence on a refused start; the wording checked is the whole answer.
     // A tracked record is what a successful start leaves behind, so the second check names the
-    // real cause: there is no PID without a started process.
+    // real cause: there is no PID without a started process. Both failures carry the launcher's
+    // own diagnostic (LaunchOutcome.Failure), which is what a CI run needs to see.
     private static void AssertLaunched(GameViewModel vm)
     {
         var expected = LocalizationService.Instance["Game.Launched"];
         Assert.True(expected == vm.StatusMessage, $"status '{vm.StatusMessage}', expected '{expected}'");
-        Assert.True(vm.Launch.Tracked("945360") is not null, "the launch was refused before any process started");
+        Assert.True(vm.Launch.Tracked("945360") is not null,
+            $"the launch was refused before any process started: {LaunchDiagnostic(vm)}");
     }
+
+    // What the launcher refused with, or the exe it was asked to start.
+    private static string LaunchDiagnostic(GameViewModel vm) =>
+        $"{LaunchOutcome.Failed.Failure ?? "no failure recorded"} (exe '{vm.LaunchRoot}')";
 
     // The helper is ours: end it by PID, so no ping/pwsh sleep outlives the run.
     private static void KillHelper(int pid)
@@ -185,6 +205,13 @@ public class GameLaunchIsolationTests : IDisposable
     [AvaloniaFact]
     public void ManagedPackageLaunchesWithItsOwnSavesAndNoNotice()
     {
+        // Windows Unity reads LocalLow, which no environment variable moves: a package there
+        // shares the user's saves and is said so instead of promising a redirect. Per-OS matrix.
+        if (OperatingSystem.IsWindows())
+        {
+            ManagedPackageSharesSavesOnWindows();
+            return;
+        }
         var package = PackageRoot();
         InstallHelper(package);
         // The Steam install must look real to the page: an exe alone is not an installation,
@@ -213,18 +240,29 @@ public class GameLaunchIsolationTests : IDisposable
         var package = PackageRoot();
         InstallHelper(package);
         var game = SteamInstallationFolder();
-        // The vanilla saves: the profile root the seed reads. The package keeps the save tree as
-        // it was (relative to the save root), the first save tree keeps its plain layout.
-        var vm = Create(Item(game), out var launch);
-        var profile = Path.Combine(AppData, "profiles", "among-us", SavesLaunchPreparation.Hash(vm.LaunchRoot)[..12]);
-        // The vanilla save location comes from the definition (profile://steam/945360).
-        var vanilla = Path.Combine(profile, "steam", "945360");
-        Directory.CreateDirectory(vanilla);
-        File.WriteAllText(Path.Combine(vanilla, "Player.txt"), "postęp");
+        // The vanilla saves: where the GAME keeps them (~/.config/unity3d), never Phaket's own
+        // profile copy. Windows Unity reads LocalLow, which no environment moves, so a package
+        // there shares the user's saves and seeds nothing (asserted below). "~" follows the
+        // process HOME, so pointing HOME at this fixture keeps the runner's own folder out.
+        var sandboxHome = Directory.CreateTempSubdirectory("phaket-seed-home-").FullName;
+        var realSaves = Path.Combine(sandboxHome, ".config", "unity3d", "Innersloth", "Among Us");
+        Directory.CreateDirectory(realSaves);
+        File.WriteAllText(Path.Combine(realSaves, "Player.txt"), "postęp");
+        var previousHome = Environment.GetEnvironmentVariable("HOME");
+        Environment.SetEnvironmentVariable("HOME", sandboxHome);
+        var vm = Create(Item(game, saveLocations: ["~/.config/unity3d/Innersloth/Among Us"]), out var launch);
         var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
         try
         {
             Play(vm);
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows: shared saves, no redirect and no seed — said once, game still starts.
+                Assert.True(vm.IsSavesSharedNoticeVisible);
+                Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
+                Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName, File.ReadAllText(Path.Combine(package, "launch-env.txt")));
+                return;
+            }
             Assert.Equal("postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
             var marker = Path.Combine(home, PackageSavesSeed.MarkerFileName);
             var firstWrite = File.GetLastWriteTimeUtc(marker);
@@ -234,7 +272,12 @@ public class GameLaunchIsolationTests : IDisposable
             Assert.Equal("nowszy postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
             Assert.Equal(firstWrite, File.GetLastWriteTimeUtc(marker));
         }
-        finally { Kill(launch); }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HOME", previousHome);
+            Kill(launch);
+            try { Directory.Delete(sandboxHome, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     [AvaloniaFact]
@@ -266,19 +309,21 @@ public class GameLaunchIsolationTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void VanillaInstallationLaunchesAsBeforeWithoutRedirect()
+    public void VanillaInstallationLaunchesThroughSteamInsteadOfTheExe()
     {
         // The Steam install exists: a folder without the exe is not an installation at all.
         var game = Path.Combine(root, "Among Us");
         Directory.CreateDirectory(game);
         var vm = Create(Item(game), out var launch);
+        using var requested = new SteamLauncherSpy();
+        var callsBefore = Called.Count;
         try
         {
             Play(vm);
-            // The vanilla exe is not the game: the launch fails in plain words and nothing is
-            // written beside the installation, which is exactly the old behaviour.
-            Assert.Equal(LocalizationService.Instance["Game.LaunchFailed"], vm.StatusMessage);
-            Assert.False(vm.IsSavesSharedNoticeVisible);
+            // Vanilla always asks Steam to run the store app, exactly as before PAK-146: no exe
+            // of ours, so mod loading and the save redirect never apply to it.
+            Assert.Equal("steam://rungameid/945360", Assert.Single(Called.Skip(callsBefore)));
+            Assert.Equal(LocalizationService.Instance["Game.Launched"], vm.StatusMessage);
             Assert.False(File.Exists(Path.Combine(game, "launch-env.txt")));
             Assert.False(Directory.Exists(Path.Combine(game, SavesIsolationPlanner.HomeDirectoryName)));
         }
@@ -294,6 +339,7 @@ public class GameLaunchIsolationTests : IDisposable
         var game = Path.Combine(root, "Among Us");
         PlaceExecutable(game);
         var vm = Create(Item(game), out var launch);
+        using var requested = new SteamLauncherSpy();
         var path = SteamShortcutService.ShortcutsPath(SteamRoot, "123");
         Assert.Equal(LocalizationService.Instance["SteamShortcut.Add"], vm.SteamToggleLabel);
         vm.ToggleSteamShortcutCommand.Execute(null);
@@ -303,8 +349,16 @@ public class GameLaunchIsolationTests : IDisposable
         this.Settle(() => vm.SteamConsentCardVisible == false && vm.HasSteamShortcut);
         Assert.True(File.Exists(path));
         Assert.Equal(LocalizationService.Instance["SteamShortcut.Remove"], vm.SteamToggleLabel);
+        // Through the shortcut Steam starts the package by its own id — never the store app,
+        // which would run the vanilla game — and its saves are the user's own (Steam carries
+        // no environment of ours), so the page says so once.
+        var callsBefore = Called.Count;
         Play(vm);
+        var shortcutId = SteamShortcutsFile.GenerateShortcutId(
+            SteamShortcutsFile.Quote(Path.Combine(game, "Among Us.exe")), vm.Game.Title);
+        Assert.Equal($"steam://rungameid/{shortcutId}", Assert.Single(Called.Skip(callsBefore)));
         Assert.Equal(LocalizationService.Instance["Game.Launched"], vm.StatusMessage);
+        Assert.True(vm.IsSavesSharedNoticeVisible);
         Assert.Null(launch.Tracked("945360")); // Steam started it, not us: nothing to stop
     }
 
@@ -362,6 +416,25 @@ public class GameLaunchIsolationTests : IDisposable
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Phaket.slnx")))
             directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("Phaket.slnx not found above the test output");
+    }
+
+    // The Windows half of ManagedPackageLaunchesWithItsOwnSavesAndNoNotice: LocalLow cannot be
+    // moved by an environment variable, so the package shares the user's saves — and says so.
+    private void ManagedPackageSharesSavesOnWindows()
+    {
+        var package = PackageRoot();
+        InstallHelper(package);
+        var vm = Create(Item(SteamInstallationFolder()), out var launch);
+        try
+        {
+            Play(vm);
+            AssertLaunched(vm);
+            Assert.True(vm.IsSavesSharedNoticeVisible);
+            Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
+                File.ReadAllText(Path.Combine(package, "launch-env.txt")));
+            Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
+        }
+        finally { Kill(launch); }
     }
 
     public void Dispose()

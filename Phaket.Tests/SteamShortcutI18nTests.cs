@@ -35,6 +35,17 @@ public class SteamShortcutI18nTests
         var pl = Source("pl-PL.json");
         var en = Source("en.json");
         Assert.Equal(pl.Keys.Order(StringComparer.Ordinal), en.Keys.Order(StringComparer.Ordinal));
+        // Every new saves/conflict key, named here so a rename cannot ship half-translated.
+        var savesAndConflicts = pl.Keys.Where(key =>
+            key.StartsWith("SaveBackup.", StringComparison.Ordinal) || key.StartsWith("Conflict.", StringComparison.Ordinal)).ToArray();
+        Assert.NotEmpty(savesAndConflicts);
+        var polishOnly = new[] { "się", "nie", "pliki", "kopie", "zapisy", "zostanie", "gry" };
+        foreach (var key in savesAndConflicts)
+        {
+            Assert.True(pl.TryGetValue(key, out var polish) && !string.IsNullOrWhiteSpace(polish), key);
+            Assert.True(en.TryGetValue(key, out var english) && !string.IsNullOrWhiteSpace(english), key);
+            Assert.DoesNotContain(polishOnly, word => english!.Contains(word, StringComparison.OrdinalIgnoreCase));
+        }
         foreach (var key in new[]
                  {
                      "SteamShortcut.Add", "SteamShortcut.Remove", "SteamShortcut.RestartSteam",

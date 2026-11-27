@@ -605,7 +605,7 @@
   "SaveBackup.LocationLabel": "Folder zapisów",
   "SaveBackup.PruneConsent": "Usuń stare kopie",
   "SaveBackup.Prune": "Usuń stare kopie",
-  "SaveBackup.PruneQuestion": "Usunąć stare kopie? Zostaną trzy najnowsze, a starszych nie da się odzyskać. Teraz na liście: {0}.",
+  "SaveBackup.PruneQuestion": "Usunąć stare kopie? Z każdej gry zostaną do trzech najnowszych, a starszych nie da się odzyskać. Teraz na liście: {0}.",
   "SaveBackup.PruneConfirm": "Tak, usuń stare",
   "SaveBackup.Pruned": "Usunięto stare kopie: {0}.",
   "SaveBackup.PruneNothing": "Nie ma starych kopii do usunięcia.",

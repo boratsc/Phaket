@@ -22,6 +22,10 @@ public sealed class LaunchService
 {
     private readonly ProcessTracker trackers;
 
+    // The one place a steam:// request leaves the app. Tests replace it to see the exact URL
+    // instead of asking a real Steam; the app never does.
+    internal static Func<string, bool>? SteamLauncher;
+
     // processStorePath is a seam for tests; app state lives in %AppData%/phaket/processes.json,
     // the same file SessionSweep refreshes.
     public LaunchService(string? processStorePath = null) => trackers = new ProcessTracker(processStorePath);
@@ -29,13 +33,15 @@ public sealed class LaunchService
     public bool LaunchGame(string steamAppId)
     {
         if (string.IsNullOrWhiteSpace(steamAppId)) return false;
+        var uri = $"steam://rungameid/{steamAppId}";
+        if (SteamLauncher is { } launcher) return launcher(uri);
         try
         {
             // steam://rungameid only asks the Steam client to start the game: no process of
             // ours, so no PID. A record here would point at Steam, never at the game.
             Process.Start(new ProcessStartInfo
             {
-                FileName = $"steam://rungameid/{steamAppId}",
+                FileName = uri,
                 UseShellExecute = true,
             });
             return true;

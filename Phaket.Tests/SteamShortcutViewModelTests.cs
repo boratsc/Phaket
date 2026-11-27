@@ -113,9 +113,10 @@ public class SteamShortcutViewModelTests : IDisposable
         Assert.True(File.Exists(path));
         var entry = Assert.Single(SteamShortcutsFile.Entries(SteamShortcutsFile.Parse(File.ReadAllBytes(path))));
         Assert.True(SteamShortcutsFile.IsPhaket(entry));
-        Assert.Equal(vm.Game.RootPath + Path.DirectorySeparatorChar + "Among Us.exe",
+        // The entry is quoted the way Steam writes it, so "Program Files" still starts.
+        Assert.Equal("\"" + vm.Game.RootPath + Path.DirectorySeparatorChar + "Among Us.exe\"",
             entry.GetString("Exe")!.Replace('/', Path.DirectorySeparatorChar));
-        Assert.Equal(vm.Game.RootPath, entry.GetString("StartDir")!.Replace('/', Path.DirectorySeparatorChar));
+        Assert.Equal("\"" + vm.Game.RootPath + "\"", entry.GetString("StartDir")!.Replace('/', Path.DirectorySeparatorChar));
         Assert.Equal("", entry.GetString("LaunchOptions"));
         Assert.True(vm.HasSteamShortcut);
         Assert.Equal(LocalizationService.Instance["SteamShortcut.Remove"], vm.SteamToggleLabel);

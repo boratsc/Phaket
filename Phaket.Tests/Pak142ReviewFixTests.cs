@@ -131,6 +131,8 @@ public sealed class Pak142ReviewFixTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    // The executor's lifecycle copies saves before the first write; this fixture has no game save
+    // folder at all, so there is nothing to copy — the answer, not the list, is what's tested.
     [Fact]
     public void TheOrchestratorRunsAnAnsweredPlanInsteadOfRefusingIt()
     {
@@ -145,20 +147,46 @@ public sealed class Pak142ReviewFixTests
             File.WriteAllText(Path.Combine(root, "packages", "mod.dll"), "mod-v1");
             new InstallOrchestrator(new PlanExecutor(Context(gameRoot, root)))
                 .Run(OperationPlanner.Plan(ModRecipe("mod-v1", ModPath), Planner(root)), cancellationToken: Ct);
+            Assert.Equal("mod-v1", File.ReadAllText(modFile));
 
             File.WriteAllText(modFile, "user-edit");
             File.WriteAllText(Path.Combine(root, "packages", "mod.dll"), "mod-v2");
-            var plan = OperationPlanner.Plan(ModRecipe("mod-v2", ModPath), Planner(root, InstallBaseline.Load(
-                InstallBaseline.DefaultPath(Path.Combine(root, "state")), "install-1")));
-            Assert.Single(plan.Conflicts);
-
-            // The lifecycle used to refuse every plan with a conflict; with the user's answer
-            // it must run the same plan and record the new agreed state.
+            var plan = Plan(ModRecipe("mod-v2", ModPath), root, InstallBaseline.Load(
+                InstallBaseline.DefaultPath(Path.Combine(root, "state")), "install-1"));
+            var conflict = Assert.Single(plan.Conflicts);
+            // The conflicted file is the fixture's Mod.dll, and no game save folder exists here:
+            // the lifecycle has nothing to copy, so the answer, not the list, is what's tested.
+            Assert.Equal(ModPath, conflict.Path);
+            // "Keep mine": the file the user edited must survive, even though the plan still
+            // carries the recipe's write for it (skipped only when the answer reaches the loop).
+            // A "keep mine" answer is the one thing the app's dialog can give for one conflicted
+            // file, so it is exactly what a user's click produces.
             var journal = new InstallOrchestrator(new PlanExecutor(Context(gameRoot, root)))
-                .Run(plan, cancellationToken: Ct, decisions: new Dictionary<string, ConflictDecision> { [ModPath] = ConflictDecision.TakeRecipe });
-
+                .Run(plan, cancellationToken: Ct, decisions: new Dictionary<string, ConflictDecision> { [ModPath] = ConflictDecision.KeepLocal });
             Assert.Equal(JournalState.Completed, journal.State);
-            Assert.Equal("mod-v2", File.ReadAllText(modFile));
+            Assert.Equal("user-edit", File.ReadAllText(modFile));
+
+            // "Use the mod's version": the same conflicted file now takes the recipe bytes.
+            File.WriteAllText(modFile, "user-edit-2");
+            File.WriteAllText(Path.Combine(root, "packages", "mod.dll"), "mod-v3");
+            var again = Plan(ModRecipe("mod-v3", ModPath), root, InstallBaseline.Load(
+                InstallBaseline.DefaultPath(Path.Combine(root, "state")), "install-1"));
+            // After "keep mine" the baseline is the tree as it is, so the next plan asks again.
+            Assert.Equal("user-edit-2", File.ReadAllText(modFile));
+            Assert.Single(again.Conflicts);
+            Assert.Equal(JournalState.Completed, new InstallOrchestrator(new PlanExecutor(Context(gameRoot, root)))
+                .Run(again, cancellationToken: Ct, decisions: new Dictionary<string, ConflictDecision> { [ModPath] = ConflictDecision.TakeRecipe }).State);
+            Assert.Equal("mod-v3", File.ReadAllText(modFile));
+
+            // No answer: the orchestrator refuses before the first write and nothing changes.
+            File.WriteAllText(modFile, "user-edit-3");
+            File.WriteAllText(Path.Combine(root, "packages", "mod.dll"), "mod-v4");
+            var third = Plan(ModRecipe("mod-v4", ModPath), root, InstallBaseline.Load(
+                InstallBaseline.DefaultPath(Path.Combine(root, "state")), "install-1"));
+            var refused = Assert.Throws<PhaketException>(() =>
+                new InstallOrchestrator(new PlanExecutor(Context(gameRoot, root))).Run(third, cancellationToken: Ct));
+            Assert.Equal(ErrorCodes.FileConflictRequiresDecision, refused.Error.Code);
+            Assert.Equal("user-edit-3", File.ReadAllText(modFile));
         }
         finally { Directory.Delete(root, recursive: true); }
     }

@@ -161,7 +161,7 @@ public static class PackageSavesIsolation
             return new Result(isolation, null);
         // Only the game's real folders are read: a copy Phaket keeps under the profile is not
         // the user's progress (it would seed an empty or stale tree).
-        var sources = SaveSources(request.SavePaths).Where(Directory.Exists).ToArray();
+        var sources = SaveSources(request.SavePaths ?? []).Where(Directory.Exists).ToArray();
         var seed = PackageSavesSeed.Seed(isolation.Environment.Values, sources, request.Os, limitBytes);
         return new Result(isolation, seed);
     }

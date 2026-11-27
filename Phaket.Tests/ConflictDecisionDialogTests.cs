@@ -157,14 +157,18 @@ public class ConflictDecisionDialogTests
             Assert.Empty(vm.InstallStatus);
             Assert.False(dialog.IsOpen);
 
-            // The accepted answer runs the install once more and reports the outcome.
+            // The accepted answer runs the install once more, with that answer, and reports the
+            // outcome: the decision must reach the executor, or "keep mine" would be ignored.
             var runs = 0;
-            vm.ExecuteOverride = (_, _, _, _) => { runs++; return Task.FromResult(new InstallOutcome(true, null, [])); };
+            var answer = default(IReadOnlyDictionary<string, ConflictDecision>);
+            vm.ExecuteOverride = (_, _, _, decisions) => { runs++; answer = decisions; return Task.FromResult(new InstallOutcome(true, null, [])); };
             executing = vm.ExecuteInstallCommand.ExecuteAsync(null);
             UiTest.Until(() => dialog.IsOpen);
             dialog.TakeRecipeCommand.Execute(null);
             UiTest.Run(() => executing);
             Assert.Equal(1, runs);
+            Assert.Equal([ModFile], answer!.Keys);
+            Assert.All(answer.Values, decision => Assert.Equal(ConflictDecision.TakeRecipe, decision));
             Assert.Equal(LocalizationService.Instance["ModInstall.Success"], vm.InstallStatus);
         }
         finally
@@ -192,7 +196,8 @@ public class ConflictDecisionDialogTests
                 Dispatcher.UIThread.RunJobs();
                 using var frame = window.CaptureRenderedFrame();
                 Assert.NotNull(frame);
-                frame.Save(Path.Combine(save, $"45-conflict-decision-{language}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+                // The same unique-per-path helper every other render uses (a rerun never overwrites).
+                frame.Save(RenderArtifacts.Path($"45-conflict-decision-{language}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
             }
             finally { LocalizationService.Instance.CurrentLanguage = previous; }
         }

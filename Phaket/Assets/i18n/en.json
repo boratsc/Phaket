@@ -605,7 +605,7 @@
   "SaveBackup.LocationLabel": "Save folder",
   "SaveBackup.PruneConsent": "Delete old copies",
   "SaveBackup.Prune": "Delete old copies",
-  "SaveBackup.PruneQuestion": "Delete old copies? The three newest stay, and the older ones cannot be recovered. On the list now: {0}.",
+  "SaveBackup.PruneQuestion": "Delete old copies? Up to three newest copies of each game stay, and the older ones cannot be recovered. On the list now: {0}.",
   "SaveBackup.PruneConfirm": "Yes, delete the old ones",
   "SaveBackup.Pruned": "Old copies deleted: {0}.",
   "SaveBackup.PruneNothing": "There are no old copies to delete.",

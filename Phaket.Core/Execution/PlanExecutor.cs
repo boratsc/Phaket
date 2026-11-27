@@ -68,6 +68,12 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
     // Execute asks the same instance directly, so a host that skips Approve is covered too.
     PlanApproval IPlanLifecycle.Begin(OperationPlan plan) => Lifecycle.Begin(plan);
 
+    // The orchestrator's entry: the save backup still runs, and the user's answer (null when the
+    // dialog was cancelled) says whether an undecided conflict may block the transaction.
+    internal PlanApproval BeginWithAnswer(OperationPlan plan, IReadOnlyDictionary<string, ConflictDecision>? decisions,
+        CancellationToken ct) =>
+        Lifecycle.BeginAsync(plan, ct: ct, waitsForDecision: decisions is null).GetAwaiter().GetResult().Approval;
+
     public static ExecutionJournal? LoadJournal(string profileRoot)
     {
         var path = Path.Combine(profileRoot, "journal.json");
@@ -216,7 +222,11 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
     {
         if (journal.State is not (JournalState.Approved or JournalState.Interrupted or JournalState.Failed or JournalState.Executing))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"journal state {journal.State} cannot execute"));
-        var operation = plan.Operations.First(o => o.OpId == opId);
+        var operation = plan.Operations.FirstOrDefault(o => o.OpId == opId)
+            // A kept file's step is still verified by the plan (its hash is the recipe's), so a
+            // "keep mine" answer must not leave a failed verification in the journal.
+            ?? plan.Verification.FirstOrDefault(v => v.OpId == opId)
+            ?? throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"plan has no operation {opId}"));
         var entries = journal.Entries.ToList();
         var existing = entries.FirstOrDefault(e => e.Intent.OpId == opId);
         if (existing is { Verified: true }) return journal; // resume: idempotent skip

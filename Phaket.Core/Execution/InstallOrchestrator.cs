@@ -34,10 +34,7 @@ public sealed class InstallOrchestrator
         using var gate = executor.LockInstallation();
         // The answer only counts for a plan that is approved with it: with no answer the
         // lifecycle refuses before the save backup, and the steps below write nothing.
-        var approval = lifecycle is PlanLifecycle full
-            ? full.BeginAsync(plan, ct: cancellationToken, waitsForDecision: decisions is null)
-                .GetAwaiter().GetResult().Approval
-            : lifecycle?.Begin(plan) ?? PlanApproval.Accept;
+        var approval = executor.BeginWithAnswer(plan, decisions, cancellationToken);
         if (!approval.Accepted)
             throw new PhaketException(ErrorCodes.FileConflictRequiresDecision,
                 ("path", plan.Conflicts.First(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision).Path));
@@ -47,8 +44,6 @@ public sealed class InstallOrchestrator
         // The user's answer per path must reach the write loop, or "keep mine" would still
         // copy the recipe's file: the executor's per-path filter decides what really runs.
         var operations = executor.ResolveConflicts(plan, journal, decisions);
-        // What the per-path answer skipped: a "keep mine" file or anything that writes over it.
-        bool SkippedBy(PlannedOperation step) => !operations.Contains(step);
         var count = operations.Count;
         try
         {
@@ -72,10 +67,14 @@ public sealed class InstallOrchestrator
             throw;
         }
         // Complete(plan, journal) also records the new agreed baseline. The plan's own
-        // verification steps would fail on a file the user kept (they carry the recipe's hash),
-        // so what runs is the same verification minus any step the answer skipped. A conflict
-        // without an answer wrote no baseline, so that half is not decided here.
-        var verify = plan with { Verification = operations.Any(SkippedBy) ? [] : plan.Verification };
+        // verification steps carry the recipe's hash, so a file the user kept would fail its
+        // step: it is checked for existence only (no hash). A conflict without an answer wrote
+        // no baseline, so that half is not decided here.
+        var verify = plan with
+        {
+            Verification = [.. plan.Verification.Select(step =>
+                operations.Contains(step) || !plan.Operations.Contains(step) ? step : step with { Sha256 = null })],
+        };
         journal = executor.Complete(verify, journal);
         if (plan.Conflicts.All(c => c.Resolution != PlanLifecycle.ConflictsRequireDecision
                 || decisions?.ContainsKey(c.Path) == true)) executor.SaveBaselineAfter(plan);
