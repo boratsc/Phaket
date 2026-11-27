@@ -52,7 +52,7 @@
   "BASE_GAME_TOOL_FAILED": "The game version download tool failed. External tool output: {detail}",
   "EPIC_SIGN_IN_REQUIRED": "This game version needs an Epic sign-in. Sign in to Epic in the Library, then try installing the mod again.",
   "DEPOTDOWNLOADER_DOTNET_NOT_FOUND": "The .NET runtime required to run DepotDownloader was not found. Install the .NET runtime and try again.",
-  "SAVE_BACKUP_TOO_LARGE": "Your saves take {size} and the backup limit is {limit}. Nothing was copied — raise the limit in Settings or free some space.",
+  "SAVE_BACKUP_TOO_LARGE": "Your saves take {size} and a backup can hold {limit}. Nothing was copied, so your saves are unchanged. Free some space or delete older backups, then try again.",
   "SAVE_BACKUP_HASH_MISMATCH": "A file in backup {id} does not match what was saved ({path}). Nothing was restored — the backup may be damaged.",
   "SAVE_BACKUP_MANIFEST_INVALID": "The backup {id} cannot be read: its description file is missing or damaged.",
   "SAVE_BACKUP_RESTORE_REFUSED": "The backup would be restored outside the save folder ({path}). Nothing was restored.",

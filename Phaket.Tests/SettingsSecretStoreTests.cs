@@ -232,6 +232,29 @@ public class SettingsSecretStoreTests
         Assert.False(h.ViewModel.NeedsMigration);
     }
 
+    // R3c 4: the device key is a secret too. Deleting secrets drops it from the store and the
+    // key store forgets the identity; a new key is made only on the next signing request.
+    [AvaloniaFact]
+    public async Task Delete_with_confirmation_removes_the_device_key_and_a_new_one_comes_on_demand()
+    {
+        using var h = Create(keys: ["epic", DeviceKeyStore.SecretKey]);
+        var keys = new DeviceKeyStore(h.Store, Path.Combine(h.Directory, "settings.json"));
+        DeviceIdentityServices.SetCurrent(new DeviceIdentityServices(keys, new DeviceKeySigner(keys, registerBeforeSigning: false)));
+        string oldKey = Convert.ToBase64String((await keys.GetPublicIdentityAsync(TestContext.Current.CancellationToken)).PublicKey);
+        Assert.NotNull(await h.Store.GetAsync(DeviceKeyStore.SecretKey, TestContext.Current.CancellationToken));
+
+        h.ViewModel.ConfirmDelete = true;
+        await h.ViewModel.DeleteSecretsCommand.ExecuteAsync(null);
+
+        Assert.Contains(DeviceKeyStore.SecretKey, h.Store.DeletedKeys);
+        Assert.Null(await h.Store.GetAsync(DeviceKeyStore.SecretKey, TestContext.Current.CancellationToken));
+        Assert.Null(keys.CachedDeviceKey);
+
+        // A later request makes a different key: the old identity is gone for good.
+        string newKey = Convert.ToBase64String((await keys.GetPublicIdentityAsync(TestContext.Current.CancellationToken)).PublicKey);
+        Assert.NotEqual(oldKey, newKey);
+    }
+
     [AvaloniaFact]
     public async Task Delete_after_migration_leaves_no_decryptable_copy()
     {

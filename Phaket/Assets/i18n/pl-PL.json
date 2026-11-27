@@ -435,7 +435,7 @@
   "Settings.Secrets.FallbackPassword": "Hasło magazynu plikowego",
   "Settings.Secrets.UnlockFallback": "Odblokuj magazyn plikowy",
   "Settings.Secrets.FallbackUnlocked": "Magazyn plikowy odblokowany w tej sesji.",
-  "Settings.Secrets.DeleteConsent": "Potwierdzam trwałe usunięcie wszystkich sekretów (tokeny kont i poświadczenia instalacyjne).",
+  "Settings.Secrets.DeleteConsent": "Potwierdzam trwałe usunięcie wszystkich zapisanych haseł, tokenów i klucza urządzenia. Phaket wygeneruje nowy klucz przy następnej publikacji.",
   "Settings.Secrets.Delete": "Usuń sekrety",
   "Settings.Secrets.Deleted": "Sekrety usunięte.",
   "Settings.Secrets.Error.Locked": "Magazyn sekretów jest zablokowany. Odblokuj portfel (gnome-keyring/kwallet), aby zobaczyć hasła po ponownym uruchomieniu.",

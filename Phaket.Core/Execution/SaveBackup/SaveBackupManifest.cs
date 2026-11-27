@@ -4,8 +4,10 @@ using Phaket.Core.Omrl;
 namespace Phaket.Core.Execution.SaveBackup;
 
 // One copied file. Path is relative to the save location it came from (posix
-// separators), so the same manifest restores on Windows and Linux.
-public sealed record SaveBackupFile(string RelativePath, long Size, DateTimeOffset Mtime, string Sha256);
+// separators), so the same manifest restores on Windows and Linux. LocationIndex
+// points at the entry in Locations (two locations may hold the same relative path);
+// a manifest written before it existed restores as location 0.
+public sealed record SaveBackupFile(string RelativePath, long Size, DateTimeOffset Mtime, string Sha256, int LocationIndex = 0);
 
 // A save location as it looked when the backup was taken: whether it existed and
 // which files were inside. A location that did not exist is recorded too, so a
@@ -35,7 +37,16 @@ public sealed record SaveBackupManifest(
         IReadOnlyList<SaveBackupLocation> locations, IReadOnlyList<SaveBackupFile> files, long totalBytes)
     {
         var canonicalLocations = locations.OrderBy(l => l.Location, StringComparer.Ordinal).ToArray();
-        var canonicalFiles = files.OrderBy(f => f.RelativePath, StringComparer.Ordinal).ToArray();
+        // A backup of one location hashes exactly as it did before LocationIndex existed, so an
+        // older manifest still verifies; the field only appears once two locations share a path.
+        if (files.All(f => f.LocationIndex == 0))
+            return CanonicalJson.Hash(new
+            {
+                id, createdAt, gameId, installationId, locations = canonicalLocations, totalBytes,
+                files = files.OrderBy(f => f.RelativePath, StringComparer.Ordinal)
+                    .Select(f => new { f.RelativePath, f.Size, f.Mtime, f.Sha256 }).ToArray(),
+            });
+        var canonicalFiles = files.OrderBy(f => f.LocationIndex).ThenBy(f => f.RelativePath, StringComparer.Ordinal).ToArray();
         return CanonicalJson.Hash(new { id, createdAt, gameId, installationId, locations = canonicalLocations, files = canonicalFiles, totalBytes });
     }
 

@@ -304,6 +304,183 @@ public sealed class SaveBackupHardeningTests
         Assert.Equal("{\"level\":999}", Read(f, "profile.json"));
     }
 
+    // 7 (R3c). The restore journal used to be written straight into the save folder: a user
+    //    file of that name must survive a restore, and the journal itself must live in the
+    //    backup folder instead.
+    [Fact]
+    public async Task RestoreNeverWritesTheJournalIntoSaveFolderAndKeepsAUserFileOfThatName()
+    {
+        using var f = new Fixture();
+        const string userJournal = ".phaket-restore-journal";
+        File.WriteAllText(Path.Combine(f.Saves, userJournal), "mine, not phaket's");
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        File.WriteAllText(Path.Combine(f.Saves, "profile.json"), "changed");
+
+        await service.RestoreAsync(f.BackupDirectory(manifest.Id), f.Saves, Ct);
+
+        Assert.Equal("{\"level\":12}", Read(f, "profile.json"));
+        Assert.Equal("mine, not phaket's", Read(f, userJournal));
+        Assert.Empty(Directory.GetFiles(f.BackupDirectory(manifest.Id), ".phaket-restore-journal", SearchOption.TopDirectoryOnly));
+    }
+
+    // 7b. The journal a run leaves behind stays inside the backup folder, never in the tree.
+    [Fact]
+    public async Task JournalOfAFailedRestoreLivesInTheBackupFolder()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        // A link where a copy would go: the physical layout is validated before every write,
+        // so the restore refuses with the journal (if any) left in the backup folder.
+        var outside = Path.Combine(f.Root, "outside-link");
+        File.WriteAllText(outside, "not a save");
+        var slot = Path.Combine(f.Saves, "Profiles", "slot1.dat");
+        File.Delete(slot);
+        File.CreateSymbolicLink(slot, outside);
+
+        await Assert.ThrowsAnyAsync<PhaketException>(() => service.RestoreAsync(f.BackupDirectory(manifest.Id), f.Saves, Ct));
+
+        Assert.Empty(Directory.GetFiles(f.Saves, ".phaket-restore-journal", SearchOption.AllDirectories));
+        Assert.Equal("not a save", File.ReadAllText(outside));
+    }
+
+    // 1 (R3c). A file link where the restore would write the target is refused, not followed:
+    //    the tree gets no write and the file it points at is untouched.
+    [Fact]
+    public async Task FileLinkWhereTheTargetGoesIsRefusedWithoutWritingThroughIt()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        var outside = Path.Combine(f.Root, "outside-profile.json");
+        File.WriteAllText(outside, "outside");
+        var profile = Path.Combine(f.Saves, "profile.json");
+        File.Delete(profile);
+        File.CreateSymbolicLink(profile, outside);
+
+        var error = await Assert.ThrowsAnyAsync<PhaketException>(() => service.RestoreAsync(f.BackupDirectory(manifest.Id), f.Saves, Ct));
+
+        // The plan's own target check reports the link the same way it always has; the point
+        // is that nothing is written through it.
+        AssertCode(ErrorCodes.PathOutOfBounds, error);
+        Assert.Equal("outside", File.ReadAllText(outside));
+    }
+
+    // 2 (R3c). Two save locations with the same relative file: both are kept apart and both
+    //    come back to their own location.
+    [Fact]
+    public async Task TwoLocationsWithTheSameRelativeFileBothRestore()
+    {
+        using var f = new Fixture();
+        var docs = Path.Combine(f.Root, "documents");
+        Directory.CreateDirectory(docs);
+        File.WriteAllText(Path.Combine(docs, "settings.dat"), "docs-settings");
+        File.WriteAllText(Path.Combine(f.Saves, "settings.dat"), "saves-settings");
+        var request = new SaveBackupRequest(f.Game, "among-us-steam", [f.Saves, docs]);
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(request, f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+
+        Assert.Equal(2, manifest.Files.Count(x => x.RelativePath == "settings.dat"));
+        Assert.Equal([0, 1], manifest.Files.Where(x => x.RelativePath == "settings.dat").Select(x => x.LocationIndex).Order());
+        File.WriteAllText(Path.Combine(f.Saves, "profile.json"), "changed");
+        File.WriteAllText(Path.Combine(f.Saves, "settings.dat"), "changed");
+        File.WriteAllText(Path.Combine(docs, "settings.dat"), "changed");
+        File.WriteAllText(Path.Combine(docs, "local.cfg"), "docs-only");
+
+        await service.RestoreAsync(f.BackupDirectory(manifest.Id), f.Saves, Ct);
+        await service.RestoreAsync(f.BackupDirectory(manifest.Id), docs, Ct);
+
+        Assert.Equal("docs-settings", File.ReadAllText(Path.Combine(docs, "settings.dat")));
+        Assert.False(File.Exists(Path.Combine(f.Saves, "local.cfg")), "saves tree got documents' files");
+        Assert.Equal("saves-settings", Read(f, "settings.dat"));
+        Assert.Equal("{\"level\":12}", Read(f, "profile.json"));
+    }
+
+    // 2b. A manifest written before LocationIndex existed still restores, including its old
+    //     files/<path key> copy folder: its files belong to the first (and only) location.
+    [Fact]
+    public async Task LegacyManifestWithoutLocationIndexStillRestores()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        var folder = f.BackupDirectory(manifest.Id);
+        // The old format on disk: copies under files/<16-hex path key>, every entry without
+        // locationIndex and a state hash over that — exactly what a previous release wrote.
+        string legacyKey = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(f.Saves)))[..16];
+        Directory.Move(Path.Combine(folder, "files", "0"), Path.Combine(folder, "files", legacyKey));
+        // The hash exactly as the previous release computed it: no locationIndex in a file entry.
+        string oldHash = Phaket.Core.Domain.CanonicalJson.Hash(new
+        {
+            id = manifest.Id, createdAt = manifest.CreatedAt, gameId = manifest.GameId,
+            installationId = manifest.InstallationId,
+            locations = manifest.Locations.OrderBy(l => l.Location, StringComparer.Ordinal).ToArray(),
+            totalBytes = manifest.TotalBytes,
+            files = manifest.Files.OrderBy(f => f.RelativePath, StringComparer.Ordinal)
+                .Select(f => new { f.RelativePath, f.Size, f.Mtime, f.Sha256 }).ToArray(),
+        });
+        var legacy = manifest with { StateHash = oldHash };
+        var node = System.Text.Json.Nodes.JsonNode.Parse(SaveBackupManifest.Format(legacy))!;
+        foreach (var file in node["files"]!.AsArray()) file!.AsObject().Remove("locationIndex");
+        string json = node.ToJsonString();
+        Assert.DoesNotContain("locationIndex", json);
+        File.WriteAllText(Path.Combine(folder, "manifest.json"), json);
+        File.WriteAllText(Path.Combine(f.Saves, "profile.json"), "changed");
+
+        await service.RestoreAsync(folder, f.Saves, Ct);
+
+        Assert.Equal("{\"level\":12}", Read(f, "profile.json"));
+        Assert.Equal("slot-one", Read(f, Path.Combine("Profiles", "slot1.dat")));
+    }
+
+    // 3 (R3c). An interrupted restore is finished by the next run: a real run is stopped in
+    //    the middle of phase 2, the journal is picked up by the next RestoreAsync, the save
+    //    folder ends complete and the journal is gone.
+    [Fact]
+    public async Task InterruptedRestoreIsFinishedByTheNextRun()
+    {
+        using var f = new Fixture();
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        var folder = f.BackupDirectory(manifest.Id);
+        File.WriteAllText(Path.Combine(f.Saves, "profile.json"), "changed");
+        File.WriteAllText(Path.Combine(f.Saves, "Profiles", "slot1.dat"), "changed");
+        // Stopped after the first file is written: the run leaves its journal behind.
+        service.BeforeRestoreWrite = path => { if (path != "Profiles/slot1.dat") throw new InvalidOperationException("stop"); };
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.RestoreAsync(folder, f.Saves, Ct));
+
+        Assert.True(File.Exists(Path.Combine(folder, ".phaket-restore-journal")), "interrupted run left no journal");
+        service.BeforeRestoreWrite = null;
+        await service.RestoreAsync(folder, f.Saves, Ct);
+
+        Assert.Equal("{\"level\":12}", Read(f, "profile.json"));
+        Assert.Equal("slot-one", Read(f, Path.Combine("Profiles", "slot1.dat")));
+        Assert.False(File.Exists(Path.Combine(folder, ".phaket-restore-journal")));
+        Assert.Empty(Directory.GetFiles(f.Saves, "*.phaket-tmp", SearchOption.AllDirectories));
+    }
+
+    // 3b. A journal naming a location this backup does not cover cannot drive a restore: it is
+    //     refused and nothing outside the covered locations is written or deleted.
+    [Fact]
+    public async Task JournalPointingAtAnUncoveredLocationIsRefused()
+    {
+        using var f = new Fixture();
+        var outside = Path.Combine(f.Root, "elsewhere");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "keep.txt"), "keep me");
+        var service = new SaveBackupService();
+        var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, Ct);
+        var folder = f.BackupDirectory(manifest.Id);
+        File.WriteAllText(Path.Combine(folder, ".phaket-restore-journal"), $"save-backup-restore/2\n{outside}\n");
+
+        var error = await Assert.ThrowsAnyAsync<PhaketException>(() => service.RestoreAsync(folder, f.Saves, Ct));
+
+        Assert.True(error.Error.Code is ErrorCodes.SaveBackupManifestInvalid or ErrorCodes.ValidationFailed);
+        Assert.Equal("keep me", File.ReadAllText(Path.Combine(outside, "keep.txt")));
+    }
+
     // A link standing where the backup's files folder should be is not followed.
     [Fact]
     public async Task LinkedFilesFolderInTheBackupIsRefused()

@@ -13,6 +13,9 @@ internal static class SessionSweep
     // download or a wait for the Steam Guard code leaves an active session looking days old while its
     // cached tokens are written. A file touched recently inside the session keeps it (PAK-60); only
     // file times count, because reads move a directory's write time without any write.
+    // shortcut: this window is a heuristic — a session active for over 24 h that wrote no files at all
+    // (a long wait, then one write) can still be swept; upgrade by asking ProcessTracker whether the
+    // session's tool process is alive instead of guessing from file times.
     private static readonly TimeSpan ActiveWriteWindow = TimeSpan.FromMinutes(30);
     // A crash-looping sweep must stay cheap: a session whose file was not reached in the budget is kept.
     private const int InspectedEntryBudget = 512;

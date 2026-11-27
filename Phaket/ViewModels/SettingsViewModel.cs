@@ -24,9 +24,10 @@ public partial class SettingsViewModel : ViewModelBase
     // plus the Steam install sign-in, which is stored under its own key (PAK-60).
     // "steam-apikey" is no longer written anywhere (the local Steam library needs no key);
     // it stays in the list so deleting secrets also clears it from existing installs.
+    // The device key is a secret too: deleting it makes Phaket generate a new device identity.
     private static readonly IReadOnlyList<string> DefaultSecretKeys =
         ["epic", "steam", "itch", "account", "steam-apikey", SteamCredentialStore.SecretKey,
-        NexusApiKeyStore.SecretKey, NexusApiKeyStore.OAuthTokensSecretKey];
+        NexusApiKeyStore.SecretKey, NexusApiKeyStore.OAuthTokensSecretKey, DeviceKeyStore.SecretKey];
 
     // Test seam: active store, its directory, key list, provider label and migration entry point.
     internal sealed record SecretStoreSeam(
@@ -606,6 +607,9 @@ public partial class SettingsViewModel : ViewModelBase
                 try { EncryptedStore.DeleteFiles(Path.Combine(secretDirectory, key + ".bin")); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { error = Loc("Settings.Secrets.Error.Unavailable"); }
             }
+            // The device key was deleted with the rest: forget the identity it produced.
+            if (secretKeys.Contains(DeviceKeyStore.SecretKey, StringComparer.Ordinal))
+                DeviceIdentityServices.Current?.KeyStore.Invalidate();
             SecretStatusText = error.Length > 0 ? error : Loc("Settings.Secrets.Deleted");
         }
         finally

@@ -435,7 +435,7 @@
   "Settings.Secrets.FallbackPassword": "File store password",
   "Settings.Secrets.UnlockFallback": "Unlock file store",
   "Settings.Secrets.FallbackUnlocked": "File store unlocked for this session.",
-  "Settings.Secrets.DeleteConsent": "I confirm permanent deletion of all secrets (account tokens and install credentials).",
+  "Settings.Secrets.DeleteConsent": "I confirm permanent deletion of all saved passwords, tokens and the device key. Phaket will make a new device key the next time it publishes something.",
   "Settings.Secrets.Delete": "Delete secrets",
   "Settings.Secrets.Deleted": "Secrets deleted.",
   "Settings.Secrets.Error.Locked": "The secret store is locked. Unlock your keyring wallet (gnome-keyring/kwallet) to see the values again.",

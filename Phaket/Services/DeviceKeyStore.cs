@@ -81,6 +81,14 @@ public sealed class DeviceKeyStore
         await SettingsFile.UpdateAsync(settingsPath, node => node["deviceNick"] = value, cancellationToken).ConfigureAwait(false);
     }
 
+    // The stored seed was deleted ("delete secrets"): drop the cached identity so the card and
+    // the signer stop showing the old fingerprint until the next signing request makes a new key.
+    public void Invalidate()
+    {
+        Volatile.Write(ref cachedIdentity, null);
+        SetOnline(false);
+    }
+
     internal void SetOnline(bool value)
     {
         int next = value ? 1 : 0;

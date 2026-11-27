@@ -33,9 +33,16 @@ public sealed class SaveBackupService
     public const string ProfileSchemaVersion = "save-backup-profile/v1";
     private const string ManifestFileName = "manifest.json";
     private const string FilesDirectoryName = "files";
+    // The restore journal lives in the backup folder (Phaket's own property), never in the save
+    // tree: a save folder may already hold a user file of this name, or a link under it.
     private const string JournalFileName = ".phaket-restore-journal";
-    private const string TempSuffix = ".phaket-tmp";
+    // A copy being swapped in place carries a random id before this suffix, so it is never a
+    // user file and never mistaken for one.
+    internal const string TempSuffix = ".phaket-tmp";
+    // Held by a backup still being built: never a backup, never a restore target.
     private const string CreateTempDirectory = ".phaket-create.tmp";
+    // Marks a journal this service wrote; an earlier version wrote "[location]" without it.
+    private const string JournalHeader = "save-backup-restore/2";
 
     // Invalid file name characters (Heroic's INVALID_FILENAME_CHARS) plus control characters.
     private static readonly Regex InvalidNameChars = new(@"[<>:""/\\|?*\p{Cc}]", RegexOptions.CultureInvariant);
@@ -60,6 +67,10 @@ public sealed class SaveBackupService
     // Test seam only (the app never sets it): called with each scanned file between the
     // pre-scan stat and its copy, so a stale scan can be produced deterministically.
     internal Action<string>? BeforeCopy { get; set; }
+
+    // Test seam only (the app never sets it): called with each file a restore is about to
+    // write, so an interruption can be produced in the middle of phase 2.
+    internal Action<string>? BeforeRestoreWrite { get; set; }
 
     public Task<IReadOnlyList<SaveBackupManifest>> ListBackupsAsync(string backupRoot, string gameFolder,
         CancellationToken ct = default) => Task.Run(() => ListBackups(backupRoot, gameFolder), ct);
@@ -121,13 +132,15 @@ public sealed class SaveBackupService
                     // make the scan demonstrably stale instead of racing a real writer.
                     beforeCopy?.Invoke(file);
                     var key = RelativeOf(trees[i].Location, file);
-                    var destination = Path.Combine(temp, FilesDirectoryName, LocationKey(trees[i].Location), key);
+                    // Numbered by location, so two locations with the same relative path never
+                    // share a copy file.
+                    var destination = Path.Combine(temp, FilesDirectoryName, i.ToString(CultureInfo.InvariantCulture), key);
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                     // The scan can be stale: the real byte count is checked as it copies, so
                     // the limit holds even if a file grew or the tree changed meanwhile.
                     copied += CopyWithinLimit(file, destination, limitBytes - copied, request.GameId);
                     var info = new FileInfo(destination);
-                    fileEntries.Add(new(key, info.Length, info.LastWriteTimeUtc, HashFile(destination)));
+                    fileEntries.Add(new(key, info.Length, info.LastWriteTimeUtc, HashFile(destination), i));
                 }
 
             var manifest = new SaveBackupManifest(
@@ -135,7 +148,7 @@ public sealed class SaveBackupService
                 id, createdAt, request.GameId, request.InstallationId,
                 trees.Select(t => new SaveBackupLocation(t.Location, t.Existed,
                         t.Files.Select(f => RelativeOf(t.Location, f)).OrderBy(f => f, StringComparer.Ordinal).ToArray())).ToArray(),
-                fileEntries.OrderBy(f => f.RelativePath, StringComparer.Ordinal).ToArray(), total, null);
+                fileEntries.OrderBy(f => f.LocationIndex).ThenBy(f => f.RelativePath, StringComparer.Ordinal).ToArray(), total, null);
             manifest = manifest with { StateHash = manifest.ComputeStateHash() };
             File.WriteAllText(Path.Combine(temp, ManifestFileName), SaveBackupManifest.Format(manifest));
             Directory.Move(temp, Path.Combine(gameRoot, id));
@@ -175,18 +188,22 @@ public sealed class SaveBackupService
 
     // The whole backup is validated and every hash verified before the first write: a
     // damaged or forged copy never leaves a half-restored (or half-deleted) save folder.
-    private static SaveBackupManifest Restore(string backupDirectory, string location, CancellationToken ct)
+    private SaveBackupManifest Restore(string backupDirectory, string location, CancellationToken ct)
     {
+        // Whatever a run interrupted earlier left for this backup is finished before this one
+        // starts; a legacy journal a previous version wrote into the save folder is cleared
+        // there (a user file of that name is not a journal and is left alone).
+        ResumePending(backupDirectory, ct);
+        ClearLegacyJournal(Path.GetFullPath(location), ct);
+
         var manifest = ReadManifest(backupDirectory);
         if (manifest.StateHash != manifest.ComputeStateHash())
             throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
         var targetRoot = Path.GetFullPath(location);
         if (!IsPlainDirectory(targetRoot))
             throw new PhaketException(ErrorCodes.SaveBackupRestoreRefused, ("path", targetRoot));
-        var entry = manifest.Locations.FirstOrDefault(l => SamePath(l.Location, location))
-            ?? throw new PhaketException(ErrorCodes.ValidationFailed,
-                ("detail", $"backup {manifest.Id} does not cover save location {location}"));
-        var sourceRoot = Path.Combine(backupDirectory, FilesDirectoryName, LocationKey(targetRoot));
+        var index = LocationIndex(manifest.Locations.FirstOrDefault(l => SamePath(l.Location, location)), manifest);
+        var entry = manifest.Locations[index];
         // A profile record keeps every file in place; a backup with no files at all is not a
         // backup: refusing to restore beats guessing what to keep.
         if (manifest.SchemaVersion == ProfileSchemaVersion)
@@ -196,15 +213,13 @@ public sealed class SaveBackupService
         }
         if (manifest.Files.Count == 0)
             throw new PhaketException(ErrorCodes.SaveBackupRestoreRefused, ("path", targetRoot));
-        // The copy tree is walked without following links; a link where it should be is refused.
-        if (!IsPlainDirectory(Path.Combine(backupDirectory, FilesDirectoryName)) || !IsPlainDirectory(sourceRoot))
-            throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
 
-        ValidateManifest(manifest, entry, backupDirectory);
+        ValidateManifest(manifest, index, backupDirectory);
 
         // Phase 1: verify every hash before anything on disk is touched.
+        var sourceRoot = CopyFolder(backupDirectory, index, entry.Location);
         var restore = new Dictionary<string, SaveBackupFile>(StringComparer.Ordinal);
-        foreach (var file in manifest.Files.Where(f => entry.Files.Contains(f.RelativePath, StringComparer.Ordinal)))
+        foreach (var file in manifest.Files.Where(f => f.LocationIndex == index && entry.Files.Contains(f.RelativePath, StringComparer.Ordinal)))
         {
             ct.ThrowIfCancellationRequested();
             var source = SourcePath(sourceRoot, file.RelativePath);
@@ -212,18 +227,21 @@ public sealed class SaveBackupService
                 throw new PhaketException(ErrorCodes.SaveBackupHashMismatch, ("id", manifest.Id), ("path", file.RelativePath));
             restore[file.RelativePath] = file;
         }
-        // Only what the backup listed but did not keep is deleted: a profile record, or a file
-        // the copy tree lost. A file that appeared after the backup is the user's and stays.
+        // Only what the backup listed but did not keep is deleted: a file the copy tree lost. A
+        // file that appeared after the backup is the user's and stays.
         var deletes = entry.Files.Where(f => !restore.ContainsKey(f)).ToArray();
 
-        // Phase 2: copies before deletions, journalled, so an interruption can be finished or undone.
-        var journal = new List<(string RelativePath, string Backup)>();
+        // Phase 2: copies before deletions, with the journal marking the restore as unfinished
+        // until the last deletion is done — so the next run finishes this one (a file already
+        // in place is skipped after re-checking its hash, which makes the whole pass idempotent).
+        File.WriteAllLines(JournalPath(backupDirectory), [JournalHeader, targetRoot]);
         foreach (var file in restore.Values.OrderBy(f => f.RelativePath, StringComparer.Ordinal))
         {
             ct.ThrowIfCancellationRequested();
+            if (IsAlreadyRestored(targetRoot, file)) continue;
+            BeforeRestoreWrite?.Invoke(file.RelativePath);
+            ct.ThrowIfCancellationRequested();
             RestoreOne(targetRoot, sourceRoot, file.RelativePath);
-            journal.Add((file.RelativePath, file.Sha256));
-            WriteJournal(targetRoot, entry, deletes, journal);
         }
         foreach (var relative in deletes)
         {
@@ -232,13 +250,60 @@ public sealed class SaveBackupService
         }
         PruneEmptyDirectories(targetRoot, ct);
         if (!entry.Existed && !Directory.EnumerateFileSystemEntries(targetRoot).Any()) Directory.Delete(targetRoot);
-        DeleteJournal(targetRoot, ct);
+        DeleteJournal(backupDirectory, ct);
         return manifest;
+    }
+
+    // A file already in place is skipped after re-checking its hash: a resumed restore does not
+    // copy it again, and a link standing where it should be is not a restored file.
+    private static bool IsAlreadyRestored(string targetRoot, SaveBackupFile file)
+    {
+        try
+        {
+            var path = PathBoundary.Resolve(targetRoot, file.RelativePath);
+            return File.Exists(path) && IsRegularFile(path) && HashFile(path) == file.Sha256;
+        }
+        catch (PhaketException) { return false; }
+    }
+
+    // One file: copied next to its target under a random temp name, then swapped in place. The
+    // swap is atomic and the temp name cannot be a user file; PathBoundary.Resolve refuses a
+    // link on the way or on the target before anything is written through it.
+    private static void RestoreOne(string targetRoot, string sourceRoot, string relative)
+    {
+        var destination = PathBoundary.Resolve(targetRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        // Resolved again after the folder exists: a link created meanwhile is still refused.
+        destination = PathBoundary.Resolve(targetRoot, relative);
+        var temp = destination + "." + NewIdToken() + TempSuffix;
+        try
+        {
+            File.Copy(SourcePath(sourceRoot, relative)!, temp, overwrite: false);
+            File.Move(temp, destination, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp) && IsRegularFile(temp))
+                try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static string NewIdToken() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
+
+    // The index of a location in the manifest: the only key its files and its copy folder are
+    // addressed by, so the same relative path in two locations cannot mix.
+    private static int LocationIndex(SaveBackupLocation? entry, SaveBackupManifest manifest)
+    {
+        var index = entry is null ? -1 : ((IReadOnlyList<SaveBackupLocation>)manifest.Locations).ToList().IndexOf(entry);
+        if (index < 0)
+            throw new PhaketException(ErrorCodes.ValidationFailed,
+                ("detail", $"backup {manifest.Id} does not cover save location"));
+        return index;
     }
 
     // Structure and containment are checked before any write: a manifest is data, and a
     // rewritten one with a valid state hash must not turn into a delete-anything grant.
-    private static void ValidateManifest(SaveBackupManifest manifest, SaveBackupLocation entry, string backupDirectory)
+    private static void ValidateManifest(SaveBackupManifest manifest, int index, string backupDirectory)
     {
         if (manifest.SchemaVersion is not (SaveBackupManifest.CurrentSchemaVersion or EmptySchemaVersion or ProfileSchemaVersion))
             throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
@@ -251,23 +316,35 @@ public sealed class SaveBackupService
             || !string.Equals(Path.GetFileName(directory), manifest.Id, Comparison))
             throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
 
-        var seenFiles = new HashSet<string>(StringComparer.Ordinal);
-        var seenFilesPath = new HashSet<string>(PathComparer);
+        // Files belong to a location, and only the (location, path) pair must be unique: two
+        // locations may hold the same relative path. A link standing where a copy folder should
+        // be (or one resolving outside the backup) is refused.
+        var filesRoot = Path.GetFullPath(Path.Combine(directory, FilesDirectoryName));
+        var filesRootReal = Path.GetFullPath(ResolveLinks(filesRoot));
+        var seenFiles = new HashSet<(int, string)>();
         foreach (var file in manifest.Files)
         {
-            if (!IsSafeRelativePath(file.RelativePath) || !seenFiles.Add(file.RelativePath)
-                || !seenFilesPath.Add(Path.GetFullPath(Path.Combine(entry.Location, file.RelativePath))))
+            if (file.LocationIndex < 0 || file.LocationIndex >= manifest.Locations.Count
+                || !IsSafeRelativePath(file.RelativePath) || !seenFiles.Add((file.LocationIndex, file.RelativePath)))
+                throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
+            var copyFull = Path.GetFullPath(CopyFolder(directory, file.LocationIndex, manifest.Locations[file.LocationIndex].Location));
+            if (!PathBoundary.IsWithin(filesRoot, copyFull)
+                || !PathBoundary.IsWithin(filesRootReal, Path.GetFullPath(ResolveLinks(copyFull)))
+                || !IsPlainDirectory(copyFull))
                 throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
         }
-        var seenLocations = new HashSet<string>(PathComparer);
+        var seenTargets = new HashSet<string>(PathComparer);
         foreach (var location in manifest.Locations)
         {
-            if (!Path.IsPathRooted(location.Location) || !seenLocations.Add(location.Location))
+            if (!Path.IsPathRooted(location.Location) || !seenTargets.Add(location.Location))
                 throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
             foreach (var relative in location.Files)
-                if (!IsSafeRelativePath(relative) || !seenFiles.Contains(relative))
+                if (!IsSafeRelativePath(relative))
                     throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
         }
+        foreach (var relative in manifest.Locations[index].Files)
+            if (!seenFiles.Contains((index, relative)))
+                throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid, ("id", manifest.Id));
     }
 
     // A manifest key is a plain relative posix path: no root, no drive, no ..
@@ -278,17 +355,6 @@ public sealed class SaveBackupService
             return false;
         var parts = relative.Split('/');
         return parts.All(p => p.Length > 0 && p != "." && p != "..");
-    }
-
-    // One file: copied next to its target, then swapped in place. The swap itself is
-    // atomic; the journal lets an interrupted restore between files be finished.
-    private static void RestoreOne(string targetRoot, string sourceRoot, string relative)
-    {
-        var destination = PathBoundary.Resolve(targetRoot, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        var temp = destination + TempSuffix;
-        File.Copy(SourcePath(sourceRoot, relative)!, temp, overwrite: true);
-        File.Move(temp, destination, overwrite: true);
     }
 
     private static void DeleteInside(string targetRoot, string relative)
@@ -308,26 +374,54 @@ public sealed class SaveBackupService
         }
     }
 
-    // The pending writes of an interrupted restore: one line per file, "<sha>\t<relative path>".
-    // It only ever lives inside the save location itself.
-    private static void WriteJournal(string targetRoot, SaveBackupLocation entry, IEnumerable<string> deletes,
-        IEnumerable<(string RelativePath, string Backup)> done)
+    // An earlier version wrote its journal straight into the save tree, with the location on
+    // the first line and "<sha>\t<path>" or "!\t<path>" after it. Only a file of exactly that
+    // shape named like the journal is removed: any other file there is the user's and stays.
+    private static void ClearLegacyJournal(string targetRoot, CancellationToken ct)
     {
-        var text = new StringBuilder();
-        text.AppendLine(entry.Location);
-        foreach (var (relative, hash) in done) text.AppendLine($"{hash}\t{relative}");
-        foreach (var relative in deletes) text.AppendLine($"!\t{relative}");
-        File.WriteAllText(JournalPath(targetRoot), text.ToString());
+        ct.ThrowIfCancellationRequested();
+        var info = new FileInfo(Path.Combine(targetRoot, JournalFileName));
+        if (!info.Exists || info.LinkTarget is not null) return;
+        try
+        {
+            var lines = File.ReadAllLines(info.FullName);
+            if (lines.Length > 0 && SamePath(lines[0], targetRoot)
+                && lines.Skip(1).All(l => l.StartsWith("!\t", StringComparison.Ordinal)
+                    || (l.Length > 66 && l[64] == '\t' && l.AsSpan(0, 64).IndexOfAnyExcept("0123456789abcdef") < 0)))
+                info.Delete();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
     }
 
-    private static void DeleteJournal(string targetRoot, CancellationToken ct)
+    // The restore journal lives in the backup folder (Phaket's own property), never in the save
+    // tree: it only says which location a run was restoring, and its presence marks the run as
+    // unfinished. Nothing in it can widen what is restored or deleted — that comes from the
+    // manifest alone — so finishing a run is just the same restore, run again.
+    private static string JournalPath(string backupDirectory) => Path.Combine(backupDirectory, JournalFileName);
+
+    private static void DeleteJournal(string backupDirectory, CancellationToken ct)
     {
-        var path = JournalPath(targetRoot);
         ct.ThrowIfCancellationRequested();
+        var path = JournalPath(backupDirectory);
         if (File.Exists(path)) File.Delete(path);
     }
 
-    private static string JournalPath(string targetRoot) => Path.Combine(targetRoot, JournalFileName);
+    // A restore that was interrupted is finished before a new one starts, so two runs never
+    // overlap. The journal is dropped first: the restore writes its own, so a second
+    // interruption is still picked up by the run after it.
+    private void ResumePending(string backupDirectory, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var path = JournalPath(Path.GetFullPath(backupDirectory));
+        if (!File.Exists(path)) return;
+        var lines = File.ReadAllLines(path);
+        if (lines.Length == 0 || lines[0] != JournalHeader) return;
+        if (lines.Length < 2) throw new PhaketException(ErrorCodes.SaveBackupManifestInvalid);
+        var location = lines[1];
+        File.Delete(path);
+        // A journal naming a location this backup does not cover is refused by the restore itself.
+        Restore(backupDirectory, location, ct);
+    }
 
     // Profile records the save location as it is now WITHOUT copying any file. Used
     // when the planned overwrites are too large to copy: the install proceeds (the
@@ -429,9 +523,20 @@ public sealed class SaveBackupService
         return id;
     }
 
-    // A short, stable folder key for one save location.
-    private static string LocationKey(string location) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(location))))[..16];
+    // One copy folder per location, numbered by its position in the manifest: two locations with
+    // the same relative path never share a copy, and the pair needs no global uniqueness.
+    private static string CopyFolderName(int index) => index.ToString(CultureInfo.InvariantCulture);
+
+    // A backup written before the numbered folders keyed its copies by the location path; that
+    // folder still restores, and only when the numbered one is absent.
+    private static string CopyFolder(string backupDirectory, int index, string location)
+    {
+        var numbered = Path.Combine(backupDirectory, FilesDirectoryName, CopyFolderName(index));
+        if (Directory.Exists(numbered)) return numbered;
+        var legacy = Path.Combine(backupDirectory, FilesDirectoryName,
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(location))))[..16]);
+        return Directory.Exists(legacy) ? legacy : numbered;
+    }
 
     private static string RelativeOf(string root, string file) =>
         Path.GetRelativePath(root, file).Replace('\\', '/');
@@ -509,6 +614,8 @@ internal static class SaveTree
             {
                 var attributes = entry.Attributes;
                 if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                // Our own leftover copy from an interrupted restore is not a save file.
+                if (entry.Name.EndsWith(SaveBackupService.TempSuffix, StringComparison.OrdinalIgnoreCase)) continue;
                 if (entry is DirectoryInfo child) pending.Push(child.FullName);
                 else yield return new Entry(entry.FullName,
                     Path.GetRelativePath(root, entry.FullName).Replace('\\', '/'));
