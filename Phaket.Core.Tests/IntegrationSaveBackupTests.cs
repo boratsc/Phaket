@@ -150,6 +150,35 @@ public sealed class IntegrationSaveBackupTests : IDisposable
         Assert.True(File.Exists(ModFile));
     }
 
+    // R3a: the backup reads where the game itself keeps saves (saveLocations), not only the
+    // profile copy — otherwise a Linux player's progress is never in the copy.
+    [Fact]
+    public void SaveLocationsOfTheGameAreBackedUpToo()
+    {
+        if (OperatingSystem.IsWindows()) return; // the fixture names a home-relative Linux folder
+        var real = Directory.CreateTempSubdirectory("phaket-real-saves-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(real, "Player.log"), "real-progress");
+            var definition = Definition() with
+            {
+                SaveLocations = new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>>
+                {
+                    ["linux"] = [real],
+                }),
+            };
+            var context = Context(definition);
+            var lifecycle = new Phaket.Core.Execution.SaveBackup.PlanLifecycle(context);
+
+            var request = lifecycle.SaveBackupRequest();
+
+            Assert.NotNull(request);
+            Assert.Contains(real, request!.Locations);
+            Assert.DoesNotContain(profileRoot, request.Locations);
+        }
+        finally { Directory.Delete(real, true); }
+    }
+
     [Fact]
     public void ExecutorItselfCopiesSavesWhenTheHostDidNotApprove()
     {
