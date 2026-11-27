@@ -5,7 +5,7 @@ using Phaket.Core.Platforms;
 
 namespace Phaket.Services;
 
-public sealed record LaunchOutcome(bool Started, bool Tracked)
+public sealed record LaunchOutcome(bool Started, bool Tracked, bool SavesShared = false)
 {
     public static LaunchOutcome Failed { get; } = new(false, false);
 }
@@ -50,18 +50,29 @@ public sealed class LaunchService
     // directArguments is a test seam that lets a fixture pass `cmd /c ...` on Windows without
     // giving up the real OpenProcess/GetProcessTimes tracking; the app never sets it.
     public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId, string? sessionLabel, string? directArguments = null)
+        => LaunchExecutable(executable, workingDirectory, appId, sessionLabel, directArguments, environment: null, savesShared: false);
+
+    // PAK-146 (model B): a package launch passes the redirected environment (saves/config
+    // inside the package) and savesShared from PackageSavesIsolation; the overload above keeps
+    // launching exactly as before (no overrides, shared = false). A package launch that could
+    // not redirect is flagged by the caller as savesShared, because it then writes into the
+    // user's real profile.
+    public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId,
+        string? sessionLabel, string? directArguments, IReadOnlyDictionary<string, string>? environment, bool savesShared)
     {
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return LaunchOutcome.Failed;
         int pid;
         try
         {
-            pid = Process.Start(new ProcessStartInfo
+            var info = new ProcessStartInfo
             {
                 FileName = executable,
                 Arguments = directArguments ?? "",
                 WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(executable)!,
                 UseShellExecute = false,
-            })?.Id ?? 0;
+            };
+            foreach (var (key, value) in environment ?? new Dictionary<string, string>()) info.Environment[key] = value;
+            pid = Process.Start(info)?.Id ?? 0;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -70,13 +81,13 @@ public sealed class LaunchService
         if (pid <= 0) return LaunchOutcome.Failed;
 
         var (found, identity) = ProcessIdentity.TryGetProcessIdentity(pid);
-        if (!found || identity is null) return new LaunchOutcome(true, false);
+        if (!found || identity is null) return new LaunchOutcome(true, false, savesShared);
         var record = ProcessRecord.FromIdentity(identity, appId, sessionLabel);
         trackers.Save(record);
         // Not alive right after the start means a launcher handed over and exited.
-        if (trackers.IsAlive(record)) return new LaunchOutcome(true, true);
+        if (trackers.IsAlive(record)) return new LaunchOutcome(true, true, savesShared);
         trackers.Remove(record);
-        return new LaunchOutcome(true, false);
+        return new LaunchOutcome(true, false, savesShared);
     }
 
     // The newest record of this app, or null when Phaket never launched the game directly.

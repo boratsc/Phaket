@@ -33,6 +33,36 @@
       "properties": { "strategy": { "enum": ["steam-manifest", "legendary-installed", "manual"] } }
     },
     "writableAreas": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "savePaths": {
+      "description": "PAK-141 save locations: \"profile://...\" or an absolute path.",
+      "type": "array", "items": { "type": "string", "minLength": 1 }
+    },
+    "savesIsolation": {
+      "description": "PAK-146: per OS, whether a package keeps its saves beside itself (\"env\", redirected env keys) or shares them with the user profile (\"shared\", with a reason). An OS left out is unknown.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "object",
+          "propertyNames": { "enum": ["windows", "linux"] },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mode"],
+            "properties": {
+              "mode": { "enum": ["env", "shared"] },
+              "env": {
+                "type": "array", "minItems": 1, "uniqueItems": true,
+                "items": { "enum": ["HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "APPDATA", "LOCALAPPDATA"] }
+              },
+              "reason": { "type": "string", "minLength": 1 }
+            },
+            "if": { "properties": { "mode": { "const": "env" } } },
+            "then": { "required": ["env"] }
+          }
+        }
+      }
+    },
     "mainExecutable": { "type": "string", "minLength": 1 },
     "platforms": {
       "type": "array", "minItems": 1, "uniqueItems": true,

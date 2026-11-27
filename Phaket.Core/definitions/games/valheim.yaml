@@ -34,3 +34,20 @@ loaderLayouts:
     entryFiles:
       - winhttp.dll
       - BepInEx/core/BepInEx.dll
+# PAK-141/146: per-character folders under one profile root.
+savePaths:
+  - profile://steam/892970
+# PAK-146 (model B), Unity: same rule as Among Us — HOME/XDG redirect works on Linux (worlds
+# live under ~/.config/unity3d/IronGate/Valheim), while %USERPROFILE%\AppData\LocalLow comes
+# from SHGetKnownFolderPath and cannot be redirected by environment on Windows.
+savesIsolation:
+  os:
+    linux:
+      mode: env
+      env:
+        - HOME
+        - XDG_CONFIG_HOME
+        - XDG_DATA_HOME
+    windows:
+      mode: shared
+      reason: unity-locallow-known-folder

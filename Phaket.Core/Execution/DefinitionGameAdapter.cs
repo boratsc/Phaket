@@ -1,4 +1,5 @@
 using Phaket.Core.Domain;
+using Phaket.Core.Launch;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
 
@@ -109,4 +110,9 @@ public sealed class DefinitionGameAdapter : IGameAdapter
     public LaunchSpec BuildLaunchSpec(Profile profile, InstallationFacts facts) =>
         new(definition.MainExecutable ?? "", [], facts.Installation.RootPath,
             new Dictionary<string, string>());
+
+    // PAK-146 (model B): what an isolated package launch of this definition looks like. A
+    // bare adapter has no package tree, so an EnvRedirect definition is reported Shared.
+    public SavesIsolationPlan BuildSavesIsolation(string? packageRoot = null) =>
+        SavesIsolationPlanner.Plan(os, (definition.SavesIsolation ?? new SavesIsolation()).For(os), packageRoot);
 }

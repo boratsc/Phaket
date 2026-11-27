@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Phaket.Core.Launch;
 using Phaket.Core.Omrl;
 
 namespace Phaket.Core.Omrl;
@@ -43,7 +44,10 @@ public sealed record GameDefinition(
     // PAK-141: save locations back up before a recipe writes. A "profile://" entry is
     // relative to the user's profile root (a store prefix such as "steam/" belongs in
     // the definition); anything else is an absolute path. Empty = no save backup.
-    IReadOnlyList<string>? SavePaths = null)
+    IReadOnlyList<string>? SavePaths = null,
+    // PAK-146 (model B): per OS, whether a package can keep its saves beside itself.
+    // Absent = unknown, and an unknown package is never declared parallel with vanilla.
+    SavesIsolation? SavesIsolation = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
@@ -65,6 +69,9 @@ public sealed record GameDefinition(
         (LaunchRequirements ?? [])
             .Where(r => r.Os is not { Count: > 0 } systems || systems.Contains(os, StringComparer.Ordinal))
             .ToArray();
+
+    public SavesIsolationMode SavesIsolationFor(string os) =>
+        (SavesIsolation ?? new SavesIsolation()).For(os);
 }
 
 // Builds launcher-facing strings from declarative requirements. Values that could
@@ -125,6 +132,7 @@ public static class GameDefinitionLoader
         public string? DefaultArch { get; init; }
         public GameSources? Sources { get; init; }
         public IReadOnlyList<string>? SavePaths { get; init; }
+        public SavesIsolation? SavesIsolation { get; init; }
     }
 
     private sealed record DetectionDto
@@ -144,7 +152,27 @@ public static class GameDefinitionLoader
             throw new PhaketException(ErrorCodes.UnsupportedSchemaVersion, ("schemaVersion", dto.SchemaVersion));
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
             dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
-            dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths);
+            dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths, ValidatedIsolation(dto.SavesIsolation));
+    }
+
+    // An unsafe or unknown mode is refused here, not silently downgraded: a definition that
+    // promises isolation must be correct, and the alternative (Shared) is a plain edit away.
+    private static SavesIsolation? ValidatedIsolation(SavesIsolation? isolation)
+    {
+        if (isolation?.Os is null) return isolation;
+        foreach (var (os, mode) in isolation.Os)
+        {
+            if (os is not ("windows" or "linux"))
+                throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"unknown saves isolation os: {os}"));
+            if (mode.Mode is not (SavesIsolationMode.EnvRedirect or SavesIsolationMode.Shared))
+                throw new PhaketException(ErrorCodes.ValidationFailed,
+                    ("detail", $"unsupported saves isolation mode for {os}: {mode.Mode}"));
+            if (mode.Mode != SavesIsolationMode.EnvRedirect) continue;
+            if (mode.Env is not { Count: > 0 } keys || keys.Any(key => !SavesIsolationPlanner.IsSafeName(key)))
+                throw new PhaketException(ErrorCodes.ValidationFailed,
+                    ("detail", $"saves isolation env keys for {os} are missing or outside the allowed set"));
+        }
+        return isolation;
     }
 }
 

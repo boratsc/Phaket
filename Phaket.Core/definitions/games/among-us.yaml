@@ -56,3 +56,21 @@ launchRequirements:
       - linux
     source: https://github.com/scp222thj/MalumMenu (IL2CPP chainloader crash workaround)
     observedAt: "2026-11-13"
+# PAK-141/146: one save tree, no per-account ambiguity: the profile is a single folder.
+savePaths:
+  - profile://steam/945360
+# PAK-146 (model B), Unity/IL2CPP: on Linux the engine resolves ~/.config/unity3d/<company>/<game>
+# through HOME/XDG_CONFIG_HOME, so a package launch can keep its saves beside itself. On Windows
+# Unity asks SHGetKnownFolderPath for %USERPROFILE%\AppData\LocalLow, which no environment
+# variable moves, so a package there shares the user's saves and is NOT parallel with vanilla.
+savesIsolation:
+  os:
+    linux:
+      mode: env
+      env:
+        - HOME
+        - XDG_CONFIG_HOME
+        - XDG_DATA_HOME
+    windows:
+      mode: shared
+      reason: unity-locallow-known-folder
