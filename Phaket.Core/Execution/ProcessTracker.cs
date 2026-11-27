@@ -24,9 +24,15 @@ public sealed record ProcessRecord(
             identity.StartTimeUtc, launchedAt ?? DateTimeOffset.UtcNow, appId, sessionLabel);
 }
 
-public sealed record ProcessStopResult(ProcessStopStatus Status, string MessagePl, string MessageEn)
+// stage/win32 name the failed OS call for logs and tests; they never reach the user's message.
+public sealed record ProcessStopResult(ProcessStopStatus Status, string MessagePl, string MessageEn,
+    string? Stage = null, int? Win32Error = null)
 {
     public string Message => $"{MessagePl} / {MessageEn}";
+
+    // One line for a test or a log: "Failed [stage=terminate win32=5]".
+    public override string ToString() =>
+        Stage is null ? $"{Status}: {Message}" : $"{Status} [stage={Stage} win32={Win32Error}]: {Message}";
 }
 
 /// <summary>Persistent launch records and fail-closed process stopping.</summary>
@@ -151,7 +157,8 @@ public sealed class ProcessTracker
         return Localized(status);
     }
 
-    private static ProcessStopResult StopResult(ProcessStopStatus status) => Localized(status);
+    private static ProcessStopResult StopResult(ProcessStopStatus status, string? stage = null, int? win32 = null) =>
+        Localized(status) with { Stage = stage, Win32Error = win32 };
 
     // UI picks the language; the record of what happened is the same in both.
     public static ProcessStopResult Localized(ProcessStopStatus status) => status switch
@@ -208,7 +215,7 @@ public sealed class ProcessTracker
         {
             return openError == errorInvalidParameter
                 ? Removed(record, ProcessStopStatus.NotRunning, removeRecord)
-                : Localized(ProcessStopStatus.IdentityUnknown);
+                : StopResult(ProcessStopStatus.IdentityUnknown, "open", openError);
         }
 
         try
@@ -219,8 +226,8 @@ public sealed class ProcessTracker
             if (!api.StartTime(handle, out var raw, out var timeError))
                 return timeError == errorInvalidParameter
                     ? Removed(record, ProcessStopStatus.NotRunning, removeRecord)
-                    : Localized(ProcessStopStatus.IdentityUnknown);
-            if (raw <= 0) return Localized(ProcessStopStatus.IdentityUnknown);
+                    : StopResult(ProcessStopStatus.IdentityUnknown, "times", timeError);
+            if (raw <= 0) return StopResult(ProcessStopStatus.IdentityUnknown, "times", 0);
             ProcessIdentity identity;
             try
             {
@@ -229,7 +236,7 @@ public sealed class ProcessTracker
             }
             catch (ArgumentOutOfRangeException)
             {
-                return Localized(ProcessStopStatus.IdentityUnknown);
+                return StopResult(ProcessStopStatus.IdentityUnknown, "times", 0);
             }
 
             // A PID that now answers with another start time is a recycled PID: the record is
@@ -240,16 +247,17 @@ public sealed class ProcessTracker
             // upgrade when the UI needs a window-close request before forced termination.
             _ = force;
 
-            var accepted = api.Terminate(handle, out _);
+            var accepted = api.Terminate(handle, out var terminateError);
             // The process handle is signalled exactly when the process ends: that is the
             // confirmation TerminateProcess itself does not give. One bounded wait is enough;
             // the loop only covers an early wake before the deadline.
             var deadline = DateTime.UtcNow + exitTimeout;
-            while (WaitObject0 != api.Wait(handle, Remaining(deadline)) && DateTime.UtcNow < deadline) { }
-            if (!api.HasExited(handle)) return Localized(ProcessStopStatus.Failed);
+            var wait = WaitObject0;
+            while ((wait = api.Wait(handle, Remaining(deadline))) != WaitObject0 && DateTime.UtcNow < deadline) { }
+            if (!api.HasExited(handle)) return StopResult(ProcessStopStatus.Failed, "wait", (int)wait);
             // Access denied from TerminateProcess on a process that then finished is "success", but a
             // refusal with the process still alive is not something to report as stopped.
-            if (!accepted) return Localized(ProcessStopStatus.Failed);
+            if (!accepted) return StopResult(ProcessStopStatus.Failed, "terminate", terminateError);
             return Removed(record, ProcessStopStatus.Stopped, removeRecord);
         }
         finally
@@ -258,13 +266,16 @@ public sealed class ProcessTracker
         }
     }
 
+    // Every answer is read as a plain int + Marshal.GetLastPInvokeError, never through a bool
+    // marshalled by the runtime: the last error belongs to this exact call, and a 0/non-0 BOOL
+    // needs no marshaller (whose failure is silent) on either the .NET or the native side.
     private sealed class Win32ProcessApi : IWindowsProcessApi
     {
         public IntPtr Open(int pid, out int error)
         {
             const uint processTerminate = 0x0001;
             const uint processQueryLimitedInformation = 0x1000;
-            var handle = OpenProcess(processTerminate | processQueryLimitedInformation, inheritHandle: false, pid);
+            var handle = OpenProcess(processTerminate | processQueryLimitedInformation, inheritHandle: 0, pid);
             error = Marshal.GetLastPInvokeError();
             return handle;
         }
@@ -272,7 +283,7 @@ public sealed class ProcessTracker
         public bool StartTime(IntPtr handle, out long fileTime100Ns, out int error)
         {
             fileTime100Ns = 0;
-            if (!GetProcessTimes(handle, out var creation, out _, out _, out _))
+            if (GetProcessTimes(handle, out var creation, out _, out _, out _) == 0)
             {
                 error = Marshal.GetLastPInvokeError();
                 return false;
@@ -286,7 +297,7 @@ public sealed class ProcessTracker
         {
             var terminated = TerminateProcess(handle, exitCode: 0);
             error = Marshal.GetLastPInvokeError();
-            return terminated;
+            return terminated != 0;
         }
 
         public bool HasExited(IntPtr handle) => Wait(handle, waitMilliseconds: 0) == WaitObject0;
@@ -358,27 +369,27 @@ public sealed class ProcessTracker
     private const uint WaitObject0 = 0;
 
     // The wait left until a deadline, clamped to what WaitForSingleObject accepts (INFINITE is -1).
+    // At least 1 ms: a 0 wait is a poll, so a clamped 0 would spin the loop until the deadline.
     private static uint Remaining(DateTime deadline) =>
-        (uint)Math.Clamp((deadline - DateTime.UtcNow).TotalMilliseconds, 0, int.MaxValue);
+        (uint)Math.Clamp((deadline - DateTime.UtcNow).TotalMilliseconds, 1, int.MaxValue);
 
+    // int, not bool: the runtime must not marshal the BOOL, and the last error is read right
+    // after the call, so no wrapper can overwrite it first.
     [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+    private static extern IntPtr OpenProcess(uint desiredAccess, int inheritHandle, int processId);
 
     [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetProcessTimes(IntPtr process, out FileTime creationTime,
+    private static extern int GetProcessTimes(IntPtr process, out FileTime creationTime,
         out FileTime exitTime, out FileTime kernelTime, out FileTime userTime);
 
     [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+    private static extern int TerminateProcess(IntPtr process, uint exitCode);
 
     [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
     private static extern uint WaitForSingleObject(IntPtr handle, uint waitMilliseconds);
 
     [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr handle);
+    private static extern int CloseHandle(IntPtr handle);
 
     [DllImport("kernel32.dll")]
     private static extern ulong GetTickCount64();

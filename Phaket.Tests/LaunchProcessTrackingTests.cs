@@ -106,8 +106,9 @@ public class LaunchProcessTrackingTests : IDisposable
             var result = service.Stop(record);
             // A Failed answer names the OS error in its message only when there is one; on
             // Windows the exit is confirmed on the process handle, so a stay-alive is reported.
+            // ToString adds the failed call and its raw Win32 code for the log.
             Assert.True(result.Status == Phaket.Core.Execution.ProcessStopStatus.Stopped,
-                $"stop answered {result.Status}: {result.Message}");
+                $"stop answered {result}");
             Assert.Empty(new Phaket.Core.Execution.ProcessTracker(Store).Load());
             AssertGoneWithin(record.Pid);
         }
@@ -158,7 +159,9 @@ public class LaunchProcessTrackingTests : IDisposable
             Assert.NotNull(vm.PendingStop);
             AssertAliveWithin(record.Pid);
             // Confirmation goes through the real fail-closed tracker; the PID is our fixture.
-            Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, service.Stop(record).Status);
+            var stopped = service.Stop(record);
+            Assert.True(stopped.Status == Phaket.Core.Execution.ProcessStopStatus.Stopped,
+                $"stop answered {stopped}");
             // The record is gone after the first stop, so a second one reports "no longer
             // running" — the other truthful fail-closed answer.
             AssertGoneWithin(record.Pid);

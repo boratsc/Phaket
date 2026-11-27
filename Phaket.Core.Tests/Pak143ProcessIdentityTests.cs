@@ -222,6 +222,13 @@ public sealed class Pak143ProcessTrackerTests
         Assert.Equal(ProcessStopStatus.Failed, result.Status);
         Assert.Contains("nie miał uprawnień", result.MessagePl);
         Assert.Contains("not allowed", result.MessageEn);
+        // The technical detail stays out of the user's message and names the refused call.
+        // A refused TerminateProcess leaves nothing to confirm, so the failed stage is the wait;
+        // an accepted signal that never ends is "wait" too (test below).
+        Assert.Equal("wait", result.Stage);
+        Assert.Equal(258, result.Win32Error); // WAIT_TIMEOUT
+        Assert.Contains("stage=wait win32=258", result.ToString());
+        Assert.DoesNotContain("win32", result.Message);
         Assert.Equal(1, api.TerminateCalls);
         Assert.Empty(removed);
         Assert.True(api.Closed, "the handle must be closed on every path");
@@ -237,6 +244,7 @@ public sealed class Pak143ProcessTrackerTests
             TimeSpan.FromMilliseconds(50));
 
         Assert.Equal(ProcessStopStatus.Failed, result.Status);
+        Assert.Equal("wait", result.Stage);
         Assert.True(api.Closed);
     }
 
@@ -316,6 +324,8 @@ public sealed class Pak143ProcessTrackerTests
             TimeSpan.FromMilliseconds(50), removed.Add);
 
         Assert.Equal(ProcessStopStatus.IdentityUnknown, result.Status);
+        Assert.Equal("times", result.Stage);
+        Assert.Equal(5, result.Win32Error);
         Assert.Empty(removed);
         Assert.Equal(0, api.TerminateCalls);
         Assert.True(api.Closed);
@@ -328,6 +338,9 @@ public sealed class Pak143ProcessTrackerTests
 }
 
 // Stands in for kernel32 on any OS: it answers exactly like the real calls on a living process.
+// A false TerminateProcess is never reported as Stopped, whatever the exit poll says; the
+// answer names the stage that refused so the CI log points at the failing call.
+// WaitError is WAIT_TIMEOUT (258) from the fake; a stage=wait assertion only names the stage.
 internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTerminate,
     int exitPollsBeforeGone = 0, bool exitedBeforeSignal = false) : ProcessTracker.IWindowsProcessApi
 {
