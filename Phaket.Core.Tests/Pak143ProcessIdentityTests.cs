@@ -331,6 +331,48 @@ public sealed class Pak143ProcessTrackerTests
         Assert.True(api.Closed);
     }
 
+    // The real Open asks for SYNCHRONIZE: without it WaitForSingleObject on that handle answers
+    // WAIT_FAILED (ERROR_ACCESS_DENIED) no matter how long the timeout is, so the exit could never
+    // be confirmed and every stop on Windows reported Failed. The mask is checked here because the
+    // product path and Windows itself are only exercised together by CI.
+    [Fact]
+    public void StopOpensTheProcessWithTheRightToTerminateAndToWait()
+    {
+        const uint synchronize = 0x00100000, terminate = 0x0001, queryLimited = 0x1000;
+
+        Assert.Equal(synchronize | terminate | queryLimited, ProcessTracker.StopAccessRights);
+        Assert.Equal(0x00101001u, ProcessTracker.StopAccessRights); // PROCESS_ALL_ACCESS is not wanted
+        Assert.Equal(0u, ProcessTracker.StopAccessRights & ~(synchronize | terminate | queryLimited));
+    }
+
+    // The one call that proves the rights reach the OS, exactly as the bug showed them missing:
+    // a handle opened WITHOUT SYNCHRONIZE makes WaitForSingleObject answer WAIT_FAILED, while the
+    // stop's own mask can be waited on. Runs on Windows only (the CI runner); elsewhere no-op.
+    [Fact]
+    public void AHandleWithoutSynchronizeCannotBeWaitedOnWhichIsWhyTheStopAsksForIt()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var pid = Environment.ProcessId;
+        var withoutSynchronize = ProcessTracker.StopAccessRights & ~0x00100000u;
+
+        var broken = ProcessTracker.OpenRaw(withoutSynchronize, pid);
+        var fixedHandle = ProcessTracker.OpenRaw(ProcessTracker.StopAccessRights, pid);
+        try
+        {
+            Assert.NotEqual(IntPtr.Zero, broken);
+            Assert.NotEqual(IntPtr.Zero, fixedHandle);
+            // WAIT_FAILED is exactly what the CI log reported as "win32=-1" before this fix.
+            Assert.Equal(uint.MaxValue, ProcessTracker.WaitRaw(broken, 0, out var brokenError));
+            Assert.NotEqual(0, brokenError);
+            Assert.NotEqual(uint.MaxValue, ProcessTracker.WaitRaw(fixedHandle, 0, out _));
+        }
+        finally
+        {
+            ProcessTracker.CloseRaw(broken);
+            ProcessTracker.CloseRaw(fixedHandle);
+        }
+    }
+
     // A failed WaitForSingleObject answers WAIT_FAILED, which names nothing: the stage carries
     // GetLastError instead, so a CI log points at the call that really failed and never at "-1".
     [Fact]

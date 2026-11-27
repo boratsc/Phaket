@@ -181,8 +181,8 @@ public sealed class ProcessTracker
     // The OS calls behind the Windows stop, so a test can prove the failure paths without Windows.
     internal interface IWindowsProcessApi
     {
-        // Opens with PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION so one handle both
-        // verifies the start time and carries the right to terminate.
+        // Opens with StopAccessRights so one handle verifies the start time, carries the right to
+        // terminate, and can be waited on.
         IntPtr Open(int pid, out int error);
 
         bool StartTime(IntPtr handle, out long fileTime100Ns, out int error);
@@ -201,6 +201,29 @@ public sealed class ProcessTracker
     }
 
     private static readonly IWindowsProcessApi Windows = new Win32ProcessApi();
+
+    // The mask one handle carries through the whole stop. SYNCHRONIZE is not optional:
+    // WaitForSingleObject refuses a process handle without it (WAIT_FAILED, ERROR_ACCESS_DENIED),
+    // so the exit could never be confirmed and every stop would report Failed.
+    internal const uint ProcessTerminate = 0x0001;
+    internal const uint ProcessQueryLimitedInformation = 0x1000;
+    internal const uint Synchronize = 0x00100000;
+    internal const uint StopAccessRights =
+        ProcessTerminate | ProcessQueryLimitedInformation | Synchronize; // 0x00101001
+
+    // The bare OpenProcess call, so a test can see the mask the stop's handle is really opened with.
+    internal static IntPtr OpenRaw(uint desiredAccess, int pid) =>
+        OpenProcess(desiredAccess, inheritHandle: 0, pid);
+
+    // The same wait a handle needs, exposed so a test can show what a missing right costs.
+    internal static uint WaitRaw(IntPtr handle, uint milliseconds, out int error)
+    {
+        var result = WaitForSingleObject(handle, milliseconds);
+        error = result == WaitFailed ? Marshal.GetLastPInvokeError() : 0;
+        return result;
+    }
+
+    internal static void CloseRaw(IntPtr handle) => CloseHandle(handle);
 
     private ProcessStopResult StopWindows(ProcessRecord record, bool force) =>
         StopWindows(record, force, Windows, TimeSpan.FromSeconds(5), removeRecord: Remove);
@@ -283,9 +306,7 @@ public sealed class ProcessTracker
     {
         public IntPtr Open(int pid, out int error)
         {
-            const uint processTerminate = 0x0001;
-            const uint processQueryLimitedInformation = 0x1000;
-            var handle = OpenProcess(processTerminate | processQueryLimitedInformation, inheritHandle: 0, pid);
+            var handle = OpenRaw(StopAccessRights, pid);
             error = Marshal.GetLastPInvokeError();
             return handle;
         }
@@ -312,12 +333,8 @@ public sealed class ProcessTracker
 
         public bool HasExited(IntPtr handle) => Wait(handle, waitMilliseconds: 0, out _) == WaitObject0;
 
-        public uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError)
-        {
-            var result = WaitForSingleObject(handle, waitMilliseconds);
-            waitError = result == WaitFailed ? Marshal.GetLastPInvokeError() : 0;
-            return result;
-        }
+        public uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError) =>
+            WaitRaw(handle, waitMilliseconds, out waitError);
 
         public void Close(IntPtr handle) => CloseHandle(handle);
     }
