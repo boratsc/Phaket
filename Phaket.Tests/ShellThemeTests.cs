@@ -31,8 +31,8 @@ public class ShellThemeTests
                 vm.Breadcrumb.Select(crumb => crumb.Label).ToArray());
             using var initial = window.CaptureRenderedFrame();
             Assert.NotNull(initial);
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            initial.Save("/tmp/opencode/phaket-render/40-version-bump.png", PngBitmapEncoderOptions.Default);
+            Directory.CreateDirectory(RenderArtifacts.Directory);
+            initial.Save(RenderArtifacts.Path("40-version-bump.png"), PngBitmapEncoderOptions.Default);
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == vm.VersionText);
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == vm.AppCodename);
             // PAK-91: the footer reads the csproj version and a codename defined once in code.

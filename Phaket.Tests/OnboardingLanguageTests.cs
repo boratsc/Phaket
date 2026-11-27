@@ -205,7 +205,7 @@ public sealed class OnboardingLanguageTests : IDisposable
     [AvaloniaFact]
     public void Render_language_step_in_both_languages()
     {
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         foreach (var language in new[] { "pl-PL", "en" })
         {
             LocalizationService.Instance.CurrentLanguage = language;
@@ -217,7 +217,7 @@ public sealed class OnboardingLanguageTests : IDisposable
             window.Show();
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
-            frame?.Save(Path.Combine("/tmp/opencode/phaket-render", $"70-onboarding-language-{language}.png"), PngBitmapEncoderOptions.Default);
+            frame?.Save(RenderArtifacts.Path($"70-onboarding-language-{language}.png"), PngBitmapEncoderOptions.Default);
         }
     }
 }

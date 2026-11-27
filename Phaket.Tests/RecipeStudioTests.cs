@@ -135,7 +135,7 @@ public sealed class RecipeStudioTests
             Source = new Uri("avares://Phaket/Styles/Tokens.axaml"),
         };
         Application.Current.Resources.MergedDictionaries.Add(tokens);
-        var directory = "/tmp/opencode/phaket-render";
+        var directory = RenderArtifacts.Directory;
         Directory.CreateDirectory(directory);
         try
         {
@@ -152,7 +152,7 @@ public sealed class RecipeStudioTests
             studioWindow.Show();
             Dispatcher.UIThread.RunJobs();
             using (var frame = studioWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the wizard.")).Save(Path.Combine(directory, "33-studio-wizard.png"), PngBitmapEncoderOptions.Default);
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the wizard.")).Save(RenderArtifacts.Path("33-studio-wizard.png"), PngBitmapEncoderOptions.Default);
             Assert.Equal(0, studio.WizardStage);
             for (var stage = 1; stage <= 3; stage++)
             {
@@ -164,7 +164,7 @@ public sealed class RecipeStudioTests
             studio.SwitchModeCommand.Execute("editor");
             Dispatcher.UIThread.RunJobs();
             using (var frame = studioWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the editor.")).Save(Path.Combine(directory, "34-studio-editor.png"), PngBitmapEncoderOptions.Default);
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the editor.")).Save(RenderArtifacts.Path("34-studio-editor.png"), PngBitmapEncoderOptions.Default);
             studioWindow.Close();
 
             var game = new GameCatalogItem(new GameDefinition("among-us", ["BepInEx/**"],
@@ -178,7 +178,7 @@ public sealed class RecipeStudioTests
             graphWindow.Show();
             Dispatcher.UIThread.RunJobs();
             using (var frame = graphWindow.CaptureRenderedFrame())
-                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the graph.")).Save(Path.Combine(directory, "35-graph.png"), PngBitmapEncoderOptions.Default);
+                (frame ?? throw new InvalidOperationException("Headless renderer returned no frame for the graph.")).Save(RenderArtifacts.Path("35-graph.png"), PngBitmapEncoderOptions.Default);
             graphWindow.Close();
         }
         finally

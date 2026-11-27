@@ -377,9 +377,9 @@ public sealed class LifecycleTests
             Assert.Equal("Opublikuj w katalogu", button.Content);
             Assert.Equal("Opublikuj w katalogu", AutomationProperties.GetName(button));
 
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using (var frame = window.CaptureRenderedFrame())
-                frame!.Save("/tmp/opencode/phaket-render/43-publish.png", PngBitmapEncoderOptions.Default);
+                frame!.Save(RenderArtifacts.Path("43-publish.png"), PngBitmapEncoderOptions.Default);
 
             await vm.PublishCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();

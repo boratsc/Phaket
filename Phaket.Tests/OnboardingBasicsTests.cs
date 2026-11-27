@@ -210,7 +210,7 @@ public sealed class OnboardingBasicsTests : IDisposable
     [AvaloniaFact]
     public async Task Render_basics_step_in_both_languages_with_and_without_games()
     {
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         foreach (var (language, scan) in new (string, Func<CancellationToken, Task<IReadOnlyList<DetectedGame>>>)[]
                  { ("pl-PL", games), ("pl-PL", _ => Task.FromResult<IReadOnlyList<DetectedGame>>([])), ("en", games) })
         {
@@ -226,14 +226,15 @@ public sealed class OnboardingBasicsTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
             string name = $"72-onboarding-basics-{language}-{(withGames ? "games" : "empty")}.png";
-            frame?.Save(Path.Combine("/tmp/opencode/phaket-render", name), PngBitmapEncoderOptions.Default);
+            var rendered = RenderArtifacts.Path(name);
+            frame?.Save(rendered, PngBitmapEncoderOptions.Default);
 
             // The radios and the rows live in the visual tree, not only in the view model.
             var channels = window.GetVisualDescendants().OfType<RadioButton>()
                 .Where(button => AutomationProperties.GetAutomationId(button)?.StartsWith("onboarding.basics.", StringComparison.Ordinal) == true)
                 .ToArray();
             Assert.Equal(2, channels.Length);
-            Assert.True(File.Exists(Path.Combine("/tmp/opencode/phaket-render", name)));
+            Assert.True(File.Exists(rendered), rendered);
         }
     }
 

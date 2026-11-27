@@ -139,9 +139,9 @@ public class CatalogOfflineTests
             var texts = window.GetVisualDescendants().OfType<TextBlock>()
                 .Select(t => t.Text).Where(t => t is not null).ToHashSet(StringComparer.Ordinal);
             Assert.Contains(loc["Catalog.Offline"], texts);
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-            frame!.Save("/tmp/opencode/phaket-render/mod-catalog-offline.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("mod-catalog-offline.png"), PngBitmapEncoderOptions.Default);
         }
         finally
         {

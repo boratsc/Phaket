@@ -265,9 +265,9 @@ public sealed class NexusSettingsTests
                     Assert.Contains(LocalizationService.Instance["Settings.Nexus.OAuth.SignIn"], buttons);
                     Assert.Contains(LocalizationService.Instance["Settings.Nexus.Tab"], buttons);
 
-                    Directory.CreateDirectory("/tmp/opencode/phaket-render");
+                    Directory.CreateDirectory(RenderArtifacts.Directory);
                     using var frame = window.CaptureRenderedFrame();
-                    frame!.Save($"/tmp/opencode/phaket-render/53-settings-nexus-{locale}.png", PngBitmapEncoderOptions.Default);
+                    frame!.Save(RenderArtifacts.Path($"53-settings-nexus-{locale}.png"), PngBitmapEncoderOptions.Default);
                 }
                 finally
                 {
@@ -306,8 +306,8 @@ public sealed class NexusSettingsTests
             {
                 Dispatcher.UIThread.RunJobs();
                 using var frame = window.CaptureRenderedFrame();
-                Directory.CreateDirectory("/tmp/opencode/phaket-render");
-                frame!.Save("/tmp/opencode/phaket-render/54-nexus-browser.png", PngBitmapEncoderOptions.Default);
+                Directory.CreateDirectory(RenderArtifacts.Directory);
+                frame!.Save(RenderArtifacts.Path("54-nexus-browser.png"), PngBitmapEncoderOptions.Default);
             }
             finally { window.Close(); }
         }

@@ -110,9 +110,9 @@ public sealed class ModpackInstallAdapterTests
             var window = new Window { Width = 1280, Height = 800, Content = new ModpackCatalogView { DataContext = viewModel } };
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/39-catalog-github.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("39-catalog-github.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally
@@ -385,6 +385,9 @@ public sealed class ModpackInstallAdapterTests
             using var client = new HttpClient(new GitHubHandler(archive, "example/mod"));
             var github = new GitHubReleaseService(client);
             var transport = new Transport(archive);
+            // The release cache is process-wide (keyed by repository), so a release listing
+            // cached by a test running beside this one would be handed to this client.
+            GitHubReleaseService.ClearCache();
             var service = new ModpackInstallService(root, packageTransport: transport,
                 catalogTransport: new Catalog(new EmptyCatalogTransport()), githubService: github);
             var pack = Pack(

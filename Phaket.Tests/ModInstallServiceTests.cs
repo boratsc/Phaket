@@ -297,8 +297,8 @@ public sealed class ModInstallServiceTests
             modsVm.SelectedTabIndex = 1;
             var window = new Window { Width = 1280, Height = 900, Content = new Phaket.Views.ModsView { DataContext = modsVm } };
             window.Show(); Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
-            using (var frame = window.CaptureRenderedFrame()) { Assert.NotNull(frame); frame.Save("/tmp/opencode/phaket-render/realtarget-preview.png", PngBitmapEncoderOptions.Default); }
+            Directory.CreateDirectory(RenderArtifacts.Directory);
+            using (var frame = window.CaptureRenderedFrame()) { Assert.NotNull(frame); frame.Save(RenderArtifacts.Path("realtarget-preview.png"), PngBitmapEncoderOptions.Default); }
             window.Close();
             await vm.ExecuteInstallCommand.ExecuteAsync(null);
             Assert.False(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));

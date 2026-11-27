@@ -26,10 +26,10 @@ public class LibraryEpicTests
         Assert.True(vm.ExecuteGameInstallCommand.CanExecute(null));
         var window = new Window { Width = 1280, Height = 800, Content = new LibraryView { DataContext = vm } };
         window.Show(); Dispatcher.UIThread.RunJobs();
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/library-install-plan.png", PngBitmapEncoderOptions.Default);
+        frame.Save(RenderArtifacts.Path("library-install-plan.png"), PngBitmapEncoderOptions.Default);
         window.Close();
     }
     private sealed class Account : IAccountService
@@ -80,11 +80,11 @@ public class LibraryEpicTests
             Assert.Equal(LocalizationService.Instance["Game.EpicLaunchManual"], detail.StatusMessage);
             var window = new Window { Width = 1280, Height = 800, Content = new GameView { DataContext = detail } };
             window.Show(); Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using (var frame = window.CaptureRenderedFrame())
             {
                 Assert.NotNull(frame);
-                frame.Save("/tmp/opencode/phaket-render/game-epic-model.png", PngBitmapEncoderOptions.Default);
+                frame.Save(RenderArtifacts.Path("game-epic-model.png"), PngBitmapEncoderOptions.Default);
             }
             window.Close();
             Assert.False(item.OwnedNotInstalled);
@@ -176,10 +176,10 @@ public class LibraryEpicTests
         var window = new Window { Width = 1280, Height = 800, Content = new LibraryView { DataContext = vm } };
         window.Show();
         Dispatcher.UIThread.RunJobs();
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/library-owned.png", PngBitmapEncoderOptions.Default);
+        frame.Save(RenderArtifacts.Path("library-owned.png"), PngBitmapEncoderOptions.Default);
         window.Close();
     }
 }

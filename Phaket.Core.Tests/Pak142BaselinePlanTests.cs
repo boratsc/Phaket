@@ -61,7 +61,7 @@ public sealed class Pak142BaselinePlanTests : IDisposable
     }
 
     [Fact]
-    public void TwoSidedEditBecomesAConflictAndNoWriteStaysInThePlan()
+    public void TwoSidedEditBecomesAConflictButTheWriteStaysForTheUsersAnswer()
     {
         File.WriteAllText(ModFile, "content-v1");
         var baseline = InstallBaseline.Capture("install-1", gameRoot);
@@ -74,7 +74,9 @@ public sealed class Pak142BaselinePlanTests : IDisposable
         Assert.Equal("requires-user-decision", conflict.Resolution);
         Assert.Contains("local:install-1", conflict.Owners);
         Assert.Contains("remote:test.recipe", conflict.Owners);
-        Assert.DoesNotContain(plan.Operations, o => o.Kind is "file.copy" or "file.remove");
+        // The write stays: "use the mod's version" needs something to run, and the executor
+        // skips or runs it per decided path. Nothing is written by planning.
+        Assert.Contains(plan.Operations, o => o.Kind == "file.copy" && o.TargetPath == ModFile);
         Assert.Equal("user-edit", File.ReadAllText(ModFile));
     }
 

@@ -48,10 +48,10 @@ public class ModLaunchViewModelTests
             var window = new Avalonia.Controls.Window { Width = 1280, Height = 800, DataContext = vm, Content = new Phaket.Views.ModsView() };
             window.Show();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/ui2-launch-requirements.png", PngBitmapEncoderOptions.Default);
+            frame.Save(RenderArtifacts.Path("ui2-launch-requirements.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { Directory.Delete(root, true); }

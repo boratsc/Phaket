@@ -101,10 +101,10 @@ public class EpicAuthViewModelTests
         var window = new EpicAuthWindow(vm) { Width = 900, Height = 700 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/16-epic-auth-fallback.png", PngBitmapEncoderOptions.Default);
+        frame.Save(RenderArtifacts.Path("16-epic-auth-fallback.png"), PngBitmapEncoderOptions.Default);
         window.Close();
     }
 }

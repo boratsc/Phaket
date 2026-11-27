@@ -139,10 +139,10 @@ public class LibraryPinTests
             var window = new Window { Width = 1280, Height = 800, Content = new Phaket.Views.LibraryView { DataContext = vm } };
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/pin-warning-1280x800.png", PngBitmapEncoderOptions.Default);
+            frame.Save(RenderArtifacts.Path("pin-warning-1280x800.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { Directory.Delete(root, true); }

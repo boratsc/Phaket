@@ -143,11 +143,11 @@ public sealed class ModpackCatalogTests
             var window = new Window { Width = 1280, Height = 800, Content = new ModpackCatalogView { DataContext = vm } };
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using (var frame = window.CaptureRenderedFrame())
             {
-                frame!.Save("/tmp/opencode/phaket-render/20-catalog.png", PngBitmapEncoderOptions.Default);
-                frame.Save("/tmp/opencode/phaket-render/38-catalog-polished.png", PngBitmapEncoderOptions.Default);
+                frame!.Save(RenderArtifacts.Path("20-catalog.png"), PngBitmapEncoderOptions.Default);
+                frame.Save(RenderArtifacts.Path("38-catalog-polished.png"), PngBitmapEncoderOptions.Default);
             }
             await vm.StartInstallCommand.ExecuteAsync(null);
             Assert.Equal("thunderstore", installer.PreparedSource);

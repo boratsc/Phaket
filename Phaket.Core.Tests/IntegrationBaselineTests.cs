@@ -122,10 +122,10 @@ public sealed class IntegrationBaselineTests : IDisposable
         var planned = adapter.PlanInstall(Profile(), Facts());
         var conflict = Assert.Single(planned.Conflicts);
         Assert.Equal("requires-user-decision", conflict.Resolution);
-        Assert.DoesNotContain(planned.Operations, o => o.Kind is "file.copy" or "file.remove" or "file.verify");
-        // Approve refuses an empty plan, so the host cannot start a conflict at all; the
-        // executor gate is checked on a runnable no-op plan carrying the same conflict.
-        var conflictPlan = planned with { Operations = [new PlannedOperation("op1", "directory.ensure", Path.Combine(gameRoot, "BepInEx"), null, null, null, [], "none", "none", "none", ["write"])] };
+        // The write stays planned (the user may accept the recipe version); only the decision
+        // at execution time decides whether it runs.
+        Assert.Contains(planned.Operations, o => o.Kind == "file.copy" && o.TargetPath == ModFile);
+        var conflictPlan = planned;
 
         // Refused before the first write: journal stays untouched, the user file is intact.
         var executor = new PlanExecutor(Context(TestFixtures.AmongUs));
@@ -150,13 +150,21 @@ public sealed class IntegrationBaselineTests : IDisposable
     {
         new InstallOrchestrator(new PlanExecutor(Context(TestFixtures.AmongUs)))
             .Run(OperationPlanner.Plan(Recipe("content-v1"), PlannerContext(null)), cancellationToken: Ct);
-        // The user edited the file after the agreed state: the plan would overwrite it.
+        // The user edited the file after the agreed state AND the new recipe changes it:
+        // a two-sided edit is the user's call, so the plan asks first.
         File.WriteAllText(ModFile, "user-edit");
-        var plan = OperationPlanner.Plan(Recipe("content-v2"), PlannerContext(null));
+        var adapter = new DefinitionGameAdapter(TestFixtures.AmongUs, "linux", "steam",
+            gameRoot, profileRoot, stagingRoot, packageRoot, _ => Recipe("content-v2"), stateRoot);
+        // The plan keeps the write; the user's "take recipe" answer is what lets it run.
+        var plan = adapter.PlanInstall(Profile(), Facts());
+        Assert.Single(plan.Conflicts);
         Assert.Contains(plan.Operations, o => o.Kind == "file.copy");
 
         var executor = new PlanExecutor(Context(TestFixtures.AmongUs));
-        var journal = executor.Execute(plan, executor.Approve(plan), Ct);
+        var journal = executor.Execute(plan, executor.Approve(plan), Ct, new Dictionary<string, ConflictDecision>
+        {
+            [ModPath] = ConflictDecision.TakeRecipe,
+        });
 
         Assert.Equal(JournalState.Completed, journal.State);
         Assert.Equal("content-v2", File.ReadAllText(ModFile));

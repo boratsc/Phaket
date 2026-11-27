@@ -231,9 +231,9 @@ public static class OperationPlanner
                 ["installed"], "none", "none", "none", ["read"]));
         }
 
-        // PAK-142: a two-sided edit is the user's decision. The conflict names both sides and
-        // the plan carries no write until the host resolves it, so nothing (not even a
-        // removal) drops the user's content silently.
+        // PAK-142: a two-sided edit is the user's decision. The write STAYS in the plan, so a
+        // "use the mod's version" answer has something to run; the executor skips or runs it
+        // per conflict path. Cutting every write instead would block unrelated files too.
         if (context.Baseline is { } baseline)
         {
             var compared = BaselineSync.Compare(operations, baseline, context.GameRoot);
@@ -242,8 +242,6 @@ public static class OperationPlanner
                     [.. (conflict.Local is null ? [] : new[] { "local:" + context.InstallationId }),
                         .. (conflict.Remote is null ? [] : new[] { "remote:" + recipe.Id })],
                     "requires-user-decision"));
-            if (compared.Any(c => c.RequiresUserDecision))
-                operations = operations.Where(o => !IsWrite(o.Kind)).ToList();
         }
 
         return new OperationPlan(

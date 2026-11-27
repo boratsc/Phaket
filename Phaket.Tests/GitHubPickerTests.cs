@@ -148,9 +148,9 @@ public sealed class GitHubPickerTests
         {
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
-            string dir = "/tmp/opencode/phaket-render";
+            string dir = RenderArtifacts.Directory;
             Directory.CreateDirectory(dir);
-            frame!.Save(Path.Combine(dir, "24-github-picker.png"), PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("24-github-picker.png"), PngBitmapEncoderOptions.Default);
             Assert.True(frame.PixelSize.Width > 0);
         }
         finally

@@ -54,10 +54,11 @@ public sealed class PlanLifecycle : IPlanLifecycle
 
     // Only the requires-user-decision conflicts gate approval; HasConflict is the one check.
     public async Task<(PlanApproval Approval, SaveBackupRef? Backup)> BeginAsync(OperationPlan plan,
-        long? limitBytes = null, CancellationToken ct = default)
+        long? limitBytes = null, CancellationToken ct = default, bool waitsForDecision = true)
     {
-        // A two-sided edit waits for the user: nothing is copied and nothing is written.
-        if (HasConflict(plan)) return (PlanApproval.Refuse, null);
+        // An undecided two-sided edit waits for the user: nothing is copied and nothing is
+        // written. A user-approved answer is not a block — the executor applies it per path.
+        if (waitsForDecision && HasConflict(plan)) return (PlanApproval.Refuse, null);
         var request = SaveBackupRequest();
         if (request is null) return (PlanApproval.Accept, null);
 

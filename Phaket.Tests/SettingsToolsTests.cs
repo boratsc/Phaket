@@ -272,9 +272,9 @@ public class SettingsToolsTests
                 .Single(b => b.Command == h.Vm.Legendary.ReloadReleasesCommand);
             Assert.True(retry.IsVisible);
             Assert.Equal(loc["Settings.Tools.Retry"], AutomationProperties.GetName(retry));
-            System.IO.Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            System.IO.Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/10-settings-tools-offline.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("10-settings-tools-offline.png"), PngBitmapEncoderOptions.Default);
 
             // The retry is the same command the button calls: with a working network the list appears.
             stub.Failure = null;
@@ -319,9 +319,9 @@ public class SettingsToolsTests
                 .Where(b => Equals(b.Content as string, loc["Settings.Tools.CheckUpdates"]) && b.IsEffectivelyVisible).ToArray();
             Assert.Equal(2, checks.Length);
             Assert.All(checks, b => Assert.Equal(loc["Settings.Tools.CheckUpdates"], AutomationProperties.GetName(b)));
-            System.IO.Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            System.IO.Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/09-settings-tools.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("09-settings-tools.png"), PngBitmapEncoderOptions.Default);
         }
         finally
         {

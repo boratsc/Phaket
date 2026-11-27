@@ -167,9 +167,9 @@ public class ModInstallViewModelTests
             var view = new Phaket.Views.ModsView { DataContext = vm };
             var window = new Window { Width = 1280, Height = 800, Content = view };
             window.Show(); Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/ui4-plan-preview.png", PngBitmapEncoderOptions.Default); window.Close();
+            frame.Save(RenderArtifacts.Path("ui4-plan-preview.png"), PngBitmapEncoderOptions.Default); window.Close();
         } finally { Directory.Delete(root, true); }
     }
 }

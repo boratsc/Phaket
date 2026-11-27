@@ -73,10 +73,10 @@ public class LibrarySteamTests
         Assert.Equal(hint, vm.SessionCleanupStatus);
         var window = new Window { Width = 1280, Height = 800, Content = new LibraryView { DataContext = vm } };
         window.Show(); Dispatcher.UIThread.RunJobs();
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save("/tmp/opencode/phaket-render/steam-install-plan.png", new PngBitmapEncoderOptions());
+        frame.Save(RenderArtifacts.Path("steam-install-plan.png"), new PngBitmapEncoderOptions());
         window.Close();
     }
 

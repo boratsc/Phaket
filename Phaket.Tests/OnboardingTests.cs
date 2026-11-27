@@ -250,16 +250,16 @@ public class OnboardingTests : IDisposable
                 windows.Add(window);
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
-                Directory.CreateDirectory("/tmp/opencode/phaket-render");
+                Directory.CreateDirectory(RenderArtifacts.Directory);
                 using var frame = window.CaptureRenderedFrame();
-                frame?.Save(Path.Combine("/tmp/opencode/phaket-render", $"60-onboarding-{language}-steps.png"), PngBitmapEncoderOptions.Default);
+                frame?.Save(RenderArtifacts.Path($"60-onboarding-{language}-steps.png"), PngBitmapEncoderOptions.Default);
 
                 // Empty registry = the page a skeleton-only build shows.
                 var skeleton = new OnboardingViewModel(new OnboardingService(settings));
                 window.DataContext = skeleton;
                 Dispatcher.UIThread.RunJobs();
                 using var empty = window.CaptureRenderedFrame();
-                empty?.Save(Path.Combine("/tmp/opencode/phaket-render", $"61-onboarding-{language}-empty.png"), PngBitmapEncoderOptions.Default);
+                empty?.Save(RenderArtifacts.Path($"61-onboarding-{language}-empty.png"), PngBitmapEncoderOptions.Default);
             }
         }
         finally { loc.CurrentLanguage = previous; }

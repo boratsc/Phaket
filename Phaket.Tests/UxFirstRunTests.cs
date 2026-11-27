@@ -263,10 +263,10 @@ public class UxFirstRunTests : IDisposable
 
     private static void Save(Window window, string name)
     {
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         Dispatcher.UIThread.RunJobs();
         using var frame = window.CaptureRenderedFrame();
-        frame?.Save(Path.Combine("/tmp/opencode/phaket-render", name), PngBitmapEncoderOptions.Default);
+        frame?.Save(RenderArtifacts.Path(name), PngBitmapEncoderOptions.Default);
     }
 
     [Fact]

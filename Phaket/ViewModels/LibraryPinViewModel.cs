@@ -18,6 +18,8 @@ public partial class LibraryViewModel
     internal void UseRegistry(string path) => registry = new InstallRegistry(path);
     internal Func<IReadOnlyList<SteamDuplicateGroup>>? DuplicateScanner { get; set; }
     internal Action<string>? FolderOpener { get; set; }
+    // Where the scan looks; a test points it at its own Steam fixture instead of the real home.
+    internal string? SteamHome { get; set; }
 
     [ObservableProperty] private bool hasPinUpdateWarning;
     [ObservableProperty] private string pinUpdateMessage = "";
@@ -123,4 +125,3 @@ public partial class LibraryViewModel
         }
     }
 }
-

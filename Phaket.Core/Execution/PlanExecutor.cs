@@ -97,7 +97,7 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
             // Save backup before the FIRST mutation; a journal write is not a game-tree change,
             // so a refused plan leaves the journal Approved. The conflict gate is ResolveConflicts.
             if (journal.State != JournalState.Executing) Lifecycle.Begin(plan);
-            var operations = ResolveConflicts(plan, decisions);
+            var operations = ResolveConflicts(plan, journal, decisions);
             journal = journal with { State = JournalState.Executing };
             Persist(journal);
             foreach (var operation in operations)
@@ -161,9 +161,10 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
         }
     }
 
-    // Every requires-user-decision conflict needs an answer; the plan is filtered to what
-    // the user accepted. Nothing in a plan with an open conflict is written.
-    private IReadOnlyList<PlannedOperation> ResolveConflicts(OperationPlan plan,
+    // Every requires-user-decision conflict needs an answer before the first write. The plan
+    // is filtered PER PATH: a "keep local" file skips the writes touching it (and only those),
+    // a "take recipe" file runs them; writes of unrelated files always run.
+    private IReadOnlyList<PlannedOperation> ResolveConflicts(OperationPlan plan, ExecutionJournal journal,
         IReadOnlyDictionary<string, ConflictDecision>? decisions)
     {
         if (!PlanLifecycle.HasConflict(plan)) return plan.Operations;
@@ -174,10 +175,28 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
         if (open.Length > 0)
             throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", open[0]));
 
-        var kept = plan.Conflicts.Where(c => decisions![c.Path] == ConflictDecision.KeepLocal)
-            .Select(c => Path.GetFullPath(Path.Combine(context.GameRoot, c.Path)))
-            .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        return plan.Operations.Where(o => !kept.Contains(Path.GetFullPath(o.TargetPath))).ToArray();
+        // A resumed transaction already wrote part of the tree; its per-path answer is not in
+        // the journal, so the only safe answers are a no-op or an explicit re-confirmation.
+        if (journal.Entries.Count > 0)
+        {
+            var fresh = decisions!;
+            if (fresh.Values.All(decision => decision == ConflictDecision.KeepLocal)) return [];
+            var applied = plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
+                    && fresh.TryGetValue(c.Path, out var answer) && answer == ConflictDecision.TakeRecipe)
+                .Select(c => Path.GetFullPath(Path.Combine(context.GameRoot, c.Path)))
+                .ToArray();
+            var written = journal.Entries.Where(e => e.Intent.Kind is "file.copy" && e.Applied)
+                .Select(e => Path.GetFullPath(e.Intent.TargetPath));
+            if (written.Any(applied.Contains))
+                throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", plan.Conflicts[0].Path));
+            return [];
+        }
+
+        var kept = plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
+                && decisions!.TryGetValue(c.Path, out var answer) && answer == ConflictDecision.KeepLocal)
+            .Select(c => c.Path).ToArray();
+        return plan.Operations.Where(o => !Omrl.BaselineSync.OperationTouches(o, kept, context.GameRoot,
+            o.Kind is "archive.extract" or "loader.ensure" ? PlanArchiveWrites(o) : null)).ToArray();
     }
 
     public ExecutionJournal Interrupt(ExecutionJournal journal)

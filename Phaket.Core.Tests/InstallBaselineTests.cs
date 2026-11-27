@@ -137,5 +137,34 @@ public sealed class InstallBaselineTests : IDisposable
         Assert.Null(InstallBaseline.LocalState(Path.Combine(root, "missing.txt")));
     }
 
+    [Fact]
+    public void CaptureRecordsALinkAsALinkAndNeverTheContentItPointsTo()
+    {
+        if (OperatingSystem.IsWindows()) return; // creating and reading links differs on Windows
+        var outside = Directory.CreateTempSubdirectory("phaket-baseline-outside-").FullName;
+        var gameRoot = Path.Combine(root, "game");
+        Directory.CreateDirectory(gameRoot);
+        try
+        {
+            var secret = Path.Combine(outside, "secret.dll");
+            File.WriteAllText(secret, "content-outside-the-game-tree");
+            // A file link and a directory link: neither may pull outside content into the state.
+            File.CreateSymbolicLink(Path.Combine(gameRoot, "linked.dll"), secret);
+            Directory.CreateSymbolicLink(Path.Combine(gameRoot, "linked-dir"), outside);
+            File.WriteAllText(Path.Combine(gameRoot, "own.dll"), "inside");
+
+            var baseline = InstallBaseline.Capture("install-1", gameRoot);
+
+            Assert.Equal(["linked.dll", "own.dll"], baseline.Files.Keys.OrderBy(key => key, StringComparer.Ordinal));
+            // The link is hashed as a link (its destination), not as the target's bytes.
+            Assert.NotEqual(InstallBaseline.ReadFile(secret).Sha256, baseline.Files["linked.dll"].Sha256);
+            Assert.Equal(0, baseline.Files["linked.dll"].Size);
+            // LocalState reads the same link the same way, so the plan does not see a phantom edit.
+            Assert.Equal(baseline.Files["linked.dll"], InstallBaseline.LocalState(Path.Combine(gameRoot, "linked.dll")));
+            Assert.True(InstallBaseline.SameEntries(baseline, InstallBaseline.Create("install-1", baseline.Files)));
+        }
+        finally { Directory.Delete(outside, recursive: true); }
+    }
+
     public void Dispose() => Directory.Delete(root, recursive: true);
 }

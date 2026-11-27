@@ -213,9 +213,9 @@ public sealed class Pak126CatalogPreviewTests
                 .ToHashSet(StringComparer.Ordinal);
             Assert.Contains("CHANGELOG.md → BepInEx/plugins/Owner-Mod/CHANGELOG.md", texts);
 
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save($"/tmp/opencode/phaket-render/{file}", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path(file), PngBitmapEncoderOptions.Default);
         }
         finally
         {

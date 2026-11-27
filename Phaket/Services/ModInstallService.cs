@@ -314,7 +314,10 @@ public sealed class ModInstallService
             var planProfileRoot = Path.Combine(profileRoot, plans.Count.ToString("D4", System.Globalization.CultureInfo.InvariantCulture));
             Directory.CreateDirectory(planProfileRoot);
             var context = new PlannerContext("install", "mod-profile", gameRoot, planProfileRoot, stagingRoot, modPackages, definition, facts,
-                VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"));
+                VanillaCacheRoot: Path.Combine(appDataRoot, "vanilla-cache"),
+                // PAK-142: the plan compares against the agreed state of THIS installation, so a
+                // two-sided edit becomes a per-file decision instead of a silent overwrite.
+                Baseline: LoadBaseline(stateRoot));
             var plan = OperationPlanner.Plan(recipe, context, generated.Ownership.ToDictionary(o => o.StepId, o => o.Ownership));
             // Thunderstore v1 publishes no sha256. The hash computed above only pins the bytes
             // already downloaded, so the plan and the registry state that no hash was obtained.
@@ -333,6 +336,11 @@ public sealed class ModInstallService
         return new(gameId, modFullName, version, endpoint, target, plans, packageRoots, [], previews, root, profileRoot, stagingRoot,
             stateRoot, packages, planProfileRoots, versionSource, unverified.Count == 0 ? null : unverified, gameManifest);
     }
+
+    // The installation's agreed state lives with the ledger in the same state root the
+    // executor writes (see InstallBaseline.LoadForPlan for the damaged-file rule).
+    internal static InstallBaseline? LoadBaseline(string stateRoot) =>
+        InstallBaseline.LoadForPlan(stateRoot, installationId: null);
 
     // PAK-127: the preview shows the destination the plan writes, never a bare archive entry
     // name (CHANGELOG.md) in place of it. A per-file recipe copies each archive entry through
@@ -468,7 +476,7 @@ public sealed class ModInstallService
                 activeAttempt = (plan, ctx, i);
                 activeAttemptCompleted = false;
                 var journal = new InstallOrchestrator(new PlanExecutor(ctx)).Run(plan, progress, ct,
-                    new ReceiptContext(preparation.GameId, preparation.Target.Store, preparation.ModFullName));
+                    new ReceiptContext(preparation.GameId, preparation.Target.Store, preparation.ModFullName), decisions);
                 journals.Add(journal);
                 executed.Add((plan, ctx, i));
                 activeAttemptCompleted = true;

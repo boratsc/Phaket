@@ -85,8 +85,9 @@ public class ConflictDecisionDialogTests
         var plan = ConflictPlan();
         Assert.True(InstallConflicts.RequiresDecision([plan]));
         var decided = InstallConflicts.Decide([plan], ConflictDecision.TakeRecipe);
-        // Every conflict of the plan is answered: the executor looks each one up.
-        Assert.Equal([ModFile, ModFile + ".old"], decided.Keys);
+        // Only the two-sided file is answered: the executor filters conflicts per path, so a
+        // proposal the user never saw ("overwrite") must not become a decision of its own.
+        Assert.Equal([ModFile], decided.Keys);
         Assert.All(decided.Values, value => Assert.Equal(ConflictDecision.TakeRecipe, value));
         Assert.False(InstallConflicts.RequiresDecision([plan with { Conflicts = [] }]));
     }
@@ -171,7 +172,7 @@ public class ConflictDecisionDialogTests
         window.Show();
         var pending = ConflictDecisionViewModel.Shared.RequestAsync([ModFile]);
         Dispatcher.UIThread.RunJobs();
-        var save = "/tmp/opencode/phaket-render";
+        var save = RenderArtifacts.Directory;
         Directory.CreateDirectory(save);
         foreach (var language in new[] { "pl-PL", "en" })
         {

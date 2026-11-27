@@ -126,7 +126,7 @@ public partial class LibraryViewModel : ViewModelBase
     {
         try
         {
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var home = SteamHome ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var os = OperatingSystem.IsWindows() ? "windows" : "linux";
             var adapter = new SteamAdapter(definitions);
             var detected = adapter.DetectInstallations(os, home);
@@ -141,6 +141,9 @@ public partial class LibraryViewModel : ViewModelBase
                 game.IsVersionPinned = game.Detected is { } current
                     && pinned.Any(e => SteamAdapter.SameInstallation(current, e.GameRoot));
             }
+            // The scan is what reads the new appmanifest: the pin warning belongs to its result,
+            // not to a later click on the card.
+            RefreshPinStatus();
             await RefreshEpicAsync();
             await RefreshSteamAsync();
         }

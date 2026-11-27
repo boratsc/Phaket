@@ -42,7 +42,16 @@ public sealed record InstallBaseline(
         if (!Directory.Exists(fullRoot))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"baseline root does not exist: {fullRoot}"));
         var files = new Dictionary<string, BaselineFileState>(StringComparer.Ordinal);
-        foreach (var path in Directory.GetFiles(fullRoot, "*", SearchOption.AllDirectories))
+        // ReparsePoint skips every link during the walk, so a planted DIRECTORY link is never
+        // descended into. File links are added back explicitly and recorded as links.
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = true,
+            MatchType = MatchType.Simple,
+        };
+        foreach (var path in Directory.EnumerateFiles(fullRoot, "*", options).Concat(Links(fullRoot)))
         {
             // Account-specific game data (e.g. Among Us per-account folders) is normally
             // unreadable and can vanish mid-walk: an unreadable or already-gone file is
@@ -57,23 +66,56 @@ public sealed record InstallBaseline(
         return Create(installationId, files);
     }
 
-    public static BaselineFileState ReadFile(string path)
+    // File links skipped by the walk, found without following them and never treated as a
+    // directory (a link to a directory contributes nothing: its content is not in this tree).
+    private static IEnumerable<string> Links(string root) =>
+        Directory.EnumerateFiles(root, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true })
+            .Where(path => IsLink(path)
+                && new FileInfo(path).Attributes is var attributes
+                && !attributes.HasFlag(FileAttributes.Directory));
+
+    // A file link is identified by WHAT IT POINTS AT, never by the target's content:
+    // the link text is hashed, so content outside the tree can never be recorded.
+    private static bool IsLink(string path) =>
+        new FileInfo(path).LinkTarget is not null
+        || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+
+    public static BaselineFileState ReadFile(string path) =>
+        IsLink(path) ? LinkState(path) : ReadContent(path);
+
+    private static BaselineFileState ReadContent(string path)
     {
         var bytes = File.ReadAllBytes(path);
         return new BaselineFileState(Convert.ToHexStringLower(SHA256.HashData(bytes)),
             new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero), bytes.LongLength);
     }
 
-    // Absent file is null. On Unix a symlink is hashed as a link, not through its target,
-    // so a planted link cannot stand in for content the baseline describes.
+    // The recorded bytes of a link are its destination; size 0 marks "not a regular file",
+    // so a link never equals the file it points to.
+    private static BaselineFileState LinkState(string path)
+    {
+        var target = System.Text.Encoding.UTF8.GetBytes(new FileInfo(path).LinkTarget ?? "");
+        return new BaselineFileState(Convert.ToHexStringLower(SHA256.HashData(target)),
+            new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero), 0);
+    }
+
+    // Absent file is null. A symlink is its own (untrusted) state: hashed as a link, never
+    // through its target, so a planted link cannot stand in for agreed content.
     public static BaselineFileState? LocalState(string path)
     {
         if (!File.Exists(path)) return null;
-        if (OperatingSystem.IsWindows() || new FileInfo(path).LinkTarget is null) return ReadFile(path);
-        var info = new FileInfo(path);
-        var target = info.ResolveLinkTarget(returnFinalTarget: false)!.FullName;
-        return new BaselineFileState(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(target))),
-            new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero), 0);
+        return ReadFile(path);
+    }
+
+    // The agreed state a planner compares against: null when nothing was agreed yet (the plan
+    // stays as before), a stale schema is ignored; anything else damaged is reported, never
+    // silently replaced (an empty baseline would turn every local edit into a conflict).
+    public static InstallBaseline? LoadForPlan(string stateRoot, string? installationId)
+    {
+        var path = DefaultPath(stateRoot);
+        if (!File.Exists(path)) return null;
+        try { return Load(path, installationId); }
+        catch (PhaketException e) when (e.Error.Code == ErrorCodes.UnsupportedSchemaVersion) { return null; }
     }
 
     public static InstallBaseline Load(string path, string? expectedInstallationId = null)

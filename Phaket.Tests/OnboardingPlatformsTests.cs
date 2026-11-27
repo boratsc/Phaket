@@ -178,7 +178,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
     [AvaloniaFact]
     public async Task Render_platforms_step_in_both_languages_with_one_signed_in()
     {
-        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+        Directory.CreateDirectory(RenderArtifacts.Directory);
         var platforms = default(PlatformsStepViewModel);
         foreach (var language in new[] { "pl-PL", "en" })
         {
@@ -203,7 +203,7 @@ public sealed class OnboardingPlatformsTests : IDisposable
             window.Show();
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
-            frame?.Save(Path.Combine("/tmp/opencode/phaket-render", $"71-onboarding-platforms-{language}.png"), PngBitmapEncoderOptions.Default);
+            frame?.Save(RenderArtifacts.Path($"71-onboarding-platforms-{language}.png"), PngBitmapEncoderOptions.Default);
 
             // The rows exist in the visual tree, not just in the view model.
             var loginButtons = window.GetVisualDescendants().OfType<Button>()

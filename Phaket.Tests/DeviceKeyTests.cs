@@ -223,10 +223,10 @@ public sealed class DeviceKeyTests
             var window = new Window { Width = 1280, Height = 800, Content = new AccountsView { DataContext = viewModel } };
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/32-identity.png", PngBitmapEncoderOptions.Default);
+            frame.Save(RenderArtifacts.Path("32-identity.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

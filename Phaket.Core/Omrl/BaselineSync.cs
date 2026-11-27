@@ -8,6 +8,25 @@ public static class BaselineSync
     public static IReadOnlyList<BaselineComparison> Compare(
         IReadOnlyList<PlannedOperation> operations, InstallBaseline baseline, string gameRoot) =>
         BaselineComparison.Compare(operations, baseline, gameRoot);
+
+    // True when a write OP lands on one of the decided paths. The operation is the final word:
+    // an extract may write a conflicted file the comparison only saw as a directory target.
+    public static bool OperationTouches(PlannedOperation operation, IReadOnlyList<string> conflictPaths,
+        string gameRoot, IEnumerable<string>? plannedFiles)
+    {
+        var relative = BaselineComparison.RelativeToGame(operation.TargetPath, gameRoot);
+        if (relative is null) return false;
+        foreach (var path in conflictPaths)
+        {
+            if (string.Equals(path, relative, StringComparison.Ordinal)) return true;
+            // A tree write (extract/provision/loader) is conflict-free only when it cannot
+            // produce the conflicted file.
+            if (path.StartsWith(relative.TrimEnd('/') + "/", StringComparison.Ordinal)
+                && !(plannedFiles ?? []).Any(file => string.Equals(BaselineComparison.RelativeToGame(file, gameRoot), path, StringComparison.Ordinal)))
+                return true;
+        }
+        return false;
+    }
 }
 
 public enum BaselineChangeKind

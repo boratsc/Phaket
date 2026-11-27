@@ -112,10 +112,10 @@ public sealed class ModPackTests
             var window = new Window { Width = 1280, Height = 800, Content = new ModPackView { DataContext = vm } };
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/21-modpack.png", PngBitmapEncoderOptions.Default);
+            frame.Save(RenderArtifacts.Path("21-modpack.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

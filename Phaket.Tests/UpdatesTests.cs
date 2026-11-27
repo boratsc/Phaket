@@ -485,9 +485,9 @@ public sealed class UpdatesTests
                         Assert.True(vm.Updates.ChannelExplicit);
                         Assert.Equal(UpdateChannel.Stable, UpdateService.LoadChannel(Path.Combine(root, "settings.json")));
 
-                        Directory.CreateDirectory("/tmp/opencode/phaket-render");
+                        Directory.CreateDirectory(RenderArtifacts.Directory);
                         using var frame = window.CaptureRenderedFrame();
-                        frame!.Save($"/tmp/opencode/phaket-render/55-settings-updates-{locale}.png", PngBitmapEncoderOptions.Default);
+                        frame!.Save(RenderArtifacts.Path($"55-settings-updates-{locale}.png"), PngBitmapEncoderOptions.Default);
                     }
                     finally { window.Close(); }
                 }

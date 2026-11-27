@@ -146,10 +146,10 @@ public class CommunitiesHeadlessTests
 
     private static void Save(Window window, string filename)
     {
-        var directory = "/tmp/opencode/phaket-render";
+        var directory = RenderArtifacts.Directory;
         Directory.CreateDirectory(directory);
         using var frame = window.CaptureRenderedFrame();
-        frame!.Save(Path.Combine(directory, filename), PngBitmapEncoderOptions.Default);
+        frame!.Save(RenderArtifacts.Path(filename), PngBitmapEncoderOptions.Default);
     }
 
     private sealed class CachedDemoApi(ICommunitiesApiClient inner) : ICommunitiesApiClient

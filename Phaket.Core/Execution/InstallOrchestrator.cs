@@ -26,14 +26,20 @@ public sealed class InstallOrchestrator
     }
 
     public ExecutionJournal Run(OperationPlan plan, IProgress<InstallProgress>? progress = null,
-        CancellationToken cancellationToken = default, ReceiptContext? receiptContext = null)
+        CancellationToken cancellationToken = default, ReceiptContext? receiptContext = null,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions = null)
     {
         // Hold the installation lock across approval, every operation and
         // completion: a concurrent install/rollback must not interleave.
         using var gate = executor.LockInstallation();
-        // PAK-141: the save backup happens before Approve; a plan with an open conflict
-        // throws here, before anything is written.
-        lifecycle?.Begin(plan);
+        // PAK-141: the save backup happens before Approve; a plan whose conflicts the user
+        // has not answered throws here, before anything is written.
+        if (lifecycle is PlanLifecycle full)
+            full.BeginAsync(plan, ct: cancellationToken,
+                waitsForDecision: decisions is null ? plan.Conflicts.Any(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision) : false)
+                .GetAwaiter().GetResult();
+        else
+            lifecycle?.Begin(plan);
         // The baseline is keyed by the installation, which only the plan carries.
         plan = plan with { InstallationRef = executor.InstallationIdFor(plan) };
         var journal = executor.Approve(plan);
@@ -60,7 +66,7 @@ public sealed class InstallOrchestrator
             throw;
         }
         // Complete(plan, journal, decisions) also records the new agreed baseline.
-        journal = executor.Complete(plan, journal, null);
+        journal = executor.Complete(plan, journal, decisions);
         if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "installed", cancellationToken: cancellationToken);
         progress?.Report(new InstallProgress(count, count, "", "verify", "done", 1.0));
         return journal;

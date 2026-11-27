@@ -274,11 +274,11 @@ public sealed class PluralCountTests
 
     private static void Save(Window window, string name)
     {
-        const string dir = "/tmp/opencode/phaket-render";
+        var dir = RenderArtifacts.Directory;
         Directory.CreateDirectory(dir);
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save(Path.Combine(dir, name), PngBitmapEncoderOptions.Default);
+        frame.Save(RenderArtifacts.Path(name), PngBitmapEncoderOptions.Default);
     }
 
     private static void AssertNotClipped(Window window, string text)

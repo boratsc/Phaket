@@ -517,9 +517,9 @@ public sealed class Pak105ModpackSusModderTests
             var expected = LocalizationService.Instance["SteamInstall.MobileConfirmation"];
             var shown = window.GetVisualDescendants().OfType<TextBlock>().Any(block => block.Text == expected);
             Assert.True(shown);
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/40-steam-mobile-confirm.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("40-steam-mobile-confirm.png"), PngBitmapEncoderOptions.Default);
             window.Close();
 
             vm.CancelDialogCommand.Execute(null);

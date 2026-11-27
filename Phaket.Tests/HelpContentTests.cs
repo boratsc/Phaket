@@ -32,9 +32,9 @@ public class HelpContentTests
             Assert.Contains(loc["Guides.EmptyMessage"], texts);
             Assert.DoesNotContain(texts, text => text!.Contains("dev/apikey", StringComparison.Ordinal));
 
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
-            frame!.Save("/tmp/opencode/phaket-render/help-empty.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("help-empty.png"), PngBitmapEncoderOptions.Default);
         }
         finally
         {

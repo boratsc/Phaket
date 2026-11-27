@@ -144,10 +144,10 @@ public class ModCatalogViewModelTests
             var tabs = (Avalonia.Controls.TabControl)view.Content!;
             tabs.SelectedIndex = 1;
             Dispatcher.UIThread.RunJobs();
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
             Assert.NotNull(frame);
-            frame.Save("/tmp/opencode/phaket-render/mod-catalog.png", PngBitmapEncoderOptions.Default);
+            frame.Save(RenderArtifacts.Path("mod-catalog.png"), PngBitmapEncoderOptions.Default);
             window.Close();
         } finally { Directory.Delete(root, true); }
     }

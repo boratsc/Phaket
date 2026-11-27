@@ -42,12 +42,12 @@ public class F3CrossTests
 
     private static void Save(Window window, string name)
     {
-        var dir = "/tmp/opencode/phaket-render";
+        var dir = RenderArtifacts.Directory;
         Directory.CreateDirectory(dir);
         Dispatcher.UIThread.RunJobs();
         using var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
-        frame.Save(Path.Combine(dir, name), PngBitmapEncoderOptions.Default);
+        frame.Save(RenderArtifacts.Path(name), PngBitmapEncoderOptions.Default);
     }
 
     private sealed class FakeApi : IModpackApiClient

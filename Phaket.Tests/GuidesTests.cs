@@ -72,9 +72,9 @@ public class GuidesTests
             Assert.Contains("Guides.AmongUs.TownOfUs", vm.Guides.Select(guide => guide.Id));
             Assert.DoesNotContain("Guides.Valheim.FirstSetup", vm.Guides.Select(guide => guide.Id));
 
-            Directory.CreateDirectory("/tmp/opencode/phaket-render");
+            Directory.CreateDirectory(RenderArtifacts.Directory);
             using var frame = window.CaptureRenderedFrame();
-            frame!.Save("/tmp/opencode/phaket-render/23-guides.png", PngBitmapEncoderOptions.Default);
+            frame!.Save(RenderArtifacts.Path("23-guides.png"), PngBitmapEncoderOptions.Default);
             var article = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), text =>
                 text.Text == vm.SelectedGuide.Title && Avalonia.Automation.AutomationProperties.GetHeadingLevel(text) == 2);
             Assert.Equal(vm.SelectedGuide.Title, article.Text);

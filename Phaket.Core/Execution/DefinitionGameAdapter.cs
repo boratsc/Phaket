@@ -81,15 +81,16 @@ public sealed class DefinitionGameAdapter : IGameAdapter
     // A missing file is "nothing agreed yet": the plan stays as it was before PAK-142.
     // A file written by an older schema is stale and ignored; anything else damaged is
     // reported, never silently treated as empty (that would turn every edit into a conflict).
-    private InstallBaseline? LoadBaseline(string installationId)
-    {
-        if (!File.Exists(BaselinePath)) return null;
-        try { return InstallBaseline.Load(BaselinePath, installationId); }
-        catch (PhaketException e) when (e.Error.Code == ErrorCodes.UnsupportedSchemaVersion) { return null; }
-    }
+    private InstallBaseline? LoadBaseline(string installationId) =>
+        InstallBaseline.LoadForPlan(stateRoot ?? profileRoot, installationId);
 
     public Task<ExecutionJournal> ApplyPlan(OperationPlan plan, IPlanExecutorHost host, CancellationToken cancellationToken)
     {
+        // Step-by-step execution cannot ask per path here: an answered plan is the host's
+        // concern (it goes through InstallOrchestrator/Execute), an open one is refused.
+        if (plan.Conflicts.Any(c => c.Resolution == Phaket.Core.Execution.SaveBackup.PlanLifecycle.ConflictsRequireDecision))
+            throw new PhaketException(ErrorCodes.FileConflictRequiresDecision,
+                ("path", plan.Conflicts[0].Path));
         var journal = host.Approve(plan);
         foreach (var operation in plan.Operations)
         {

@@ -254,7 +254,7 @@ public sealed class ModpackInstallService : IModpackInstallService
                         if (index < 0) continue;
                         var operationPlan = preparation.Plans[index];
                         var executionContext = new PlanExecutionContext(
-                            preparation.Target.Sandbox ? Path.Combine(preparation.SandboxRoot, "game") : Path.GetFullPath(preparation.Target.GameRoot),
+                            IsSandbox(preparation) ? Path.Combine(preparation.SandboxRoot, "game") : Path.GetFullPath(preparation.Target.GameRoot),
                             preparation.PlanProfileRoots is { Count: > 0 } roots ? roots[index] : preparation.ProfileRoot,
                             preparation.StagingRoot, preparation.PackageRoots[index], GameDefinitions.LoadAll().First(g => g.Slug == preparation.GameId),
                             operationPlan.RecipeRef.Id, profileId, preparation.StateRoot) with
@@ -264,16 +264,12 @@ public sealed class ModpackInstallService : IModpackInstallService
                             // PAK-142: the plan carries the installation the baseline is keyed by.
                             InstallationId = operationPlan.InstallationRef,
                         };
-                        // PAK-144: modded installations are pinned to the build they were installed on.
-                        registry.Add(new InstalledRecipe(operationPlan.RecipeRef.Id, operationPlan.RecipeRef.Version,
+                        // PAK-144: modded installations are pinned to the build they were installed on;
+                        // a throwaway sandbox install is never pinned (same rule as ModInstallService).
+                        registry.Add(Pinned(new InstalledRecipe(operationPlan.RecipeRef.Id, operationPlan.RecipeRef.Version,
                             pack.GameId, preparation.Target.Store, executionContext.GameRoot, executionContext.ProfileRoot,
-                            executionContext.StagingRoot, preparation.StateRoot, preparation.SandboxRoot.Length == 0 ? null : preparation.SandboxRoot,
-                            DateTimeOffset.UtcNow, preparation.ModFullName, preparation.Version)
-                        {
-                            PinnedAt = DateTimeOffset.UtcNow,
-                            PinnedBuildId = preparation.Manifest?.BuildId is { Length: > 0 } build ? build : null,
-                            PinnedManifestId = preparation.Manifest?.ManifestId is { Length: > 0 } manifest ? manifest : null,
-                        });
+                            executionContext.StagingRoot, preparation.StateRoot, IsSandbox(preparation) ? preparation.SandboxRoot : null,
+                            DateTimeOffset.UtcNow, preparation.ModFullName, preparation.Version), preparation));
                         registered.Add((operationPlan.RecipeRef.Id, executionContext.GameRoot, executionContext));
                     }
                     completed++;
@@ -339,6 +335,19 @@ public sealed class ModpackInstallService : IModpackInstallService
         try { profiles.Save(); }
         catch (Exception rollbackError) { System.Diagnostics.Trace.TraceError("Modpack profile rollback failed: {0}", rollbackError); }
     }
+
+    // PAK-144: modded installations are pinned to the build they were installed on;
+    // a throwaway sandbox install is never pinned.
+    private static bool IsSandbox(InstallPreparation preparation) =>
+        preparation.Target.Sandbox || !string.IsNullOrEmpty(preparation.SandboxRoot);
+
+    internal static InstalledRecipe Pinned(InstalledRecipe entry, InstallPreparation preparation) =>
+        entry.SandboxRoot is not null || IsSandbox(preparation) ? entry : entry with
+        {
+            PinnedAt = DateTimeOffset.UtcNow,
+            PinnedBuildId = preparation.Manifest?.BuildId is { Length: > 0 } build ? build : null,
+            PinnedManifestId = preparation.Manifest?.ManifestId is { Length: > 0 } manifest ? manifest : null,
+        };
 
     private static async Task<ModpackSourceItem> ToCoreItemAsync(ModpackMod item, GitHubReleaseService github,
         CancellationToken cancellationToken)
