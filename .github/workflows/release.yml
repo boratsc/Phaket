@@ -7,10 +7,15 @@
 #   (tylko kanały release/beta; File to sama nazwa pliku, bez ścieżek).
 # Kolejność: build+test obu projektów aplikacji (Linux i Windows) → vpk pack (Setup/Portable na
 # windows-latest, AppImage na ubuntu) → SHA256SUMS.txt → draft GitHub Release z paczkami per OS →
-# deploy po SSH/SCP (paczki + Phaket-Setup.exe, potem manifest releases.<channel>.<os>.json) →
-# publikacja release.
+# deploy po SSH/SCP (paczki kanału, potem manifest releases.<channel>.<os>.json) → publikacja release.
 # Promocja beta→prod = to samo uruchomienie z channel=release (bez kopiowania plików między kanałami).
 # Bez podpisów kodu (brak certyfikatu, decyzja 25.11.2026) i bez ogłoszeń Discord.
+#
+# ==== publishTarget (co robi przebieg) =======================================================
+#   none              = tylko build+test i artefakty Actions; bez draftu, bez serwera.
+#   github-draft      = j.w. + draft GitHub Release (zostaje draftem — publikacja ręczna);
+#                       NIE dotyka serwera.
+#   github-draft+server = draft + deploy na serwer + `gh release edit --draft=false` na końcu.
 #
 # ==== Konfiguracja (działanie właściciela repo — workflow NIE zakłada, że to istnieje) ==========
 # Sekrety (Settings → Secrets and variables → Actions → Secrets):
@@ -19,15 +24,18 @@
 #   3. Wklej klucz prywatny jako base64:   base64 -w0 phaket-ci | ... → sekret DEPLOY_SSH_PRIVATE_KEY
 # Variables (… → Variables):
 #   4. DEPLOY_HOST = vps-b99a39c3.vps.ovh.net, DEPLOY_USER = debian
-#   5. (opcjonalnie) RELEASES_DOWNLOAD_BASE_URL = publiczny prefiks paczek w manifeście serwera;
-#      domyślnie https://phaket.app/releases/ (jak w compose.yaml serwera).
+#   5. (opcjonalnie) RELEASES_DOWNLOAD_BASE_URL = publiczny prefiks paczek; workflow przekazuje go
+#      do generacji manifestu TYLKO jako weryfikację, że odpowiada kanałowi przebiegu — serwer
+#      czyta własną wartość z .env compose (domyślnie https://phaket.app/releases/).
 # Uprawnienia: GITHUB_TOKEN wystarcza do draft release (contents: write); brak sekretów płatnych.
 #
-# Struktura katalogów na serwerze (volumeny z PhaketServer/compose.yaml):
-#   releases_packages:/usr/share/nginx/html/releases/<os>/                ← paczki i instalatory per OS
+# Struktura katalogów na serwerze (volumeny z PhaketServer/compose.yaml; kanon: README serwera):
+#   releases_packages:/usr/share/nginx/html/releases/<channel>/<os>/      ← paczki i Phaket-Setup.exe
 #   releases_manifests:/data/releases/releases.<channel>.<os>.json        ← czytane przez /api/releases
+#   Stąd URL pobrania = https://phaket.app/releases/<channel>/<os>/<File> (downloadBaseUrl kończy się
+#   na /releases/, więc File w manifeście MUSI być względne wobec katalogu kanału).
 # Volumeny Dockera nie są katalogami hosta: skrypty scripts/server-deploy.py kopiują pliki przez
-# `docker compose exec/cp` w repozytorium serwera (~/PhaketServer). Plik trafia PRZED manifestem.
+# `docker cp` w repozytorium serwera (~/PhaketServer). Plik trafia PRZED manifestem.
 # =============================================================================================
 
 name: Release
@@ -63,9 +71,33 @@ permissions:
 env:
   VPK_VERSION: 1.2.161
   SERVER_ROOT: ~/PhaketServer
+  # Katalog paczek w manifeście; musi zgadzać się z RELEASES_DOWNLOAD_BASE_URL serwera.
+  DOWNLOAD_BASE_URL: ${{ vars.RELEASES_DOWNLOAD_BASE_URL || 'https://phaket.app/releases/' }}
+  # Instalator-stub (PAK-114) czyta go z feedu; nginx prod musi serwować go z /download/ (§6 runbooka).
+  STUB_URL: https://phaket.app/download/PhaketSetup.exe
 
 jobs:
+  # Wersja i kanał przychodzą ręcznie: bez tej bramki da się wydać release 0.1.1-beta.1
+  # (Velopack oznaczy go jako prerelease, a manifest release wskaże build bety).
+  validate:
+    runs-on: ubuntu-26.04
+    outputs:
+      version: ${{ inputs.version }}
+    steps:
+      - name: Version matches the channel
+        env:
+          VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || {
+            echo "::error::Wersja '$VERSION' nie jest semver 0.1.1 lub 0.1.1-beta.1"; exit 1; }
+          prerelease=0; [[ "$VERSION" == *-* ]] && prerelease=1
+          [[ "$CHANNEL" == beta ]] && want=1 || want=0
+          [[ "$prerelease" == "$want" ]] || {
+            echo "::error::Kanał $CHANNEL wymaga wersji $([[ $want == 1 ]] && echo 'z przyrostkiem -beta' || echo 'bez przyrostka prerelease')"; exit 1; }
+
   build-windows:
+    needs: validate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -100,7 +132,8 @@ jobs:
 
       # Kanał należy do serwera (release/beta), nie do paczki: bez --channel vpk używa "win".
       # Setup.exe jedzie do feedu pod stałą nazwą, bo stub instalatora (PAK-114) szuka
-      # wpisu "Phaket-Setup.exe" w releases[] i uruchamia go po weryfikacji SHA-256.
+      # wpisu "Phaket-Setup.exe" w releases[] i uruchamia go po weryfikacji SHA-256. Plik jest
+      # per kanał (katalog /releases/<channel>/win/), więc Setup.exe bety nie nadpisze stabilnego.
       - name: Name the installer for the feed
         shell: bash
         run: |
@@ -122,6 +155,7 @@ jobs:
           if-no-files-found: error
 
   build-linux:
+    needs: validate
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -167,7 +201,8 @@ jobs:
           if-no-files-found: error
 
   draft-release:
-    needs: [build-windows, build-linux]
+    needs: [validate, build-windows, build-linux]
+    if: ${{ inputs.publishTarget != 'none' }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v5
@@ -182,12 +217,13 @@ jobs:
         run: |
           gh release create "v${{ inputs.version }}" \
             --draft --title "Phaket ${{ inputs.version }}" \
-            --notes "Kanał: ${{ inputs.channel }}. Sumy kontrolne: SHA256SUMS.txt. Instalator: https://phaket.app/download/PhaketSetup.exe (Windows), paczka portable w załącznikach." \
+            --notes "Kanał: ${{ inputs.channel }}. Sumy kontrolne: SHA256SUMS.txt. Instalator: $STUB_URL (Windows, zawsze stabilny kanał), paczka portable w załącznikach." \
             assets/*
 
+  # Tylko pełne wydanie dotyka serwera: github-draft zostawia draft GitHub bez deployu.
   deploy:
-    needs: [build-windows, build-linux]
-    if: ${{ inputs.publishTarget != 'none' }}
+    needs: [validate, build-windows, build-linux, draft-release]
+    if: ${{ inputs.publishTarget == 'github-draft+server' }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -196,6 +232,16 @@ jobs:
           path: assets
           pattern: phaket-*
           merge-multiple: true
+
+      # Jedno źródło prawdy dla workflow i serwera: katalog paczek musi być katalogiem kanału,
+      # bo File w manifeście jest doklejane do downloadBaseUrl.
+      - name: Check the download base URL matches the channel
+        env:
+          EXPECTED: https://phaket.app/releases/${{ inputs.channel }}/
+        run: |
+          base=${DOWNLOAD_BASE_URL%/}
+          [[ "$base/" == "$EXPECTED" ]] || {
+            echo "::error::DOWNLOAD_BASE_URL=$base/ nie jest katalogiem kanału ${{ inputs.channel }} ($EXPECTED)"; exit 1; }
 
       - name: Configure SSH
         env:
@@ -217,7 +263,7 @@ jobs:
           set -euo pipefail
           ssh -i ~/.ssh/deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
             "python3 $SERVER_ROOT/scripts/server-deploy.py --channel $CHANNEL --stage-dir $SERVER_ROOT/staging" < /dev/null
-          # Paczki i instalatory (bez --delete: feed trzyma poprzednie wersje), bez SHA256SUMS.txt.
+          # Paczki i instalatory kanału (bez --delete: feed trzyma poprzednie wersje), bez SHA256SUMS.txt.
           for os in win linux; do
             rsync -az --exclude SHA256SUMS.txt -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
               "assets/$os-x64"/ "$DEPLOY_USER@$DEPLOY_HOST:$SERVER_ROOT/staging/$os/"
@@ -244,7 +290,6 @@ jobs:
             "python3 $SERVER_ROOT/scripts/server-deploy.py --channel $CHANNEL --stage-dir $SERVER_ROOT/staging --clean" < /dev/null
 
       - name: Publish GitHub Release
-        if: ${{ inputs.publishTarget != 'none' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "v${{ inputs.version }}" --draft=false

@@ -18,7 +18,7 @@ jest dozwolony bez każdorazowej zgody; **prod** (phaket.app / VPS OVH) — tylk
 | Workflow wydania | `.github/workflows/release.yml` | — |
 | Stub instalatora (workflow) | `.github/workflows/installer-stub.yml` | — |
 | Generacja manifestu | `scripts/feed-manifest.py` | — |
-| Wdrożenie na serwer | `scripts/server-deploy.py` | `scripts/server-deploy.py` (uruchamiany na VPS) |
+| Wdrożenie na serwer | `scripts/server-deploy.py` | `scripts/server-deploy.py` (uruchamiany na VPS; kopia w repo serwera musi być aktualna) |
 | Kontrakt `/api/releases` | czytany w `Phaket/Services/UpdateService.cs` (`ServerFeedSource`) | `Phaket.Api/Releases.cs` |
 | Stub instalatora | `installer/Phaket.InstallerStub/` (`InstallRunner.cs`, `Manifest.cs`, `FirstInstall.cs`) | — |
 
@@ -28,6 +28,15 @@ Kontrakt API (release.yml, nagłówek; Releases.cs):
 Serwer składa odpowiedź z manifestu `releases.<channel>.<os>.json`, sortuje wersje malejąco
 i zwraca jedną odpowiedź będącą nadzbiorem obu kontraktów (`manifest.Releases` dla klienta
 Velopack, `releases[]` + `latestVersion` dla stubu) (Releases.cs, `Serve`).
+
+**Kanoniczny layout paczek (ustalony 27.11.2026):** `/releases/{channel}/{os}/{File}` —
+`channel` ∈ `beta|release`, `os` ∈ `win|linux`. Wynika z serwera, nie z workflow:
+`PhaketServer/README.md:23` („Paczki serwuje statycznie nginx pod `/releases/{channel}/`”),
+`PhaketServer/compose.yaml:49-50` („Velopack packages served under `/releases/{channel}/`”),
+`Releases.cs:59` (`File` to jeden segment, klient dokleja go po `downloadBaseUrl`, które kończy
+się na `/releases/`), `Releases.cs:20-23` (`downloadBaseUrl` = `https://phaket.app/releases/`).
+Workflow pakuje więc do `/releases/{channel}/{os}/`, a `File` w manifeście pozostaje samą nazwą
+pliku. `Phaket-Setup.exe` jest per kanał, bo leży w katalogu kanału.
 
 ---
 
@@ -50,9 +59,12 @@ Zmienne (zakładka *Variables*) — workflow czyta je jako `vars.*`:
 
 4. `DEPLOY_HOST` = `vps-b99a39c3.vps.ovh.net`
 5. `DEPLOY_USER` = `debian`
-6. (opcjonalnie) `RELEASES_DOWNLOAD_BASE_URL` — prefiks paczek w manifeście; **uwaga:**
-   workflow go nie przekazuje, czyta go serwer z `.env` compose (`https://phaket.app/releases/`
-   domyślnie — PhaketServer/compose.yaml).
+6. (opcjonalnie) `RELEASES_DOWNLOAD_BASE_URL` — prefiks paczek w manifeście. Workflow **czyta** go
+   z `vars` jako `env.DOWNLOAD_BASE_URL` i porównuje z katalogiem kanału przebiegu
+   (`https://phaket.app/releases/<channel>/`) w kroku „Check the download base URL matches the
+   channel” — rozjazd zatrzymuje deploy przed SSH. Samą wartość `downloadBaseUrl` w odpowiedzi
+   ustawia **serwer** ze swojego `.env` compose (`https://phaket.app/releases/` domyślnie —
+   PhaketServer/compose.yaml:9); zmiana zmiennej w GitHubie nie zmienia feedu, zmienia się na VPS.
 
 Uprawnienia: `GITHUB_TOKEN` wystarcza do draft release (`permissions: contents: write`);
 brak sekretów płatnych (release.yml, nagłówek sekcji „Konfiguracja”).
@@ -98,31 +110,38 @@ Kanał beta = wersja z przyrostkiem prerelease, np. `0.1.1-beta.1` (release.yml,
 2. Inputy:
    - `version`: np. `0.1.1-beta.1` (wymagany)
    - `channel`: `beta`
-   - `publishTarget`: `none` (build bez publikacji — do sprawdzenia), `github-draft`
-     (draft na GitHubie bez serwera) albo `github-draft+server` (pełne wydanie).
-     **Uwaga:** `deploy` wykonuje się dla każdej wartości różnej od `none`, a krok
-     „Publish GitHub Release” ma warunek `!= 'none'`, więc `publishTarget=github-draft`
-     publikuje też na serwer a mimo to opuszcza publikację release (szczegóły w §8).
-3. `concurrency: release-<channel>` blokuje dwa przebiegi tego samego kanału i nie kasuje
+   - `publishTarget`:
+     | wartość | draft GitHub | serwer | publikacja draftu |
+     |---|---|---|---|
+     | `none` | — | — | — (tylko artefakty Actions) |
+     | `github-draft` | tak | **nie** | nie — draft zostaje, publikacja ręczna |
+     | `github-draft+server` | tak | tak | tak (`gh release edit --draft=false` na końcu) |
+3. Job `validate` (pierwszy, bez niego nie rusza build) wymaga `version` semver i zgodności
+   z kanałem: `beta` → wersja **z** przyrostkiem prerelease (np. `-beta.1`), `release` → **bez**
+   niego. Niezgodność zatrzymuje przebieg przed pakowaniem (release.yml, krok „Version matches
+   the channel”).
+4. `concurrency: release-<channel>` blokuje dwa przebiegi tego samego kanału i nie kasuje
    przebiegu w toku (release.yml, `concurrency`).
 
 ### 2.2 Co się dzieje po kolei
 
 | Etap (job / krok) | Efekt |
 |---|---|
+| `validate`: `Version matches the channel` | semver + zgodność `version`↔`channel`; przy błędzie reszta jobów nie startuje |
 | `build-windows`: `Build and test` | `dotnet build` solucji **przed** pakowaniem — wydanie nie może powstać z kodu, który nie przechodzi testów (release.yml) |
 | `build-windows`: `Publish win-x64` → `Pack Setup.exe and Portable.zip` | self-contained publish; `vpk pack` bez `--channel` (kanał należy do serwera) |
-| `build-windows`: `Name the installer for the feed` | `Phaket-<wersja>-Setup.exe` → `Phaket-Setup.exe` (stała nazwa, bo stub szuka dokładnie tego wpisu) |
+| `build-windows`: `Name the installer for the feed` | `Phaket-<wersja>-Setup.exe` → `Phaket-Setup.exe` (stała nazwa, bo stub szuka dokładnie tego wpisu; plik jest per kanał) |
 | `build-windows`: `SHA256SUMS (Windows)` | `sha256sum -- * > SHA256SUMS.txt` w `releases/win-x64` |
 | `build-linux`: `Publish` → `Pack AppImage` | AppImage, `--categories Utility`, `--compression gzip` (release.yml) |
 | `build-linux`: `SHA256SUMS (Linux)` | sumy w `releases/linux-x64` |
 | oba joby → artefakty | `phaket-win-x64-beta`, `phaket-linux-x64-beta` (nazwa z inputem `channel`) |
-| `draft-release`: `Draft GitHub Release` | `gh release create "v<wersja>" --draft` z paczkami (`assets/*`). **Uwaga:** note release odsyła do `https://phaket.app/download/PhaketSetup.exe` — patrz §7 |
+| `draft-release`: `Draft GitHub Release` | **tylko dla `publishTarget != none`**: `gh release create "v<wersja>" --draft` z paczkami (`assets/*`); note odsyła do `https://phaket.app/download/PhaketSetup.exe` (§6, §7) |
+| `deploy`: `Check the download base URL matches the channel` | **tylko dla `github-draft+server`**: `RELEASES_DOWNLOAD_BASE_URL` musi wskazywać `<base>/releases/<channel>/` |
 | `deploy`: `Configure SSH` | dekoduje klucz, `ssh-keyscan` hosta |
-| `deploy`: `Upload release files to the server volumes` | seria `ssh`: `server-deploy.py` bez `--clean` (tworzy `~/PhaketServer/staging/{win,linux,manifests}` i katalogi w kontenerze nginx), potem `rsync` paczek i `rsync` manifestów |
+| `deploy`: `Upload release files to the server volumes` | seria `ssh`: `server-deploy.py` bez `--clean` (tworzy `~/PhaketServer/staging/{win,linux,manifests}` i katalogi `/releases/<channel>/<os>` w wolumenie paczek), potem `rsync` paczek i `rsync` manifestów |
 | `deploy`: manifesty | `feed-manifest.py --version <wersja> --out releases.beta.<os>.json` z paczek w stagingu |
-| `deploy`: `Commit release into the server volumes` | `server-deploy.py --clean`: waliduje manifesty, `docker compose cp` paczek → wolumen nginx, **potem** manifestów → wolumen api; czyści staging |
-| `deploy`: `Publish GitHub Release` | `gh release edit "v<wersja>" --draft=false` (dla `publishTarget != none`) |
+| `deploy`: `Commit release into the server volumes` | `server-deploy.py --clean`: waliduje manifesty, `docker cp` paczek → wolumen nginx (`/releases/<channel>/<os>`), **potem** manifestów → wolumen api; czyści staging |
+| `deploy`: `Publish GitHub Release` | `gh release edit "v<wersja>" --draft=false` — tylko przy `github-draft+server` |
 
 Kolejność jest wymuszona: pliki paczek trafiają do wolumenu **przed** manifestem, więc
 przerwany deploy zostawia stary manifest i klient nie dostanie 404 na brakującej paczce
@@ -130,12 +149,13 @@ przerwany deploy zostawia stary manifest i klient nie dostanie 404 na brakujące
 
 ### 2.3 Gdzie wylądują artefakty
 
-- **GitHub**: draft release `v<wersja>` z paczkami per OS i `SHA256SUMS.txt` (draft-release).
-- **Serwer / paczki**: wolumen `releases_packages` → `/usr/share/nginx/html/releases/win/`
-  i `.../linux/`, serwowane pod `https://phaket.app/releases/` (release.yml, nagłówek
-  „Struktura katalogów”; compose.yaml `www`). **Uwaga:** workflow nie tworzy podkatalogu
-  kanału, a katalogi nie są czyszczone (`--clean` czyści tylko staging) — obie wersje kanału
-  (beta i release) lądują w tych samych katalogach os (szczegóły w §8).
+- **GitHub**: draft release `v<wersja>` z paczkami per OS i `SHA256SUMS.txt` (draft-release) —
+  tylko dla `publishTarget` ≠ `none`.
+- **Serwer / paczki** (tylko `github-draft+server`): wolumen `releases_packages` →
+  `/usr/share/nginx/html/releases/<channel>/win/` i `.../linux/`, serwowane pod
+  `https://phaket.app/releases/<channel>/<os>/` (release.yml, nagłówek „Struktura katalogów”;
+  compose.yaml `www`; layout w §0). Katalogi kanału nie są czyszczone (`--clean` czyści tylko
+  staging), więc feed trzyma poprzednie wersje **tego kanału**; kanały są rozdzielone.
 - **Serwer / manifesty**: wolumen `releases_manifests` → `/data/releases/releases.<channel>.<os>.json`
   czytane przez `/api/releases` (compose.yaml `api`, `RELEASES_DIRECTORY`).
 
@@ -146,8 +166,9 @@ przerwany deploy zostawia stary manifest i klient nie dostanie 404 na brakujące
 curl -s 'https://phaket.app/api/releases?channel=beta&os=win'   | head -c 600
 curl -s 'https://phaket.app/api/releases?channel=beta&os=linux' | head -c 600
 
-# 2) Każdy plik z odpowiedzi istnieje pod downloadBaseUrl (downloadBaseUrl + File)
-curl -sI 'https://phaket.app/releases/' | head -1      # katalog: 403 przy autoindex off — to OK
+# 2) Każdy plik z odpowiedzi istnieje pod downloadBaseUrl + <channel>/<os>/ + File
+curl -sI 'https://phaket.app/releases/beta/win/' | head -1   # katalog: 403 przy autoindex off — to OK
+curl -sI "https://phaket.app/releases/beta/win/$(curl -s 'https://phaket.app/api/releases?channel=beta&os=win' | jq -r '.releases[0].File')" | head -1
 
 # 3) Sumy zgodne z SHA256SUMS.txt z release'u (GitHub)
 sha256sum Phaket-Setup.exe
@@ -156,9 +177,10 @@ sha256sum Phaket-Setup.exe
 Checklist:
 
 - [ ] `latestVersion` = `<wersja>` w `channel=beta&os=win` **i** `os=linux`
-- [ ] `downloadBaseUrl` w odpowiedzi = `https://phaket.app/releases/`
-- [ ] każdy `File` z odpowiedzi pobiera się (HTTP 200) i jego SHA-256 z pliku `SHA256SUMS.txt`
-  oraz z odpowiedzi API jest identyczny
+- [ ] `downloadBaseUrl` w odpowiedzi = `https://phaket.app/releases/`; paczka jest pod
+      `<downloadBaseUrl><channel>/<os>/<File>` — serwer nie dokleja kanału do `File`,
+      kanał jest w ścieżce katalogu paczek (§0)
+- [ ] plik pod `https://phaket.app/releases/beta/<os>/<File>` pobiera się (HTTP 200) i jego SHA-256 z pliku `SHA256SUMS.txt` oraz z odpowiedzi API jest identyczny
 - [ ] draft/Release `v<wersja>` zawiera paczki obu OS i `SHA256SUMS.txt`
 - [ ] (jeśli kanał stage) ten sam `curl` na `https://stage.phaket.app/api/releases?...`
 
@@ -185,7 +207,7 @@ $env:PHAKET_INSTALLER_MANIFEST = 'https://stage.phaket.app/api/releases?channel=
 ```
 
 **Linux:** stub jest tylko dla Windows; świeża instalacja = pobranie AppImage
-z `/releases/linux/` (lub z załączników release'u) i uruchomienie.
+z `/releases/<channel>/linux/` (lub z załączników release'u) i uruchomienie.
 **Uwaga:** `UpdateService` działa tylko w instalacji rozpoznanej przez Velopack
 (`manager.IsInstalled`); w środowisku deweloperskim i po seed-install aplikacja pokaże
 „Tryb deweloperski…” (UpdateService.cs `DevelopmentMode`; FirstInstall.cs, komentarz
@@ -258,10 +280,14 @@ z paczek przebiegu.
 ### 4.2 Uruchomienie
 
 Workflow **Release** → *Run workflow*: `version` = np. `0.1.0` (**bez** `-beta`),
-`channel` = `release`, `publishTarget` = `github-draft` (lub `github-draft+server`).
+`channel` = `release`, `publishTarget` = `github-draft+server` (pełna promocja) albo
+`github-draft` (tylko draft na GitHubie, bez deployu — np. gdy serwer ma być wdrożony ręcznie).
+Job `validate` odrzuci wersję z przyrostkiem prerelease na kanale `release`.
 Podczas przebiegu vpk buduje paczki pod tą samą wersją — **licz się z tym, że nowa paczka
 `release` ma inną sumę niż paczka `beta` tej samej wersji** (manifest i SHA z nowego
-przebiegu). Nie mieszaj sum z beta w weryfikacji.
+przebiegu). Nie mieszaj sum z beta w weryfikacji. Paczki obu kanałów leżą w osobnych
+katalogach (`/releases/beta/...` i `/releases/release/...`), więc żadna promocja nie nadpisuje
+plików drugiego kanału (§0).
 
 ### 4.3 Weryfikacja po
 
@@ -287,10 +313,10 @@ rollback to cofnięcie **manifestu** — aplikacja przestaje widzieć nową wers
 
 1. **Manifesty na serwerze** (jedyna rzecz, którą czyta API): przywróć poprzedni
    `releases.<channel>.<os>.json` do wolumenu `releases_manifests`
-   (`docker compose cp <plik> api:/data/releases/...`). Paczki poprzedniej wersji
-   **zostają** w wolumenie `releases_packages` (katalogi nie są czyszczone — server-deploy.py).
-   Jeśli manifest był publikowany z worktree, możesz go odtworzyć `feed-manifest.py`
-   z poprzednich paczek albo wziąć kopię sprzed deploy.
+   (`docker cp <plik> <kontener-api>:/data/releases/...`). Paczki poprzedniej wersji
+   **zostają** w wolumenie `releases_packages` (katalogi kanału nie są czyszczone —
+   server-deploy.py). Jeśli manifest był publikowany z worktree, możesz go odtworzyć
+   `feed-manifest.py` z poprzednich paczek albo wziąć kopię sprzed deploy.
 2. **GitHub**: draft → usuń (`gh release delete v<wersja> --yes` na drafcie) lub — jeśli
    release jest opublikowany i wydanie jest błędne — oznacz jako prerelease / usuń według
    decyzji właściciela. GitHub release nie wpływa na feed aplikacji.
@@ -298,9 +324,9 @@ rollback to cofnięcie **manifestu** — aplikacja przestaje widzieć nową wers
    server-deploy.py nie usuwa plików z wolumenu).
 4. **Weryfikacja**: `curl` na `channel=<kanał>` pokazuje poprzednią wersję jako `latestVersion`.
 
-> Uwaga: paczki `release` i `beta` trafiają do tych samych katalogów `/releases/win|linux/`
-> (§8) — jeśli cofasz tylko manifest, paczki nowej wersji nadal są pod URL-em, tylko nikt
-> do nich nie prowadzi.
+> Uwaga: rollback manifestu nie usuwa paczek nowej wersji z wolumenu — nadal są pod
+> `https://phaket.app/releases/<channel>/<os>/`, tylko nikt do nich nie prowadzi. Rollback
+> jednego kanału nie dotyka drugiego (osobne katalogi, §0).
 
 ### 5.2 Najczęstsze usterki
 
@@ -309,6 +335,9 @@ rollback to cofnięcie **manifestu** — aplikacja przestaje widzieć nową wers
 | Deploy: `BŁĄD: manifest wskazuje brakujący plik` | manifest i paczki z różnych przebiegów / ręczne podmiany | przebuduj manifest z tych samych paczek (`feed-manifest.py`) i powtórz deploy |
 | Deploy: `BŁĄD: brak manifestów` | `rsync` manifests nie dotarł albo zły katalog | sprawdź `~/PhaketServer/staging/manifests` |
 | Deploy: `BŁĄD: --stage-dir musi być ~/PhaketServer/staging` | zły `SERVER_ROOT` | popraw `SERVER_ROOT`/ścieżkę na VPS |
+| Deploy: `BŁĄD: brak działającego kontenera nginx na hoście` | stack compose nie działa albo serwis nginx ma inną nazwę | `docker compose ps` w `~/PhaketServer`; nazwę kontenera skrypt wykrywa przez `docker ps --filter name=nginx` |
+| Deploy: `Check the download base URL matches the channel` | `vars.RELEASES_DOWNLOAD_BASE_URL` wskazuje inny katalog niż kanał przebiegu | popraw zmienną (§1.1) lub usuń ją (domyślne `https://phaket.app/releases/`) |
+| Validate: `Kanał ... wymaga wersji ...` | `beta` z wersją bez `-beta` albo `release` z `-beta` | podaj wersję zgodną z kanałem |
 | API: `400 {"error":"INVALID_PARAMETER"}` | zły `channel`/`os` (tylko `beta|release`, `win|linux`) | popraw URL; serwer waliduje przed dostępem do pliku |
 | API: `404 {"error":"NOT_FOUND"}` | brak manifestu kanału (pusty feed do pierwszego wydania) | wydaj na ten kanał; brak domyślnego kanału jest zamierzony |
 | API: `500 {"error":"INVALID_MANIFEST"}` | uszkodzony/niezgodny manifest (zły `SHA256`, `File` ze ścieżką, duplikat) | przebuduj manifest generatorem |
@@ -335,9 +364,13 @@ wydaniach aplikacji (installer-stub.yml, nagłówek; Phaket.InstallerStub.Win32.
 - **Weryfikacja:** krok `Check size (<5 MB)` przerywa build przy ≥ 5 MB
   (`PublishSizeLimitBytes` = 4 900 000 w csproj); testy w `Phaket.InstallerStub.Tests`
   muszą przejść przed publikacją.
-- **Stały URL:** `PhaketSetup.exe` w katalogu `phaket/download/` (ścieżka stała w workflow).
-  **Uwaga:** faktyczny publiczny URL (`phaket.app/download/PhaketSetup.exe` vs
-  `https://phaket.app/downloads/...`) wymaga potwierdzenia w konfiguracji nginx — §8.
+- **Stały URL:** `PhaketSetup.exe` w katalogu `phaket/download/` (ścieżka stała w workflow,
+  installer-stub.yml krok `Upload stub`). **Bloker prod (§7):** vps nie serwuje publicznie
+  `phaket.app/download/PhaketSetup.exe` — workflow wgrywa plik do
+  `/srv/synapsekit-boracik/nginx/html/phaket/download/`, ale `PhaketWWW/nginx.conf` takiego
+  katalogu nie mapuje (nieznane ścieżki dostają `302 /`). Do czasu osobnej zmiany vhosta URL
+  w release notes jest zapowiedzią, nie działającym linkiem — stub trzeba na razie podać
+  użytkownikom z artefaktu Actions.
 - Kontrakt stubu: `channel=release&os=win`, manifest ≤ 4 MB, `File` bez ścieżek lub pełny
   HTTPS, SHA-256 obowiązkowy (Manifest.cs).
 
@@ -350,7 +383,10 @@ wydaniach aplikacji (installer-stub.yml, nagłówek; Phaket.InstallerStub.Win32.
   deployu serwera (PAK-110, konfiguracja vhosta — PhaketWWW/README.md: „Wdrożenie na
   phaket.app wymaga osobnej zgody”). Nawet gdy API odpowiada, `/releases/<ścieżka>` pod
   `PhaketWWW` ma `error_page 404 = @home` (302 do `/`) — paczki muszą być serwowane przez
-  vhost prod, nie przez kontener zajawki (PhaketWWW/nginx.conf).
+  vhost prod, nie przez kontener zajawki (PhaketWWW/nginx.conf:44-50). **Bloker prod.**
+- **Stub instalatora na prod**: `https://phaket.app/download/PhaketSetup.exe` (URL z release
+  notes) jeszcze nie odpowiada — katalog `phaket/download/` nie jest mapowany przez żaden vhost.
+  **Bloker prod** (§6), nie do naprawy po stronie workflow.
 - **Stage** (192.168.1.184 / stage.phaket.app) ma **puste manifesty** do pierwszego wydania:
   do czasu pierwszego deployu `/api/releases` zwraca `404 NOT_FOUND`.
 - **Sekrety i zmienne GitHub NIE są jeszcze skonfigurowane** — pierwszy deploy padnie na
@@ -360,28 +396,24 @@ wydaniach aplikacji (installer-stub.yml, nagłówek; Phaket.InstallerStub.Win32.
 
 ---
 
-## 8. Rozbieżności do domknięcia (znalezione przy pisaniu runbooka)
+## 8. Rozbieżności — stan domknięcia (27.11.2026)
 
-Poniższe punkty **nie są** opisem działania — workflow ich jeszcze nie realizuje. Runbook
-ich nie obiecuje; lista jest dla właściciela PAK-109.
+Lista z przeglądu runbooka (PAK-109/111). Wszystkie punkty po stronie **PhaketDesktop**
+domknięte; zostały tylko fakty serwera opisane jako blokery w §7.
 
-1. **`publishTarget` nie rozdziela GitHub i serwera.** `deploy` ma warunek `!= 'none'`,
-   więc `github-draft` też wdraża na serwer; „Publish GitHub Release” z identycznym
-   warunkiem nie rozróżnia wartości (release.yml).
-2. **Katalog paczek nie zawiera kanału.** vpk pack bez `--channel`, `server-deploy.py`
-   kopiuje do `/usr/share/nginx/html/releases/{win,linux}`, a compose i README serwera
-   mówią o `/releases/{channel}/`. Beta i release mogą nadpisać się nawzajem pod tą samą nazwą.
-3. **`Phaket-Setup.exe` jest jednym plikiem dla obu kanałów** w katalogu os — druga wydana
-   wersja (np. release po beta) nadpisuje plik, na który wskazuje stary manifest.
-4. **`RELEASES_DOWNLOAD_BASE_URL` nie jest przekazywany przez workflow**, mimo wpisu
-   w nagłówku jako opcjonalna zmienna — czyta go serwer z `.env`.
-5. **`scripts/publish-feed.sh`** (stary, ręczny skrypt, `DRY-RUN` z `FEED_REMOTE_DIR`
-   „DO UZGODNIENIA”) jest martwy wobec nowego przepływu — kandydat do usunięcia.
-6. **Release note** odsyła do `https://phaket.app/download/PhaketSetup.exe` — brak potwierdzenia,
-   że nginx prod serwuje dokładnie tę ścieżkę (§6, §7); workflow stubu wgrywa plik pod inną ścieżką.
-7. **`installer-stub.yml` deklaruje `permissions: contents: read`** — wystarcza przy
-   `ssh-keyscan`/scp; poprawność nie jest krytyczna, ale warto sprawdzić przy pierwszym deployu.
-8. **Aktualizacja in-app na Linux (AppImage)** wymaga `IsInstalled` prawdziwego dla AppImage —
-   do potwierdzenia w pierwszym teście e2e (§3.1); nie znaleziono testu integracyjnego.
-9. `docs/RELEASE_RUNBOOK.md` jest pierwszym plikiem w `docs/` — CI i workflow go nie
-   sprawdzają; zgodność utrzymuje się ręcznie.
+| # | Rozbieżność | Stan |
+|---|---|---|
+| 1 | `publishTarget` nierozdzielony (`github-draft` też deployował) | **domknięte**: `draft-release` i `deploy` mają `if` odpowiednio `!= none` i `== github-draft+server`; `none` = same artefakty (§2.1) |
+| 2 | Katalog paczek bez kanału (kolizja beta/release) | **domknięte**: `/releases/{channel}/{os}/` w `server-deploy.py` i w nagłówku release.yml; layout potwierdzony serwerem (§0) |
+| 3 | `Phaket-Setup.exe` jeden dla obu kanałów | **domknięte** przez #2 — instalator leży w katalogu kanału, więc jest per kanał |
+| 4 | `RELEASES_DOWNLOAD_BASE_URL` nieprzekazywany | **domknięte**: workflow ma `env.DOWNLOAD_BASE_URL` z `vars`/defaultu i weryfikuje, że wskazuje katalog kanału przed deployem; wartość w odpowiedzi ustawia serwer (§1.1) |
+| 5 | Martwy `scripts/publish-feed.sh` | **domknięte**: usunięty, brak odwołań |
+| 6 | URL stuba w release notes vs ścieżka wgrana przez workflow | **ustalone**: workflow stubu wgrywa `phaket/download/PhaketSetup.exe`, note i runbook używają `https://phaket.app/download/PhaketSetup.exe`; brak mapowania tego katalogu w vhost prod = **bloker prod** (§6, §7) |
+| 7 | `installer-stub.yml` deklaruje `contents: read` | **OK**: job nie tworzy release'u, używa tylko `ssh`/`scp` — uprawnienie wystarcza; sprawdzić przy pierwszym realnym deployu stubu |
+| 8 | In-app update na Linux wymaga `IsInstalled` dla AppImage | **otwarte**: wymaga testu e2e na prawdziwym AppImage (§3.1); poza zakresem workflow |
+| 9 | Runbook niesprawdzany przez CI | **bez zmian**: zgodność utrzymywana ręcznie |
+
+Dodatkowo w tej naprawie: job `validate` wymusza zgodność wersji z kanałem (bez niego dało się
+wydać `0.1.1-beta.1` na `release`), `server-deploy.py` wykrywa kontener `nginx` przez `docker ps`
+zamiast `docker compose` (nazwa projektu compose zależy od katalogu, więc `docker compose exec`
+w `~/PhaketServer` wywracał się przy zmianie nazwy katalogu repozytorium serwera).

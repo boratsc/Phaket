@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # Wdrożenie feedu wydania (release.yml) do działającego stacku serwera PAK-110.
-# Na hoście serwera nazwa release-<os> -> pliki w releases_packages, releases_manifests -> manifesty (compose.yaml).
+# Na hoście serwera: paczki kanału -> releases_packages/.../releases/<kanał>/<os>, manifesty ->
+# releases_manifests/data/releases (volumeny z PhaketServer/compose.yaml).
+# Layout kanału jest tym, który serwuje nginx i ogłasza API: /releases/{channel}/{os}/File
+# (PhaketServer README, Releases.cs: downloadBaseUrl kończy się na /releases/).
 #
 #   python3 scripts/server-deploy.py --channel beta --stage-dir ~/PhaketServer/staging            # przygotuj
 #   ... rsync paczek do <stage-dir>/{win,linux} i manifestów do <stage-dir>/manifests/ ...
@@ -16,18 +19,34 @@ from pathlib import Path
 
 CHANNELS = ["beta", "release"]
 SYSTEMS = ["win", "linux"]
-# Ścieżki wewnątrz obrazów z PhaketServer/compose.yaml.
-PACKAGES = {system: f"/usr/share/nginx/html/releases/{system}" for system in SYSTEMS}
+# Kontener i ścieżka wewnątrz obrazu (nazwa serwisu compose zależy od projektu — stąd wykrywanie).
+SERVICE = "nginx"
+# Wewnątrz wolumenu releases_packages, który nginx montuje jako /usr/share/nginx/html/releases.
+PACKAGES = "/usr/share/nginx/html/releases"
+# Wewnątrz wolumenu releases_manifests, który API montuje jako /data/releases.
 MANIFESTS = "/data/releases"
 
 
-def run(*command: str) -> None:
+def run(*command: str) -> str:
     print("+", " ".join(command), flush=True)
-    subprocess.run(command, check=True, cwd=Path.home() / "PhaketServer")
+    return subprocess.run(command, check=True, cwd=Path.home() / "PhaketServer",
+                          capture_output=True, text=True).stdout
 
 
-def staging_dir(root: Path, system: str | None = None, manifests: bool = False) -> Path:
-    return root / ("manifests" if manifests else system or "")
+_container: list[str] = []
+
+
+def container_id() -> str:
+    if not _container:
+        found = run("docker", "ps", "-q", "--filter", f"name={SERVICE}").split()
+        if not found:
+            raise RuntimeError(f"brak działającego kontenera {SERVICE} na hoście")
+        _container.append(found[0])
+    return _container[0]
+
+
+def copy(source: str, destination: str) -> None:
+    run("docker", "cp", source, f"{container_id()}:{destination}")
 
 
 def main() -> int:
@@ -47,9 +66,13 @@ def main() -> int:
         for system in SYSTEMS:
             (root / system).mkdir(parents=True, exist_ok=True)
         (root / "manifests").mkdir(parents=True, exist_ok=True)
-        for system in SYSTEMS:
-            run("docker", "compose", "exec", "-T", "nginx", "sh", "-c", f"mkdir -p {PACKAGES[system]}")
-        print(f"{root}: gotowy na rsync")
+        try:
+            for system in SYSTEMS:
+                run("docker", "exec", container_id(), "mkdir", "-p", f"{PACKAGES}/{args.channel}/{system}")
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"BŁĄD: {error}", file=sys.stderr)
+            return 1
+        print(f"{root}: gotowy na rsync (kanał {args.channel})")
         return 0
 
     manifests = root / "manifests"
@@ -70,28 +93,32 @@ def main() -> int:
             print(f"BŁĄD: manifest {path} nie spełnia kontraktu serwera: {error}", file=sys.stderr)
             return 1
 
-    for system, container_path in PACKAGES.items():
-        source = root / system
-        files = sorted(path for path in source.iterdir() if path.is_file()) if source.is_dir() else []
-        # Manifest (<system>/releases.<channel>.<system>.json) nie może wskazywać pliku, którego
-        # nie ma w katalogu paczek w chwili publikacji.
-        for name in manifests[system].get("Releases", []):
-            if not (source / name["File"]).is_file():
-                print(f"BŁĄD: manifest wskazuje brakujący plik {name['File']}", file=sys.stderr)
+    try:
+        for system in SYSTEMS:
+            source = root / system
+            files = sorted(path for path in source.iterdir() if path.is_file()) if source.is_dir() else []
+            # Manifest nie może wskazywać pliku, którego nie ma w katalogu kanału w chwili publikacji.
+            for name in manifests[system].get("Releases", []):
+                if not (source / name["File"]).is_file():
+                    print(f"BŁĄD: manifest wskazuje brakujący plik {name['File']} ({system})", file=sys.stderr)
+                    return 1
+            if not files:
+                print(f"BŁĄD: brak paczek w {source}", file=sys.stderr)
                 return 1
-        if not files:
-            print(f"BŁĄD: brak paczek w {source}", file=sys.stderr)
-            return 1
-        # docker cp nie ma --no-overwrite: kopiujemy do wolumenu przez kontener nginx.
-        for path in files:
-            run("docker", "compose", "cp", str(path), f"nginx:{container_path}/{path.name}")
+            folder = f"{PACKAGES}/{args.channel}/{system}"
+            # docker cp nie ma --no-overwrite: kopiujemy do wolumenu przez kontener nginx.
+            for path in files:
+                copy(str(path), f"{folder}/{path.name}")
 
-    for path in expected:
-        run("docker", "compose", "cp", str(path), f"api:{MANIFESTS}/{path.name}")
+        for path in expected:
+            copy(str(path), f"{MANIFESTS}/{path.name}")
+    except (RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"BŁĄD: publikacja nie powiodła się: {error}", file=sys.stderr)
+        return 1
 
     for path in sorted(root.rglob("*"), reverse=True):
         path.rmdir() if path.is_dir() else path.unlink()
-    print(f"opublikowano kanał {args.channel}: {', '.join(path.name for path in expected)}")
+    print(f"opublikowano kanał {args.channel}: /releases/{args.channel}/win, /releases/{args.channel}/linux")
     return 0
 
 
