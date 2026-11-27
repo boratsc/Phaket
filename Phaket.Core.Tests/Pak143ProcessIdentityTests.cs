@@ -103,7 +103,7 @@ public sealed class Pak143ProcessTrackerTests
         Assert.Contains("Gra została zatrzymana.", result.MessagePl);
         Assert.Contains("The game has been stopped.", result.MessageEn);
         Assert.Empty(tracker.Load());
-        Assert.True(Helpers.WaitUntilGone(helper.Id), "the verified stop must end the helper");
+        Assert.True(helper.WaitForExit(5000), "the verified stop must end the helper");
     }
 
     [Fact]
@@ -282,6 +282,41 @@ public sealed class Pak143ProcessTrackerTests
         // proves, so here the cleaner itself is what has to run.
         Assert.NotEmpty(removed);
         Assert.Equal(0, api.TerminateCalls);
+        Assert.True(api.WaitCalls == 0, "identity is compared before the liveness poll");
+        Assert.True(api.Closed);
+    }
+
+    [Fact]
+    public void WindowsStopOfAStartTimeBeforeBootNeverSignalsAndClearsTheRecord()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true);
+        var record = LiveWindowsRecord() with { StartTimeUtc = FakeWindowsApi.BootTimeUtc.AddMinutes(-1) };
+        var removed = new List<ProcessRecord>();
+
+        var result = ProcessTracker.StopWindows(record, force: true, api,
+            TimeSpan.FromMilliseconds(50), removed.Add);
+
+        Assert.Equal(ProcessStopStatus.IdentityMismatch, result.Status);
+        Assert.Single(removed);
+        Assert.Equal(0, api.TerminateCalls);
+        Assert.True(api.WaitCalls == 0, "identity is compared before the liveness poll");
+        Assert.True(api.Closed);
+    }
+
+    [Fact]
+    public void WindowsPreTerminateWaitFailureFailsClosedAndKeepsTheRecord()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true) { PreTerminateWaitError = 6 };
+        var removed = new List<ProcessRecord>();
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(50), removed.Add);
+
+        Assert.Equal(ProcessStopStatus.IdentityUnknown, result.Status);
+        Assert.Equal("wait", result.Stage);
+        Assert.Equal(6, result.Win32Error);
+        Assert.Empty(removed);
+        Assert.Equal(0, api.TerminateCalls);
         Assert.True(api.Closed);
     }
 
@@ -388,8 +423,9 @@ public sealed class Pak143ProcessTrackerTests
         Assert.Equal("wait", result.Stage);
         Assert.Equal(6, result.Win32Error); // ERROR_INVALID_HANDLE, not -1
         Assert.Contains("stage=wait win32=6", result.ToString());
-        // One failure is final: the wait is not retried against a handle that already failed.
-        Assert.Equal(1, api.WaitCalls);
+        // The identity poll runs first; one post-signal failure is final and is not retried.
+        Assert.Equal(2, api.WaitCalls);
+        Assert.Equal(1, api.WaitsAfterTerminate);
         Assert.True(api.Closed);
     }
 
@@ -407,6 +443,7 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
     int exitPollsBeforeGone = 0, bool exitedBeforeSignal = false) : ProcessTracker.IWindowsProcessApi
 {
     internal const long CreationTime = 1_330_000_000_000_000_000;
+    internal static readonly DateTimeOffset BootTimeUtc = DateTimeOffset.FromFileTime(CreationTime).AddDays(-1);
 
     private bool exited = exitedBeforeSignal;
 
@@ -430,9 +467,10 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
         return pid == 4242 && OpenError == 0 ? new IntPtr(1) : IntPtr.Zero;
     }
 
-    public bool StartTime(IntPtr handle, out long fileTime100Ns, out int error)
+    public bool StartTime(IntPtr handle, out long fileTime100Ns, out DateTimeOffset bootTimeUtc, out int error)
     {
         fileTime100Ns = CreationTime;
+        bootTimeUtc = BootTimeUtc;
         error = StartTimeError;
         return StartTimeError == 0;
     }
@@ -452,17 +490,20 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
         return exited;
     }
 
-    // WAIT_FAILED with the errno a bad handle answers (6 = ERROR_INVALID_HANDLE); any non-zero
-    // ExitCode turns the fake's wait into a real failure instead of WAIT_TIMEOUT.
+    // WAIT_FAILED with the errno a bad handle answers (6 = ERROR_INVALID_HANDLE). The pre-signal
+    // poll has its own error so a refusal there can be proved to send no signal.
+    public int PreTerminateWaitError { get; init; }
+
     public int WaitError { get; init; }
 
     public uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError)
     {
         WaitCalls++;
         if (TerminateCalls > 0 && waitMilliseconds > 0) WaitsAfterTerminate++;
-        if (WaitError != 0)
+        var error = TerminateCalls > 0 ? WaitError : PreTerminateWaitError;
+        if (error != 0)
         {
-            waitError = WaitError;
+            waitError = error;
             return uint.MaxValue; // WAIT_FAILED
         }
         waitError = 0;
@@ -486,6 +527,8 @@ internal static class Helpers
     internal sealed class Helper(Process process) : IDisposable
     {
         public int Id => process.Id;
+
+        internal bool WaitForExit(int milliseconds) => process.WaitForExit(milliseconds);
 
         public void Dispose()
         {
@@ -517,13 +560,6 @@ internal static class Helpers
             "among-us", "sleep");
 
     internal static bool StillRunning(int pid) => ProcessIdentity.TryGetProcessIdentity(pid).found;
-
-    internal static bool WaitUntilGone(int pid)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (StillRunning(pid) && DateTime.UtcNow < deadline) Thread.Sleep(10);
-        return !StillRunning(pid);
-    }
 }
 
 internal sealed class TempStore : IDisposable

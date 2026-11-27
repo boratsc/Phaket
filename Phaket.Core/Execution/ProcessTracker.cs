@@ -185,7 +185,7 @@ public sealed class ProcessTracker
         // terminate, and can be waited on.
         IntPtr Open(int pid, out int error);
 
-        bool StartTime(IntPtr handle, out long fileTime100Ns, out int error);
+        bool StartTime(IntPtr handle, out long fileTime100Ns, out DateTimeOffset bootTimeUtc, out int error);
 
         bool Terminate(IntPtr handle, out int error);
 
@@ -247,10 +247,7 @@ public sealed class ProcessTracker
 
         try
         {
-            // An exited process keeps its kernel object (and its handle answers), so this is
-            // "not running" before the start time is even asked for.
-            if (api.HasExited(handle)) return Removed(record, ProcessStopStatus.NotRunning, removeRecord);
-            if (!api.StartTime(handle, out var raw, out var timeError))
+            if (!api.StartTime(handle, out var raw, out var bootTimeUtc, out var timeError))
                 return timeError == errorInvalidParameter
                     ? Removed(record, ProcessStopStatus.NotRunning, removeRecord)
                     : StopResult(ProcessStopStatus.IdentityUnknown, "times", timeError);
@@ -259,7 +256,7 @@ public sealed class ProcessTracker
             try
             {
                 identity = new ProcessIdentity(record.Pid, DateTimeOffset.FromFileTime(raw), raw,
-                    ProcessStartTimeUnit.WindowsFileTime100Ns);
+                    ProcessStartTimeUnit.WindowsFileTime100Ns, BootTimeUtc: bootTimeUtc);
             }
             catch (ArgumentOutOfRangeException)
             {
@@ -269,6 +266,13 @@ public sealed class ProcessTracker
             // A PID that now answers with another start time is a recycled PID: the record is
             // stale, never a stop order, so it is cleared before answering (as on Linux).
             if (!Matches(record, identity)) return Removed(record, ProcessStopStatus.IdentityMismatch, removeRecord);
+
+            // The open handle pins this exact process, so its creation time cannot change before
+            // the signal. Poll liveness only after identity matches; an unreadable poll is not "alive".
+            var beforeSignal = api.Wait(handle, waitMilliseconds: 0, out var beforeSignalError);
+            if (beforeSignal == WaitObject0) return Removed(record, ProcessStopStatus.NotRunning, removeRecord);
+            if (beforeSignal != WaitTimeout)
+                return StopResult(ProcessStopStatus.IdentityUnknown, "wait", beforeSignalError);
 
             // shortcut: Windows has no portable graceful stop signal, so both modes use TerminateProcess;
             // upgrade when the UI needs a window-close request before forced termination.
@@ -314,9 +318,10 @@ public sealed class ProcessTracker
             return handle;
         }
 
-        public bool StartTime(IntPtr handle, out long fileTime100Ns, out int error)
+        public bool StartTime(IntPtr handle, out long fileTime100Ns, out DateTimeOffset bootTimeUtc, out int error)
         {
             fileTime100Ns = 0;
+            bootTimeUtc = default;
             if (GetProcessTimes(handle, out var creation, out _, out _, out _) == 0)
             {
                 error = Marshal.GetLastPInvokeError();
@@ -324,6 +329,7 @@ public sealed class ProcessTracker
             }
             error = 0;
             fileTime100Ns = ((long)creation.High << 32) | creation.Low;
+            bootTimeUtc = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(GetTickCount64());
             return true;
         }
 
@@ -402,6 +408,9 @@ public sealed class ProcessTracker
 
     // WAIT_OBJECT_0 from WaitForSingleObject: the kernel object is signalled, i.e. the process has exited.
     private const uint WaitObject0 = 0;
+
+    // WAIT_TIMEOUT: the process is still running.
+    private const uint WaitTimeout = 258;
 
     // WAIT_FAILED from WaitForSingleObject: the call itself failed, and GetLastError names why.
     private const uint WaitFailed = uint.MaxValue;
