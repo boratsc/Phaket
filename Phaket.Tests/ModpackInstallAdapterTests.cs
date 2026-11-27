@@ -375,10 +375,6 @@ public sealed class ModpackInstallAdapterTests
     public async Task Maps_github_and_nexus_to_core_contract_and_surfaces_hash_warning()
     {
         var root = TestAccounts.TempPath();
-        // Pak105 registers the same example/mod namespace for its own probe. A release asset
-        // already in this process-wide allowlist makes the GitHub warning disappear, so the
-        // gate starts from a known state here and the entry is dropped again below.
-        SourcePolicy.AllowGitHubRepository("example/mod", false);
         try
         {
             var gameRoot = Path.Combine(root, "game");
@@ -407,7 +403,6 @@ public sealed class ModpackInstallAdapterTests
         }
         finally
         {
-            SourcePolicy.AllowGitHubRepository("example/mod", false);
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }

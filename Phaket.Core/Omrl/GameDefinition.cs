@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Phaket.Core.Omrl;
@@ -156,16 +157,43 @@ public static class SourcePolicy
         "BepInEx/BepInEx",
     };
 
+    // Test seam: in a test process a flow resolves GitHub URLs against the entries it registered
+    // itself, so a probe repository added by one test is not handed to a test running beside it,
+    // and the process-wide list stays untouched. `set` receives the flow's entries (null when it
+    // registered none) and returns the new ones; production never installs the hook.
+    private static Action<Func<ImmutableHashSet<string>?, ImmutableHashSet<string>?>>? githubReposHook;
+
+    internal static void UseIsolatedGitHubRepos(Action<Func<ImmutableHashSet<string>?, ImmutableHashSet<string>?>> set)
+    {
+#if DEBUG
+        githubReposHook = set;
+#endif
+        set(_ => []);
+    }
+
+    private static ImmutableHashSet<string>? CurrentGitHubRepos()
+    {
+        ImmutableHashSet<string>? isolated = null;
+        if (githubReposHook is not null) githubReposHook(repos => { isolated = repos; return repos; });
+        else lock (GitHubGate) isolated = [.. GitHubRepos];
+        return isolated;
+    }
+
     // allow: false lets a test drop its own probe entry instead of leaving it for other tests.
     public static void AllowGitHubRepository(string ownerAndRepo, bool allow = true)
     {
         if (!IsValidGitHubRepository(ownerAndRepo))
             throw new ArgumentException("Expected a GitHub owner/repository pair.", nameof(ownerAndRepo));
-        lock (GitHubGate)
+        if (githubReposHook is null)
         {
-            if (allow) GitHubRepos.Add(ownerAndRepo);
-            else GitHubRepos.Remove(ownerAndRepo);
+            lock (GitHubGate)
+            {
+                if (allow) GitHubRepos.Add(ownerAndRepo);
+                else GitHubRepos.Remove(ownerAndRepo);
+            }
+            return;
         }
+        githubReposHook(repos => allow ? (repos ?? []).Add(ownerAndRepo) : (repos ?? []).Remove(ownerAndRepo));
     }
 
     // Catalog artifacts come from the trusted server and are pinned by sha256.
@@ -194,8 +222,7 @@ public static class SourcePolicy
     {
         if (!IsValidGitHubRepository(ownerAndRepo) || string.IsNullOrWhiteSpace(tag) || string.IsNullOrWhiteSpace(assetName)
             || !Uri.TryCreate(source, UriKind.Absolute, out var uri) || !IsGitHubAssetUrl(source)) return false;
-        lock (GitHubGate)
-            if (!GitHubRepos.Contains(ownerAndRepo)) return false;
+        if (CurrentGitHubRepos() is not { } allowed || !allowed.Contains(ownerAndRepo)) return false;
         var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length == 6
             && string.Equals(parts[0] + "/" + parts[1], ownerAndRepo, StringComparison.OrdinalIgnoreCase)
@@ -215,7 +242,7 @@ public static class SourcePolicy
         {
             var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, "^/([^/]+/[^/]+)/releases/download/");
             if (!match.Success) return false;
-            lock (GitHubGate) return GitHubRepos.Contains(match.Groups[1].Value);
+            return CurrentGitHubRepos()?.Contains(match.Groups[1].Value) is true;
         }
         if (uri.Host.Equals("objects.githubusercontent.com", StringComparison.OrdinalIgnoreCase)
             || uri.Host.Equals("release-assets.githubusercontent.com", StringComparison.OrdinalIgnoreCase)) return true;

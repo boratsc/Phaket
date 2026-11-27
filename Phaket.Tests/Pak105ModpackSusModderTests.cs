@@ -351,7 +351,11 @@ public sealed class Pak105ModpackSusModderTests
             Assert.Equal(2, plan.Preparations.Count);
             Assert.Equal("v1.0.0", Assert.Single(plan.SourcePlan!.Items).Version);
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            SourcePolicy.AllowGitHubRepository("example/mod", false);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     [Fact]
