@@ -55,7 +55,11 @@ public sealed class SaveBackupService
     }
 
     public Task<SaveBackupManifest> CreateBackupAsync(SaveBackupRequest request, string backupRoot, long limitBytes,
-        CancellationToken ct = default) => Task.Run(() => CreateBackup(request, backupRoot, limitBytes, ct), ct);
+        CancellationToken ct = default) => Task.Run(() => CreateBackup(request, backupRoot, limitBytes, ct, BeforeCopy), ct);
+
+    // Test seam only (the app never sets it): called with each scanned file between the
+    // pre-scan stat and its copy, so a stale scan can be produced deterministically.
+    internal Action<string>? BeforeCopy { get; set; }
 
     public Task<IReadOnlyList<SaveBackupManifest>> ListBackupsAsync(string backupRoot, string gameFolder,
         CancellationToken ct = default) => Task.Run(() => ListBackups(backupRoot, gameFolder), ct);
@@ -71,7 +75,8 @@ public sealed class SaveBackupService
         long keepBytes, bool consent, CancellationToken ct = default) =>
         Task.Run(() => Prune(backupRoot, gameFolder, keepCount, keepBytes, consent, ct), ct);
 
-    private static SaveBackupManifest CreateBackup(SaveBackupRequest request, string backupRoot, long limitBytes, CancellationToken ct)
+    private static SaveBackupManifest CreateBackup(SaveBackupRequest request, string backupRoot, long limitBytes, CancellationToken ct,
+        Action<string>? beforeCopy = null)
     {
         if (limitBytes <= 0)
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", "backup limit must be positive"));
@@ -112,6 +117,9 @@ public sealed class SaveBackupService
                 foreach (var file in trees[i].Files)
                 {
                     ct.ThrowIfCancellationRequested();
+                    // Test seam: runs after the pre-scan stat and before the copy, so a test can
+                    // make the scan demonstrably stale instead of racing a real writer.
+                    beforeCopy?.Invoke(file);
                     var key = RelativeOf(trees[i].Location, file);
                     var destination = Path.Combine(temp, FilesDirectoryName, LocationKey(trees[i].Location), key);
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);

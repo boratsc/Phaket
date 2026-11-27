@@ -108,7 +108,13 @@ public class ModInstallViewModelTests
                 return Task.FromResult(Preparation());
             };
             vm.Catalog.SelectedMod = mod;
-            await Task.Delay(100); Dispatcher.UIThread.RunJobs();
+            // The detail lookup and the refresh both hold modcatalog.db and both write into the
+            // view model: wait for the lookup instead of a fixed delay, then a refresh that is
+            // still running must finish before the page is built from its result.
+            if (vm.Catalog.PendingDetails is { } pendingDetails) await pendingDetails;
+            Dispatcher.UIThread.RunJobs();
+            if (vm.Catalog.RefreshCommand.ExecutionTask is { } refresh) await refresh;
+            Dispatcher.UIThread.RunJobs();
             vm.Catalog.Details = new ThunderstoreModDetails(mod, [version], DateTimeOffset.UnixEpoch);
             vm.SelectedTabIndex = 1;
             var window = new Window { Width = 1280, Height = 800, Content = new Phaket.Views.ModsView { DataContext = vm } };

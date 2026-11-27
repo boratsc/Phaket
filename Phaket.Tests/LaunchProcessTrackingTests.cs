@@ -104,7 +104,10 @@ public class LaunchProcessTrackingTests : IDisposable
         try
         {
             var result = service.Stop(record);
-            Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, result.Status);
+            // A Failed answer names the OS error in its message only when there is one; on
+            // Windows the exit is confirmed on the process handle, so a stay-alive is reported.
+            Assert.True(result.Status == Phaket.Core.Execution.ProcessStopStatus.Stopped,
+                $"stop answered {result.Status}: {result.Message}");
             Assert.Empty(new Phaket.Core.Execution.ProcessTracker(Store).Load());
             AssertGoneWithin(record.Pid);
         }

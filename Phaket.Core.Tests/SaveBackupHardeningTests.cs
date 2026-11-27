@@ -254,7 +254,9 @@ public sealed class SaveBackupHardeningTests
     }
 
     // 5. The byte count is taken while copying, not from the pre-scan: a save file that grew
-    //    between the scan and the copy stops the backup and its half copy is removed.
+    //    between the scan and the copy stops the backup and its half copy is removed. The
+    //    seam makes the growth deterministic — a writer racing the copy saw the same state
+    //    on a fast CI disk and the backup legitimately succeeded.
     [Fact]
     public async Task GrowingSaveFileStopsTheBackupAndCleansUp()
     {
@@ -263,30 +265,18 @@ public sealed class SaveBackupHardeningTests
         File.WriteAllBytes(save, new byte[1_000_000]);
         const long limit = 500_000_000;
         var gameFolder = Path.Combine(f.Backups, f.GameFolder);
-        var backup = new SaveBackupService().CreateBackupAsync(new(f.Game, "among-us-steam", [f.Saves]),
-            f.Backups, limit, CancellationToken.None);
-        // The growth races the copy of this one file: the only outcomes that may not happen are a
-        // successful backup or a half working copy. Both the pre-scan (a stale 1 MB count) and a
-        // copy that reads past its budget are covered, so every run asserts one real refusal.
-        for (var attempt = 0; attempt < 50 && !backup.IsCompleted; attempt++)
+        var service = new SaveBackupService
         {
-            if (backup.IsCompleted) break;
-            try
-            {
-                using var writer = new FileStream(save, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-                writer.SetLength(limit + 1);
-                break;
-            }
-            catch (IOException) { await Task.Delay(1, Ct); }
-        }
-        PhaketException? error = null;
-        try { await backup; }
-        catch (PhaketException e) { error = e; }
+            // After the scan counted 1 MB, the file is over the limit: the copy must refuse it.
+            BeforeCopy = path => { if (path == save) File.WriteAllBytes(path, new byte[limit + 1]); },
+        };
 
-        Assert.NotNull(error);
-        Assert.True(error.Error.Code is ErrorCodes.SaveBackupTooLarge or ErrorCodes.SaveBackupChangedDuringCopy,
-            $"unexpected code {error.Error.Code}");
-        Assert.False(Directory.Exists(gameFolder) && Directory.GetFileSystemEntries(gameFolder).Length > 0);
+        var error = await Assert.ThrowsAsync<PhaketException>(() => service.CreateBackupAsync(
+            new(f.Game, "among-us-steam", [f.Saves]), f.Backups, limit, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SaveBackupChangedDuringCopy, error.Error.Code);
+        // The half copy and its folder are gone: no backup directory is left behind.
+        Assert.Empty(Directory.Exists(gameFolder) ? Directory.GetFileSystemEntries(gameFolder) : []);
     }
 
     // 6. Every manifest hash is verified before the first write.

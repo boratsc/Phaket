@@ -55,12 +55,30 @@ public class GameLaunchIsolationTests : IDisposable
 
     // The helper stands in for the game: it writes the directory it started in and its path
     // variables into the package folder, which is what the game would read for its saves.
+    // POSIX: a sh script. Windows: text is not an executable, so a real pwsh (Windows PowerShell
+    // 5.1 as the fallback) runs the script; a console app in a non-interactive process has an
+    // empty HOME, so the plan's HOME/XDG_CONFIG_HOME are what the launch asserts.
     private static string InstallHelper(string directory)
     {
         Directory.CreateDirectory(directory);
         var exe = Path.Combine(directory, "Among Us.exe");
+        if (OperatingSystem.IsWindows())
+        {
+            var windowsPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            var pwsh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "PowerShell", "7", "pwsh.exe");
+            File.WriteAllText(exe, File.Exists(pwsh) ? pwsh : windowsPowerShell);
+            File.WriteAllText(Path.Combine(directory, "launch-env.ps1"), """
+                $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
+                $lines = @("HOME=$env:HOME", "XDG_CONFIG_HOME=$env:XDG_CONFIG_HOME", "PWD=$($PWD.Path)")
+                [IO.File]::WriteAllLines((Join-Path $dir 'launch-env.txt'), $lines)
+                Start-Sleep -Seconds 30
+                """);
+            return exe;
+        }
         File.WriteAllText(exe, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return exe;
     }
 
@@ -104,16 +122,18 @@ public class GameLaunchIsolationTests : IDisposable
     private GameViewModel Create(GameCatalogItem item, out LaunchService launch)
     {
         launch = new LaunchService(Store);
-        var vm = new GameViewModel(item, () => { }, appDataRoot: AppData)
+        return Create(item, launch);
+    }
+
+    private GameViewModel Create(GameCatalogItem item, LaunchService launch) =>
+        // No Steam on this machine: the page asks nothing and "play" starts the package itself.
+        new(item, () => { }, appDataRoot: AppData)
         {
             Launch = launch,
-            HostOs = "linux",
-            // No Steam on this machine: the page asks nothing and "play" starts the package itself.
+            HostOs = OperatingSystem.IsWindows() ? "windows" : "linux",
             SteamHome = SteamRoot,
             SteamRoots = [SteamRoot],
         };
-        return vm;
-    }
 
     // The command is async: pump the dispatcher until its flag flips (a fixture Steam writes fast).
     private void Settle(Func<bool> done)
@@ -134,11 +154,32 @@ public class GameLaunchIsolationTests : IDisposable
         task.GetAwaiter().GetResult();
     }
 
-    private static void Kill(LaunchService launch)
+    // The page says the same sentence on a refused start; the wording checked is the whole answer.
+    // A tracked record is what a successful start leaves behind, so the second check names the
+    // real cause: there is no PID without a started process.
+    private static void AssertLaunched(GameViewModel vm)
     {
-        foreach (var record in new ProcessTracker(null).Load())
-            try { using var process = System.Diagnostics.Process.GetProcessById(record.Pid); process.Kill(entireProcessTree: true); process.WaitForExit(5000); }
-            catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        var expected = LocalizationService.Instance["Game.Launched"];
+        Assert.True(expected == vm.StatusMessage, $"status '{vm.StatusMessage}', expected '{expected}'");
+        Assert.True(vm.Launch.Tracked("945360") is not null, "the launch was refused before any process started");
+    }
+
+    // The helper is ours: end it by PID, so no ping/pwsh sleep outlives the run.
+    private static void KillHelper(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(5000);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+    }
+
+    private void Kill(LaunchService launch)
+    {
+        foreach (var record in new ProcessTracker(Store).Load())
+            KillHelper(record.Pid);
     }
 
     [AvaloniaFact]
@@ -153,7 +194,7 @@ public class GameLaunchIsolationTests : IDisposable
         try
         {
             Play(vm);
-            Assert.Equal(LocalizationService.Instance["Game.Launched"], vm.StatusMessage);
+            AssertLaunched(vm);
             var seen = File.ReadAllText(Path.Combine(package, "launch-env.txt"));
             var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
             Assert.Contains($"HOME={home}", seen);
@@ -210,10 +251,14 @@ public class GameLaunchIsolationTests : IDisposable
                 LocalizationService.Instance["Game.SavesShared"]);
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową.", LocalizationService.Instance["Game.SavesSharedTitle"]);
             var seen = File.ReadAllText(Path.Combine(package, "launch-env.txt"));
-            var realHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            // A shared launch passes no redirect at all: the game keeps the profile it always
+            // had. A console app's HOME is empty, so "empty" is the truthful comparison, not
+            // the test runner's real profile (Linux keeps its value and asserts it).
+            var realHome = OperatingSystem.IsWindows() ? "" : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Assert.Contains($"HOME={realHome}", seen); // nothing redirected
             Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName, seen);
-            Assert.NotNull(launch.Tracked("945360")); // starting was never refused
+            Assert.True(vm.Launch.Tracked("945360") is not null,
+                $"the game did not start: '{vm.StatusMessage}'"); // starting was never refused
             vm.DismissSavesSharedNoticeCommand.Execute(null);
             Assert.False(vm.IsSavesSharedNoticeVisible);
         }

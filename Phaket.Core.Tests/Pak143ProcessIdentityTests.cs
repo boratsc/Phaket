@@ -208,20 +208,22 @@ public sealed class Pak143ProcessTrackerTests
         Assert.Equal("{ not json", File.ReadAllText(temp.Path));
     }
 
-    // The Windows stop is asserted through the OS seam on every platform: the CI failure was a
-    // silent "Stopped" while the process kept running, so each refusal must stay a refusal.
+    // The Windows stop is asserted through the OS seam on every platform: a refusal must stay a
+    // refusal, a recycled PID must clear its stale record, and a dead PID is "not running".
     [Fact]
     public void WindowsTerminateRefusalIsNeverReportedAsStopped()
     {
         var api = new FakeWindowsApi(terminateAccepted: false, exitsOnTerminate: false);
+        var removed = new List<ProcessRecord>();
 
         var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
-            TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(5));
+            TimeSpan.FromMilliseconds(100), removed.Add);
 
         Assert.Equal(ProcessStopStatus.Failed, result.Status);
         Assert.Contains("nie miał uprawnień", result.MessagePl);
         Assert.Contains("not allowed", result.MessageEn);
         Assert.Equal(1, api.TerminateCalls);
+        Assert.Empty(removed);
         Assert.True(api.Closed, "the handle must be closed on every path");
     }
 
@@ -232,7 +234,7 @@ public sealed class Pak143ProcessTrackerTests
         var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: false);
 
         var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
-            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+            TimeSpan.FromMilliseconds(50));
 
         Assert.Equal(ProcessStopStatus.Failed, result.Status);
         Assert.True(api.Closed);
@@ -242,27 +244,34 @@ public sealed class Pak143ProcessTrackerTests
     public void WindowsStopReportsStoppedOnlyAfterTheExitIsConfirmed()
     {
         var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true, exitPollsBeforeGone: 2);
+        var removed = new List<ProcessRecord>();
 
         var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
-            TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(5));
+            TimeSpan.FromMilliseconds(500), removed.Add);
 
         Assert.Equal(ProcessStopStatus.Stopped, result.Status);
         Assert.Contains("Gra została zatrzymana.", result.MessagePl);
-        Assert.True(api.PollsAfterTerminate >= 3, "the exit has to be confirmed by polling the handle");
+        Assert.True(api.WaitsAfterTerminate >= 1, "the exit has to be confirmed by waiting on the handle");
+        Assert.Equal(LiveWindowsRecord().Pid, Assert.Single(removed).Pid);
         Assert.True(api.Closed);
         Assert.False(api.ClosedBeforeTerminate, "the handle must outlive the signal it carries");
     }
 
     [Fact]
-    public void WindowsStopOfAMismatchedStartTimeNeverSignals()
+    public void WindowsStopOfAMismatchedStartTimeNeverSignalsAndClearsTheRecord()
     {
         var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true);
         var record = LiveWindowsRecord() with { StartTime = 1_300_000_000_000_000_001 };
+        var removed = new List<ProcessRecord>();
 
         var result = ProcessTracker.StopWindows(record, force: true, api,
-            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+            TimeSpan.FromMilliseconds(50), removed.Add);
 
         Assert.Equal(ProcessStopStatus.IdentityMismatch, result.Status);
+        Assert.Contains("innego procesu", result.MessagePl);
+        // Remove keys on the record it is given; the store path is what the Windows test below
+        // proves, so here the cleaner itself is what has to run.
+        Assert.NotEmpty(removed);
         Assert.Equal(0, api.TerminateCalls);
         Assert.True(api.Closed);
     }
@@ -271,11 +280,43 @@ public sealed class Pak143ProcessTrackerTests
     public void WindowsStopOfAnAlreadyFinishedProcessIsNotRunning()
     {
         var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true, exitedBeforeSignal: true);
+        var removed = new List<ProcessRecord>();
 
         var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
-            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+            TimeSpan.FromMilliseconds(50), removed.Add);
 
         Assert.Equal(ProcessStopStatus.NotRunning, result.Status);
+        Assert.Single(removed);
+        Assert.Equal(0, api.TerminateCalls);
+        Assert.True(api.Closed);
+    }
+
+    [Fact]
+    public void WindowsStopOfADeadPidClearsTheRecord()
+    {
+        // OpenProcess on an exited PID answers ERROR_INVALID_PARAMETER: the record is stale.
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true) { OpenError = 87 };
+        var removed = new List<ProcessRecord>();
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(50), removed.Add);
+
+        Assert.Equal(ProcessStopStatus.NotRunning, result.Status);
+        Assert.Single(removed);
+        Assert.False(api.Closed, "a failed open leaves no handle to close");
+    }
+
+    [Fact]
+    public void WindowsStopOfAnUnreadableStartTimeFailsClosedAndKeepsTheRecord()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true) { StartTimeError = 5 };
+        var removed = new List<ProcessRecord>();
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(50), removed.Add);
+
+        Assert.Equal(ProcessStopStatus.IdentityUnknown, result.Status);
+        Assert.Empty(removed);
         Assert.Equal(0, api.TerminateCalls);
         Assert.True(api.Closed);
     }
@@ -302,16 +343,23 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
 
     public bool ClosedBeforeTerminate { get; private set; }
 
+    // ERROR_INVALID_PARAMETER from OpenProcess is what a dead PID answers on Windows.
+    public int OpenError { get; init; }
+
+    // 0 = GetProcessTimes succeeds; any other value is its last error.
+    public int StartTimeError { get; init; }
+
     public IntPtr Open(int pid, out int error)
     {
-        error = 0;
-        return pid == 4242 ? new IntPtr(1) : IntPtr.Zero;
+        error = OpenError;
+        return pid == 4242 && OpenError == 0 ? new IntPtr(1) : IntPtr.Zero;
     }
 
-    public bool StartTime(IntPtr handle, out long fileTime100Ns)
+    public bool StartTime(IntPtr handle, out long fileTime100Ns, out int error)
     {
         fileTime100Ns = CreationTime;
-        return true;
+        error = StartTimeError;
+        return StartTimeError == 0;
     }
 
     public bool Terminate(IntPtr handle, out int error)
@@ -328,6 +376,15 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
             exited = true;
         return exited;
     }
+
+    public uint Wait(IntPtr handle, uint waitMilliseconds)
+    {
+        if (TerminateCalls > 0 && waitMilliseconds > 0) WaitsAfterTerminate++;
+        // A bounded wait answers WAIT_OBJECT_0 once the exit happens; an exited process answers at once.
+        return HasExited(handle) ? 0u : 258u; // WAIT_TIMEOUT
+    }
+
+    public int WaitsAfterTerminate { get; private set; }
 
     public void Close(IntPtr handle)
     {

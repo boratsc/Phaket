@@ -144,6 +144,13 @@ public sealed class ProcessTracker
         return StopResult(status);
     }
 
+    // The Windows stop receives its cleaner, so the same code runs in a test that owns no store.
+    private static ProcessStopResult Removed(ProcessRecord record, ProcessStopStatus status, Action<ProcessRecord>? remove)
+    {
+        remove?.Invoke(record);
+        return Localized(status);
+    }
+
     private static ProcessStopResult StopResult(ProcessStopStatus status) => Localized(status);
 
     // UI picks the language; the record of what happened is the same in both.
@@ -171,7 +178,7 @@ public sealed class ProcessTracker
         // verifies the start time and carries the right to terminate.
         IntPtr Open(int pid, out int error);
 
-        bool StartTime(IntPtr handle, out long fileTime100Ns);
+        bool StartTime(IntPtr handle, out long fileTime100Ns, out int error);
 
         bool Terminate(IntPtr handle, out int error);
 
@@ -179,34 +186,40 @@ public sealed class ProcessTracker
         // or the answer cannot be read.
         bool HasExited(IntPtr handle);
 
+        // WaitForSingleObject's result: WAIT_OBJECT_0 (0) means the process handle is signalled.
+        uint Wait(IntPtr handle, uint waitMilliseconds);
+
         void Close(IntPtr handle);
     }
 
     private static readonly IWindowsProcessApi Windows = new Win32ProcessApi();
 
     private ProcessStopResult StopWindows(ProcessRecord record, bool force) =>
-        StopWindows(record, force, Windows, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(10));
+        StopWindows(record, force, Windows, TimeSpan.FromSeconds(5), removeRecord: Remove);
 
     internal static ProcessStopResult StopWindows(ProcessRecord record, bool force, IWindowsProcessApi api,
-        TimeSpan exitTimeout, TimeSpan pollInterval)
+        TimeSpan exitTimeout, Action<ProcessRecord>? removeRecord = null)
     {
+        // The same answers the Linux stop already gives for a dead PID (87 = ERROR_INVALID_PARAMETER).
         const int errorInvalidParameter = 87;
-        const int errorAccessDenied = 5;
 
         var handle = api.Open(record.Pid, out var openError);
         if (handle == IntPtr.Zero)
         {
             return openError == errorInvalidParameter
-                ? Localized(ProcessStopStatus.NotRunning)
-                : openError == errorAccessDenied
-                    ? Localized(ProcessStopStatus.Failed)
-                    : Localized(ProcessStopStatus.IdentityUnknown);
+                ? Removed(record, ProcessStopStatus.NotRunning, removeRecord)
+                : Localized(ProcessStopStatus.IdentityUnknown);
         }
 
         try
         {
-            if (!api.StartTime(handle, out var raw))
-                return Localized(ProcessStopStatus.IdentityUnknown);
+            // An exited process keeps its kernel object (and its handle answers), so this is
+            // "not running" before the start time is even asked for.
+            if (api.HasExited(handle)) return Removed(record, ProcessStopStatus.NotRunning, removeRecord);
+            if (!api.StartTime(handle, out var raw, out var timeError))
+                return timeError == errorInvalidParameter
+                    ? Removed(record, ProcessStopStatus.NotRunning, removeRecord)
+                    : Localized(ProcessStopStatus.IdentityUnknown);
             if (raw <= 0) return Localized(ProcessStopStatus.IdentityUnknown);
             ProcessIdentity identity;
             try
@@ -219,23 +232,25 @@ public sealed class ProcessTracker
                 return Localized(ProcessStopStatus.IdentityUnknown);
             }
 
-            if (!Matches(record, identity)) return Localized(ProcessStopStatus.IdentityMismatch);
+            // A PID that now answers with another start time is a recycled PID: the record is
+            // stale, never a stop order, so it is cleared before answering (as on Linux).
+            if (!Matches(record, identity)) return Removed(record, ProcessStopStatus.IdentityMismatch, removeRecord);
 
             // shortcut: Windows has no portable graceful stop signal, so both modes use TerminateProcess;
             // upgrade when the UI needs a window-close request before forced termination.
             _ = force;
-            // Ask first: a process that is already gone is a truthful "not running".
-            if (api.HasExited(handle)) return Localized(ProcessStopStatus.NotRunning);
 
-            // The request is asynchronous, and its result alone does not say the process died.
             var accepted = api.Terminate(handle, out _);
+            // The process handle is signalled exactly when the process ends: that is the
+            // confirmation TerminateProcess itself does not give. One bounded wait is enough;
+            // the loop only covers an early wake before the deadline.
             var deadline = DateTime.UtcNow + exitTimeout;
-            while (!api.HasExited(handle) && DateTime.UtcNow < deadline) Thread.Sleep(pollInterval);
+            while (WaitObject0 != api.Wait(handle, Remaining(deadline)) && DateTime.UtcNow < deadline) { }
             if (!api.HasExited(handle)) return Localized(ProcessStopStatus.Failed);
-            // Access denied from TerminateProcess on a finished process is "success", but a refusal
-            // with the process still exiting on its own is not something to report as stopped.
+            // Access denied from TerminateProcess on a process that then finished is "success", but a
+            // refusal with the process still alive is not something to report as stopped.
             if (!accepted) return Localized(ProcessStopStatus.Failed);
-            return Localized(ProcessStopStatus.Stopped);
+            return Removed(record, ProcessStopStatus.Stopped, removeRecord);
         }
         finally
         {
@@ -254,10 +269,15 @@ public sealed class ProcessTracker
             return handle;
         }
 
-        public bool StartTime(IntPtr handle, out long fileTime100Ns)
+        public bool StartTime(IntPtr handle, out long fileTime100Ns, out int error)
         {
             fileTime100Ns = 0;
-            if (!GetProcessTimes(handle, out var creation, out _, out _, out _)) return false;
+            if (!GetProcessTimes(handle, out var creation, out _, out _, out _))
+            {
+                error = Marshal.GetLastPInvokeError();
+                return false;
+            }
+            error = 0;
             fileTime100Ns = ((long)creation.High << 32) | creation.Low;
             return true;
         }
@@ -269,8 +289,9 @@ public sealed class ProcessTracker
             return terminated;
         }
 
-        public bool HasExited(IntPtr handle) =>
-            WaitForSingleObject(handle, waitMilliseconds: 0) == WaitObject0;
+        public bool HasExited(IntPtr handle) => Wait(handle, waitMilliseconds: 0) == WaitObject0;
+
+        public uint Wait(IntPtr handle, uint waitMilliseconds) => WaitForSingleObject(handle, waitMilliseconds);
 
         public void Close(IntPtr handle) => CloseHandle(handle);
     }
@@ -336,20 +357,27 @@ public sealed class ProcessTracker
     // WAIT_OBJECT_0 from WaitForSingleObject: the kernel object is signalled, i.e. the process has exited.
     private const uint WaitObject0 = 0;
 
+    // The wait left until a deadline, clamped to what WaitForSingleObject accepts (INFINITE is -1).
+    private static uint Remaining(DateTime deadline) =>
+        (uint)Math.Clamp((deadline - DateTime.UtcNow).TotalMilliseconds, 0, int.MaxValue);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetProcessTimes(IntPtr process, out FileTime creationTime,
         out FileTime exitTime, out FileTime kernelTime, out FileTime userTime);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool TerminateProcess(IntPtr process, uint exitCode);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
     private static extern uint WaitForSingleObject(IntPtr handle, uint waitMilliseconds);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("kernel32.dll")]
