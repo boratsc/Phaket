@@ -31,6 +31,9 @@ public sealed class LaunchService
     // instead of asking a real Steam; the app never does.
     internal static Func<string, bool>? SteamLauncher;
 
+    // A counting seam for the fail-closed test; production uses Process.Start.
+    internal static Func<ProcessStartInfo, Process?>? SteamProcessStarter;
+
     // processStorePath is a seam for tests; app state lives in %AppData%/phaket/processes.json,
     // the same file SessionSweep refreshes.
     public LaunchService(string? processStorePath = null) => trackers = new ProcessTracker(processStorePath);
@@ -40,11 +43,14 @@ public sealed class LaunchService
         if (string.IsNullOrWhiteSpace(steamAppId)) return false;
         var uri = $"steam://rungameid/{steamAppId}";
         if (SteamLauncher is { } launcher) return launcher(uri);
+        if (Environment.GetEnvironmentVariable("PHAKET_TEST_MODE") == "1")
+            throw new InvalidOperationException("steam:// blocked in tests");
         try
         {
             // steam://rungameid only asks the Steam client to start the game: no process of
             // ours, so no PID. A record here would point at Steam, never at the game.
-            Process.Start(new ProcessStartInfo
+            var start = SteamProcessStarter ?? Process.Start;
+            start(new ProcessStartInfo
             {
                 FileName = uri,
                 UseShellExecute = true,

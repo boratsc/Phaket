@@ -17,6 +17,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Phaket.InstallerStub\Phaket.InstallerStub.csproj" />
+    <ProjectReference Include="..\..\Phaket\Phaket.csproj" />
+    <Compile Include="..\..\Phaket.Tests\SteamLaunchGuard.cs" Link="SteamLaunchGuard.cs" />
+    <Compile Include="..\..\Phaket.Tests\SteamLaunchGuardTests.cs" Link="SteamLaunchGuardTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,6 +11,9 @@ internal static class SteamLaunchGuard
     internal static readonly ConcurrentQueue<string> RequestedUris = new();
 
     [ModuleInitializer]
-    internal static void BlockSystemSteamLaunches() =>
+    internal static void BlockSystemSteamLaunches()
+    {
+        Environment.SetEnvironmentVariable("PHAKET_TEST_MODE", "1");
         LaunchService.SteamLauncher = uri => { RequestedUris.Enqueue(uri); return true; };
+    }
 }

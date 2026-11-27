@@ -13,6 +13,9 @@
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <ProjectReference Include="../Phaket.Core/Phaket.Core.csproj" />
+    <ProjectReference Include="../Phaket/Phaket.csproj" />
+    <Compile Include="../Phaket.Tests/SteamLaunchGuard.cs" Link="SteamLaunchGuard.cs" />
+    <Compile Include="../Phaket.Tests/SteamLaunchGuardTests.cs" Link="SteamLaunchGuardTests.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>

@@ -35,6 +35,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Phaket.Tests" />
+    <InternalsVisibleTo Include="Phaket.Core.Tests" />
+    <InternalsVisibleTo Include="Phaket.InstallerStub.Tests" />
   </ItemGroup>
 
   <ItemGroup>
