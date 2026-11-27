@@ -168,6 +168,11 @@ identyczny `OperationPlan`. Testy sprawdzają pary kluczy i placeholdery.
   /`PHAKET_LEGENDARY`); bez skonfigurowanych narzędzi plan kończy się czytelnym
   błędem, nigdy cichym pobraniem z niezaufanego źródła.
 
+## Wydawanie
+
+Runbook operacyjny (beta, promocja beta→prod, test e2e aktualizacji, rollback):
+[`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md).
+
 ## Znane ograniczenia PoC
 
 - Instalacja w UI działa na **sandbox fixture** (nie na prawdziwej grze); E2E na realnej
