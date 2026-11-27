@@ -56,6 +56,7 @@
   "SAVE_BACKUP_MANIFEST_INVALID": "The backup {id} cannot be read: its description file is missing or damaged.",
   "SAVE_BACKUP_RESTORE_REFUSED": "The backup would be restored outside the save folder ({path}). Nothing was restored.",
   "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED": "Deleting old backups is permanent. Confirm first that Phaket may remove them.",
+  "SAVE_BACKUP_CHANGED_DURING_COPY": "The saves of {game} changed while they were being copied ({path}), so the backup would mix two states. Nothing was kept — close the game and start the install again.",
   "DISK_FULL": "Not enough disk space. {requiredMb} MB more is needed.",
   "AURELIA_UNAVAILABLE": "Aurelia is not available ({reason}), so Phaket shows the locally detected Steam games instead.",
   "AURELIA_FAILED": "Aurelia returned an error, so Phaket shows the locally detected Steam games instead: {detail}",

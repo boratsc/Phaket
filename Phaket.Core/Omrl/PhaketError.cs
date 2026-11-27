@@ -75,6 +75,9 @@ public static class ErrorCodes
     public const string SaveBackupRestoreRefused = "SAVE_BACKUP_RESTORE_REFUSED";
     // Deleting old backups is irreversible; it only runs with the user's explicit consent.
     public const string SaveBackupPruneConsentRequired = "SAVE_BACKUP_PRUNE_CONSENT_REQUIRED";
+    // The save folder grew while it was being copied: the copy stops rather than
+    // produce a backup that is neither the old nor the new state (PAK-141 review).
+    public const string SaveBackupChangedDuringCopy = "SAVE_BACKUP_CHANGED_DURING_COPY";
     // PAK-146: a package tree is never half-materialized onto a full disk; the worst-case
     // size (sum of cache files) is checked before the first copy.
     public const string DiskFull = "DISK_FULL";

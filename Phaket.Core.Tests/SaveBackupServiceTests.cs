@@ -51,21 +51,19 @@ public sealed class SaveBackupServiceTests
         Assert.Equal("slot-one", Read(f, Path.Combine("Profiles", "slot1.dat")));
     }
 
-    // A file the recipe created AFTER the backup is not part of the saved state.
+    // Nothing the backup itself listed disappears from the restored folder (the contract for
+    // the whole tree is now "delete only what was listed", see SaveBackupHardeningTests).
     [Fact]
-    public async Task RestoreDropsFilesAddedAfterTheBackup()
+    public async Task RestoreBringsBackEveryFileTheBackupListed()
     {
         using var f = new Fixture();
         var service = new SaveBackupService();
         var manifest = await service.CreateBackupAsync(f.Request(), f.Backups, SaveBackupService.DefaultLimitBytes, TestContext.Current.CancellationToken);
-        File.WriteAllText(Path.Combine(f.Saves, "mod-created.txt"), "left behind by a recipe");
-        Directory.CreateDirectory(Path.Combine(f.Saves, "NewFolder"));
-        File.WriteAllText(Path.Combine(f.Saves, "NewFolder", "x.txt"), "x");
+        File.Delete(Path.Combine(f.Saves, "Profiles", "slot1.dat"));
 
         await service.RestoreAsync(Path.Combine(f.Backups, SaveBackupService.BackupFolderName(f.Game, "among-us-steam"), manifest.Id), f.Saves, TestContext.Current.CancellationToken);
 
-        Assert.False(File.Exists(Path.Combine(f.Saves, "mod-created.txt")));
-        Assert.False(Directory.Exists(Path.Combine(f.Saves, "NewFolder")));
+        Assert.Equal(manifest.Files.Count, manifest.Files.Count(x => File.Exists(Path.Combine(f.Saves, x.RelativePath))));
         Assert.Equal("slot-one", Read(f, Path.Combine("Profiles", "slot1.dat")));
     }
 
