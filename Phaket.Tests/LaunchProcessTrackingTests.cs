@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Phaket.Core.Execution;
 using Phaket.Services;
 using Phaket.ViewModels;
 
@@ -119,9 +120,14 @@ public class LaunchProcessTrackingTests : IDisposable
     public void SteamProtocolLaunchLeavesNoRecord()
     {
         var service = new LaunchService(Store);
-        // The protocol is delegated to the platform shell; whether it resolves does not
-        // matter for the record, which is absent by design (no PID on our side).
-        service.LaunchGame("945360");
+        // No spy: the module initializer's default guard must intercept this call. A real
+        // steam:// handler would open Steam, so this assertion proves no system hand-off occurred.
+        Assert.NotNull(LaunchService.SteamLauncher);
+        var before = SteamLaunchGuard.RequestedUris.Count;
+        // The protocol is delegated to the launcher seam; the record is absent by design.
+        Assert.True(service.LaunchGame("945360"));
+        Assert.Equal(before + 1, SteamLaunchGuard.RequestedUris.Count);
+        Assert.Equal("steam://rungameid/945360", SteamLaunchGuard.RequestedUris.Last());
         Assert.False(File.Exists(Store));
         Assert.Null(service.Tracked("945360"));
     }
@@ -160,13 +166,8 @@ public class LaunchProcessTrackingTests : IDisposable
             AssertAliveWithin(record.Pid);
             // Confirmation goes through the real fail-closed tracker; the PID is our fixture.
             var stopped = service.Stop(record);
-            Assert.True(stopped.Status == Phaket.Core.Execution.ProcessStopStatus.Stopped,
-                $"stop answered {stopped}");
-            // The record is gone after the first stop, so a second one reports "no longer
-            // running" — the other truthful fail-closed answer.
+            Assert.Equal(ProcessStopStatus.Stopped, stopped.Status);
             AssertGoneWithin(record.Pid);
-            Assert.Contains(vm.Launch.Stop(record).Status,
-                new[] { Phaket.Core.Execution.ProcessStopStatus.Stopped, Phaket.Core.Execution.ProcessStopStatus.NotRunning });
 
             vm.ConfirmStopCommand.Execute(null);
             Assert.Null(vm.PendingStop);

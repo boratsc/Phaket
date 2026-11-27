@@ -23,9 +23,11 @@ public class GameLaunchIsolationTests : IDisposable
     private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-iso-").FullName;
 
     // The steam:// requests the run made; set only through the app's own launcher seam.
+    // The module guard already intercepts every request; the spy additionally records this fixture's.
     private static readonly List<string> Called = [];
 
     // Records the launch request and reports success without starting anything.
+    // Restores the module's hermetic guard, never null and never the system launcher.
     private sealed class SteamLauncherSpy : IDisposable
     {
         private readonly Func<string, bool>? previous = LaunchService.SteamLauncher;
@@ -67,33 +69,26 @@ public class GameLaunchIsolationTests : IDisposable
         return item;
     }
 
-    // The helper stands in for the game: it writes the directory it started in and its path
-    // variables into the package folder, which is what the game would read for its saves.
-    // POSIX: a sh script named like the game. Windows: text is not an executable, so the fixture
-    // returns the real Windows PowerShell as the executable and the script as its arguments (a
-    // console app in a non-interactive process has an empty HOME, so the plan's HOME/
-    // XDG_CONFIG_HOME are what the launch asserts). -NoProfile keeps the runner's profile out.
+    // POSIX: a sh script named like the game. Windows: a real PowerShell PE under the definition's
+    // executable name; the same script runs through it and records HOME/XDG_CONFIG_HOME/PWD.
+    // -NoProfile keeps the runner's profile out.
     private static (string Executable, string Arguments) InstallHelper(string directory)
     {
         Directory.CreateDirectory(directory);
-        var script = Path.Combine(directory, "launch-env.ps1");
         var game = Path.Combine(directory, "Among Us.exe");
         if (OperatingSystem.IsWindows())
         {
-            // System32\WindowsPowerShell\v1.0\powershell.exe exists on every Windows and is absent
-            // from the per-runner "latest" PowerShell installs; pwsh 7 is only preferred when present.
-            var windowsPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                "WindowsPowerShell", "v1.0", "powershell.exe");
-            var pwsh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "PowerShell", "7", "pwsh.exe");
-            var shell = File.Exists(pwsh) ? pwsh : windowsPowerShell;
+            var script = Path.Combine(directory, "launch-env.ps1");
+            // A real PE under the definition's executable name: a text file named .exe is not runnable.
+            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe"), game);
             File.WriteAllText(script, """
                 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
                 $lines = @("HOME=$env:HOME", "XDG_CONFIG_HOME=$env:XDG_CONFIG_HOME", "PWD=$($PWD.Path)")
                 [IO.File]::WriteAllLines((Join-Path $dir 'launch-env.txt'), $lines)
                 Start-Sleep -Seconds 30
                 """);
-            return (shell, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"");
+            return (game, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"");
         }
         File.WriteAllText(game, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
         File.SetUnixFileMode(game, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -180,9 +175,10 @@ public class GameLaunchIsolationTests : IDisposable
     // launcher's own diagnostic too, so a CI log names the failure on the first failing line.
     private static void AssertLaunched(GameViewModel vm)
     {
-        var expected = LocalizationService.Instance["Game.Launched"];
-        Assert.True(expected == vm.StatusMessage,
-            $"status '{vm.StatusMessage}', expected '{expected}': {LaunchDiagnostic(vm)}");
+        // A direct launch is not "via Steam"; the contract is a successful start plus a record,
+        // not a Store-named status shared with the shortcut path.
+        Assert.True(vm.LastLaunch is { Started: true, Tracked: true },
+            $"direct launch was not started and tracked: {LaunchDiagnostic(vm)}");
         Assert.True(vm.Launch.Tracked("945360") is not null,
             $"the launch was refused before any process started: {LaunchDiagnostic(vm)}");
     }
