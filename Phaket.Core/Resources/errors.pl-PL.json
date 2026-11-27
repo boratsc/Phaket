@@ -15,6 +15,7 @@
   "ARTIFACT_DOWNLOAD_UNAVAILABLE": "Artefakt {artifact} wymaga pobrania, które nie jest dostępne w tej wersji. Użyj lokalnej kopii z zgodną sumą kontrolną.",
   "ARTIFACT_DOWNLOAD_TIMEOUT": "Pobieranie artefaktu {artifact} przekroczyło limit czasu. Sprawdź połączenie i spróbuj ponownie.",
   "ARTIFACT_SIZE_MISMATCH": "Artefakt {artifact} ma rozmiar {actual}, a oczekiwano {expected} bajtów. Pobranie zostało odrzucone.",
+  "ARCH_MISMATCH": "Artefakt {artifact} jest zbudowany dla architektury {artifactArch}, a ta instalacja to {arch}. Mod się nie wczyta — wybierz wersję dla {arch} lub inną instalację.",
   "MOD_SOURCE_INVALID": "Wybrane źródło moda ({source}) jest niepełne lub nieprawidłowe: {detail}.",
   "MOD_SOURCE_HOST_NOT_ALLOWED": "Host pobierania {host} nie jest dozwolony dla tego źródła moda.",
   "MOD_ARTIFACT_UNAVAILABLE": "Żaden wariant moda {artifact} nie pasuje do tej instalacji (architektura: {arch}, sklep: {store}). Wybierz inną wersję moda lub inną instalację.",

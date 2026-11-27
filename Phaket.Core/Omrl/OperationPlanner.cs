@@ -110,15 +110,25 @@ public static class OperationPlanner
         var writes = new List<(string Path, string OpId)>();
         var requiresDownload = false;
 
+        // R2c: an artifact's declared arch applies to EVERY step that consumes it, not only to
+        // loader.ensure. A hard mismatch refuses the plan; an unknown installation arch only
+        // warns, because the mod may still work and refusing would block a first install.
+        var archUnknown = false;
         foreach (var step in recipe.Steps)
         {
             if (!ConditionEvaluator.Evaluate(step.When, facts)) continue;
-            if (step.Use == "loader.ensure" && step.With.TryGetValue("artifact", out var loaderId)
-                && artifacts.TryGetValue(loaderId.GetString() ?? "", out var loaderArtifact)
-                && loaderArtifact.Arch is { } loaderArch)
+            var consumed = ConsumedArtifact(step, artifacts);
+            if (consumed is not null)
             {
-                if (facts.Arch != loaderArch)
+                if (step.Use == "loader.ensure" && facts.Arch != consumed.Arch)
                     throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", facts.Arch ?? "unknown"));
+                if (step.Use != "loader.ensure")
+                {
+                    if (facts.Arch is null) archUnknown = true;
+                    else if (!string.Equals(facts.Arch, consumed.Arch, StringComparison.Ordinal))
+                        throw new PhaketException(ErrorCodes.ArchMismatch,
+                            ("artifact", consumed.Id), ("artifactArch", consumed.Arch!), ("arch", facts.Arch));
+                }
             }
             var operation = OperationCatalog.TryGet(step.Use, out var definition) ? definition! : null;
             if (operation is null) throw new PhaketException(ErrorCodes.UnknownOperation, ("operation", step.Use));
@@ -193,6 +203,7 @@ public static class OperationPlanner
 
         var conflicts = DetectConflicts(writes, context.ExistingOwners ?? [], context.GameRoot).ToList();
         var warnings = ExecutableWarnings(operations).ToList();
+        if (archUnknown) warnings.Add("ARCH_UNKNOWN");
         if (recipe.Artifacts.Any(a => a.Sha256 is null && SourcePolicy.IsGitHubAssetUrl(a.Source)))
             warnings.Add("GITHUB_HASH_UNVERIFIED");
         foreach (var operation in operations.Where(o => o.Kind == "loader.ensure"))
@@ -252,6 +263,24 @@ public static class OperationPlanner
             warnings,
             requiresDownload,
             verification);
+    }
+
+    // The artifact a step takes its bytes from, when that artifact declares an arch:
+    // loader.ensure through "artifact", file.copy/archive.extract through "from".
+    private static RecipeArtifact? ConsumedArtifact(
+        RecipeStep step, Dictionary<string, RecipeArtifact> artifacts)
+    {
+        var key = step.Use switch { "loader.ensure" => "artifact", "file.copy" or "archive.extract" => "from", _ => null };
+        if (key is null || !step.With.TryGetValue(key, out var element)
+            || element.ValueKind != System.Text.Json.JsonValueKind.String) return null;
+        var value = element.GetString() ?? "";
+        if (key == "from")
+        {
+            var (scheme, path) = VirtualUri.Parse(value);
+            if (scheme != "package") return null;
+            value = path.Split('/')[0];
+        }
+        return artifacts.TryGetValue(value, out var artifact) && artifact.Arch is not null ? artifact : null;
     }
 
     private static bool LoaderVersionCompatible(RecipeStep step, string? requiredRange)

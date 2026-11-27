@@ -15,6 +15,9 @@ public sealed class HttpPackageTransport : IPackageTransport
         { "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com" };
     private readonly HttpClient http;
     private readonly TimeSpan timeout;
+    // An injected HttpClient must not follow redirects on its own (the default instance sets
+    // AllowAutoRedirect = false). When it does, every answered request is still refused after
+    // the fact if its final RequestUri left the https allowlist (see OpenReadAsync).
     public HttpPackageTransport(HttpClient? http = null, TimeSpan? timeout = null)
     {
         this.http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(10) };

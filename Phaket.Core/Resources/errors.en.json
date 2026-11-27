@@ -15,6 +15,7 @@
   "ARTIFACT_DOWNLOAD_UNAVAILABLE": "Artifact {artifact} requires a download that is not available in this version. Use a local copy with a matching checksum.",
   "ARTIFACT_DOWNLOAD_TIMEOUT": "Downloading artifact {artifact} timed out. Check the connection and try again.",
   "ARTIFACT_SIZE_MISMATCH": "Artifact {artifact} has size {actual}, but {expected} bytes were expected. The download was discarded.",
+  "ARCH_MISMATCH": "Artifact {artifact} is built for {artifactArch}, but this installation is {arch}. It would not load — pick a mod version for {arch} or another installation.",
   "MOD_SOURCE_INVALID": "The selected {source} mod source is incomplete or invalid: {detail}.",
   "MOD_SOURCE_HOST_NOT_ALLOWED": "The download host {host} is not approved for this mod source.",
   "MOD_ARTIFACT_UNAVAILABLE": "No downloadable variant of {artifact} matches this installation (architecture: {arch}, store: {store}). Choose another mod version or installation.",

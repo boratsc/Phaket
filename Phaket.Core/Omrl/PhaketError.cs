@@ -19,6 +19,9 @@ public static class ErrorCodes
     public const string ArtifactDownloadUnavailable = "ARTIFACT_DOWNLOAD_UNAVAILABLE";
     public const string ArtifactDownloadTimeout = "ARTIFACT_DOWNLOAD_TIMEOUT";
     public const string ArtifactSizeMismatch = "ARTIFACT_SIZE_MISMATCH";
+    // R2c: an artifact built for one architecture would be written into an installation of
+    // the other one. Refused at plan time instead of producing a mod that cannot load.
+    public const string ArchMismatch = "ARCH_MISMATCH";
     public const string ModSourceInvalid = "MOD_SOURCE_INVALID";
     public const string ModSourceHostNotAllowed = "MOD_SOURCE_HOST_NOT_ALLOWED";
     // No catalog artifact of this mod version serves the installation's arch/store.
