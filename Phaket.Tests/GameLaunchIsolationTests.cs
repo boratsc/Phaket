@@ -15,9 +15,9 @@ using Phaket.ViewModels;
 namespace Phaket.Tests;
 
 // PAK-146 B in the product: "Graj" starts a managed installation from its package folder with
-// redirected saves, tells the user once when that is impossible, and seeds only once. The
-// launch is the real helper process (POSIX sh), so the environment the game saw is asserted
-// from inside the process, not from the view model's plan.
+// redirected saves, tells the user once when that is impossible, and seeds only once. Linux
+// proves the redirect from inside the sh helper; Windows proves the Shared contract through
+// the tracked helper process and the absence of a package-local save redirect.
 public class GameLaunchIsolationTests : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-iso-").FullName;
@@ -56,6 +56,7 @@ public class GameLaunchIsolationTests : IDisposable
                 ["linux"] = linuxMode == "env"
                     ? new SavesIsolationMode("env", ["HOME", "XDG_CONFIG_HOME"])
                     : new SavesIsolationMode("shared", Reason: "unity-locallow-known-folder"),
+                ["windows"] = new SavesIsolationMode("shared", Reason: "unity-locallow-known-folder"),
             }),
             SaveLocations: saveLocations is null ? null
                 : new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>> { ["linux"] = saveLocations }));
@@ -69,29 +70,17 @@ public class GameLaunchIsolationTests : IDisposable
         return item;
     }
 
-    // POSIX: a sh script named like the game. Windows: a real PowerShell PE under the definition's
-    // executable name; the same script runs through it and records HOME/XDG_CONFIG_HOME/PWD.
-    // -NoProfile keeps the runner's profile out.
+    // POSIX: a sh script named like the game, recording HOME/XDG_CONFIG_HOME/PWD. Windows:
+    // a real ping PE under the definition's executable name; Shared saves need no env capture.
     private static (string Executable, string Arguments) InstallHelper(string directory)
     {
         Directory.CreateDirectory(directory);
         var game = Path.Combine(directory, "Among Us.exe");
         if (OperatingSystem.IsWindows())
         {
-            var script = Path.Combine(directory, "launch-env.ps1");
-            var output = Path.Combine(directory, "launch-env.txt");
-            // A real PE under the definition's executable name: a text file named .exe is not runnable.
-            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                "WindowsPowerShell", "v1.0", "powershell.exe"), game);
-            File.WriteAllText(script, """
-                $target = $args[0]
-                $temporary = "${target}.${PID}.tmp"
-                $lines = @("HOME=$env:HOME", "XDG_CONFIG_HOME=$env:XDG_CONFIG_HOME", "PWD=$($PWD.Path)")
-                [IO.File]::WriteAllLines($temporary, $lines)
-                [IO.File]::Move($temporary, $target, $true)
-                Start-Sleep -Seconds 30
-                """);
-            return (game, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" \"{output}\"");
+            // ping is a Windows system binary, starts immediately and stays alive for ~300 s.
+            File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ping.exe"), game);
+            return (game, "-n 300 127.0.0.1");
         }
         File.WriteAllText(game, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
         File.SetUnixFileMode(game, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -172,8 +161,7 @@ public class GameLaunchIsolationTests : IDisposable
         Assert.True(done(), "the command did not finish");
     }
 
-    // PowerShell startup is asynchronous from Play's perspective, especially on a cold Windows
-    // runner. Wait for the fixture's atomic write instead of racing the helper's first instructions.
+    // Linux writes the environment atomically; wait for that proof instead of racing the helper.
     private static string WaitForFile(string path, GameViewModel vm, LaunchService launch)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -209,25 +197,49 @@ public class GameLaunchIsolationTests : IDisposable
         }
     }
 
-    // The page says the same sentence on a refused start; the wording checked is the whole answer.
-    // A tracked record is what a successful start leaves behind, so the second check names the
-    // real cause: there is no PID without a started process. The status mismatch carries the
-    // launcher's own diagnostic too, so a CI log names the failure on the first failing line.
-    private static void AssertLaunched(GameViewModel vm)
+    // A tracked record is what a successful start leaves behind; wait for it under CI load.
+    private static ProcessRecord WaitForTracked(LaunchService launch)
     {
-        // A direct launch is not "via Steam"; the contract is a successful start plus a record,
-        // not a Store-named status shared with the shortcut path.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            if (launch.Tracked("945360") is { } record) return record;
+            Assert.True(DateTime.UtcNow < deadline, "no tracked helper process for 945360 within 10 seconds");
+            Thread.Sleep(10);
+        }
+    }
+
+    // The page says the same sentence on a refused start; the wording checked is the whole answer.
+    // A direct launch is successful only with a live PID plus its start-time identity, not merely
+    // a Store-named status shared with the shortcut path.
+    private static void AssertLaunched(GameViewModel vm, LaunchService launch)
+    {
         Assert.True(vm.LastLaunch is { Started: true, Tracked: true },
             $"direct launch was not started and tracked: {LaunchDiagnostic(vm)}");
-        Assert.True(vm.Launch.Tracked("945360") is not null,
-            $"the launch was refused before any process started: {LaunchDiagnostic(vm)}");
+        var record = WaitForTracked(launch);
+        Assert.True(record is { Pid: > 0, StartTime: not null, StartTimeUtc: not null },
+            $"the launch record has no process identity: {LaunchDiagnostic(vm)}");
+        Assert.True(ProcessIdentity.TryGetProcessIdentity(record.Pid).found,
+            $"helper pid {record.Pid} is not alive: {LaunchDiagnostic(vm)}");
+    }
+
+    // Windows Unity keeps saves in LocalLow: a direct package launch is Shared, never redirected.
+    private static void AssertSharedPackageLaunch(GameViewModel vm, LaunchService launch, string package)
+    {
+        AssertLaunched(vm, launch);
+        Assert.True(vm.LastLaunch is { SavesShared: true },
+            $"the launch did not report shared saves: {LaunchDiagnostic(vm)}");
+        Assert.True(vm.IsSavesSharedNoticeVisible,
+            $"no shared-saves notice: {LaunchDiagnostic(vm)}");
+        Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)),
+            "a Shared launch created a package-local save redirect");
     }
 
     // What the launcher refused with, or the exe it was asked to start.
     private static string LaunchDiagnostic(GameViewModel vm) =>
         $"{vm.LastLaunch?.Failure ?? "no failure recorded"} (exe '{vm.LaunchRoot}')";
 
-    // The helper is ours: end it by PID, so no ping/pwsh sleep outlives the run.
+    // The POSIX fixture is sh plus a sleep child, so retain whole-tree cleanup there.
     private static void KillHelper(int pid)
     {
         try
@@ -239,10 +251,31 @@ public class GameLaunchIsolationTests : IDisposable
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
 
-    private void Kill(LaunchService launch)
+    // A successful signal can leave the PID visible for a few milliseconds under CI load.
+    private static void AssertGoneWithin(int pid, int seconds = 10)
     {
-        foreach (var record in new ProcessTracker(Store).Load())
-            KillHelper(record.Pid);
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        while (ProcessIdentity.TryGetProcessIdentity(pid).found)
+            Assert.True(DateTime.UtcNow < deadline, $"process {pid} still alive after {seconds}s");
+    }
+
+    private void StopHelpers()
+    {
+        var tracker = new ProcessTracker(Store);
+        foreach (var record in tracker.Load())
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var result = tracker.TryStop(record, force: true);
+                Assert.True(result.Status is ProcessStopStatus.Stopped or ProcessStopStatus.NotRunning,
+                    $"fixture helper {record.Pid} was not stopped: {result}");
+            }
+            else
+            {
+                KillHelper(record.Pid);
+            }
+            AssertGoneWithin(record.Pid);
+        }
     }
 
     [AvaloniaFact]
@@ -265,7 +298,7 @@ public class GameLaunchIsolationTests : IDisposable
         try
         {
             Play(vm, helper);
-            AssertLaunched(vm);
+            AssertLaunched(vm, launch);
             var seen = WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch);
             var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
             Assert.Contains($"HOME={home}", seen);
@@ -275,7 +308,7 @@ public class GameLaunchIsolationTests : IDisposable
             // Steam is not a launcher here: Phaket started the process, so it can stop it.
             Assert.NotNull(launch.Tracked("945360"));
         }
-        finally { Kill(launch); }
+        finally { StopHelpers(); }
     }
 
     [AvaloniaFact]
@@ -303,11 +336,9 @@ public class GameLaunchIsolationTests : IDisposable
             if (OperatingSystem.IsWindows())
             {
                 // Windows: shared saves, no redirect and no seed — said once, game still starts.
-                // A refused start must say so here, not only die on a missing file below.
-                Assert.True(vm.IsSavesSharedNoticeVisible, $"no shared-saves notice: {LaunchDiagnostic(vm)}");
-                Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
-                Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
-                    WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch));
+                AssertSharedPackageLaunch(vm, launch, package);
+                Assert.False(File.Exists(Path.Combine(home, PackageSavesSeed.MarkerFileName)),
+                    "a Shared launch created a seed marker");
                 return;
             }
             Assert.Equal("postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
@@ -322,7 +353,7 @@ public class GameLaunchIsolationTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("HOME", previousHome);
-            Kill(launch);
+            StopHelpers();
             try { Directory.Delete(sandboxHome, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
     }
@@ -337,23 +368,22 @@ public class GameLaunchIsolationTests : IDisposable
         try
         {
             Play(vm, helper);
-            Assert.True(vm.IsSavesSharedNoticeVisible, $"no shared-saves notice: {LaunchDiagnostic(vm)}");
+            AssertSharedPackageLaunch(vm, launch, package);
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową. Nie uruchamiaj obu wersji jednocześnie, żeby nie nadpisać postępu.",
                 LocalizationService.Instance["Game.SavesShared"]);
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową.", LocalizationService.Instance["Game.SavesSharedTitle"]);
-            var seen = WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch);
-            // A shared launch passes no redirect at all: the game keeps the profile it always
-            // had. A console app's HOME is empty, so "empty" is the truthful comparison, not
-            // the test runner's real profile (Linux keeps its value and asserts it).
-            var realHome = OperatingSystem.IsWindows() ? "" : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            Assert.Contains($"HOME={realHome}", seen); // nothing redirected
-            Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName, seen);
-            Assert.True(vm.Launch.Tracked("945360") is not null,
-                $"the game did not start: '{vm.StatusMessage}'"); // starting was never refused
+            if (!OperatingSystem.IsWindows())
+            {
+                var seen = WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch);
+                // Linux proves the shared launch passes no redirect: the helper sees the real profile.
+                var realHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                Assert.Contains($"HOME={realHome}", seen);
+                Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName, seen);
+            }
             vm.DismissSavesSharedNoticeCommand.Execute(null);
             Assert.False(vm.IsSavesSharedNoticeVisible);
         }
-        finally { Kill(launch); }
+        finally { StopHelpers(); }
     }
 
     [AvaloniaFact]
@@ -375,7 +405,7 @@ public class GameLaunchIsolationTests : IDisposable
             Assert.False(File.Exists(Path.Combine(game, "launch-env.txt")));
             Assert.False(Directory.Exists(Path.Combine(game, SavesIsolationPlanner.HomeDirectoryName)));
         }
-        finally { Kill(launch); }
+        finally { StopHelpers(); }
     }
 
     // "Dodaj do Steam" at the shipped 1280x800: the question first, then one entry in Steam,
@@ -477,13 +507,9 @@ public class GameLaunchIsolationTests : IDisposable
         try
         {
             Play(vm, helper);
-            AssertLaunched(vm);
-            Assert.True(vm.IsSavesSharedNoticeVisible);
-            Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
-                WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch));
-            Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
+            AssertSharedPackageLaunch(vm, launch, package);
         }
-        finally { Kill(launch); }
+        finally { StopHelpers(); }
     }
 
     public void Dispose()
