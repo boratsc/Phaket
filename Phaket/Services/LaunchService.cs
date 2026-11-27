@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Phaket.Core.Execution;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
+using Phaket.Core.Platforms.SteamShortcuts;
 
 namespace Phaket.Services;
 
@@ -114,6 +115,16 @@ public sealed class LaunchService
 
     // Win32 STILL_ACTIVE: also what a suspended process reports before it is resumed.
     private const int StillActiveExitCode = 259;
+
+    // PAK-146 B: "Graj" through Steam when a Phaket shortcut exists. Steam runs the shortcut
+    // exactly as written in its file (its own StartDir, no extra variables), so the caller's
+    // save plan is only reported, never applied here; whether the saves ended up shared comes
+    // from that plan. A steam:// launch leaves no PID of ours, so nothing to track or stop,
+    // and the same diagnostic Failure travels back when Steam refuses the request.
+    public LaunchOutcome LaunchShortcut(string? steamAppId, string? sessionLabel, bool savesShared) =>
+        LaunchGame(steamAppId ?? "")
+            ? new LaunchOutcome(true, false, savesShared)
+            : LaunchOutcome.Failed with { Failure = $"steam:// launch refused for '{steamAppId}'", SavesShared = savesShared };
 
     // The newest record of this app, or null when Phaket never launched the game directly.
     public ProcessRecord? Tracked(string? appId) =>

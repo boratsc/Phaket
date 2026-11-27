@@ -47,7 +47,8 @@ public class GameViewMenuTests
         var (window, vm, _, items) = OpenMenu(_ => { });
         try
         {
-            Assert.Equal(9, items.Length);
+            // PAK-145: the Steam shortcut entry joined the menu (a one-time setup action).
+            Assert.Equal(10, items.Length);
             Assert.All(items, i => Assert.False(string.IsNullOrWhiteSpace(i.Header as string)));
             Assert.All(items, i => Assert.NotNull(i.Command));
             var commands = items.Select(i => i.Command).ToHashSet();
@@ -58,7 +59,7 @@ public class GameViewMenuTests
             {
                 vm.OpenInstallCommand, vm.OpenProfilesCommand, vm.OpenBackupCommand, vm.OpenBuildsCommand,
                 vm.OpenCompatibilityCommand, vm.OpenShareCommand, vm.OpenGraphCommand, vm.OpenReportCommand,
-                vm.PrepareLaunchOptionsCommand
+                vm.PrepareLaunchOptionsCommand, vm.ToggleSteamShortcutCommand
             })
                 Assert.Contains(expected, commands);
         }

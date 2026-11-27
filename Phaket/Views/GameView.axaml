@@ -141,6 +141,11 @@
                       <MenuItem Header="{Binding [Graph.Title], Source={x:Static services:LocalizationService.Instance}}" Command="{Binding OpenGraphCommand}" />
                       <MenuItem Header="{Binding [Report.Title], Source={x:Static services:LocalizationService.Instance}}" Command="{Binding OpenReportCommand}" />
                       <MenuItem Header="{Binding [Game.LaunchOptions], Source={x:Static services:LocalizationService.Instance}}" Command="{Binding PrepareLaunchOptionsCommand}" />
+                      <!-- PAK-145: the shortcut lives in "Więcej" (a one-time setup), the question
+                           it asks opens as a card right under the actions. -->
+                      <MenuItem Command="{Binding ToggleSteamShortcutCommand}"
+                                Header="{Binding SteamToggleLabel}"
+                                AutomationProperties.Name="{Binding SteamToggleLabel}" />
                     </MenuFlyout>
                   </Button.Flyout>
                 </Button>
@@ -158,6 +163,34 @@
               </StackPanel>
             </StackPanel>
           </Border>
+          <Border Classes="card" Background="{DynamicResource RaisedBrush}" IsVisible="{Binding IsSavesSharedNoticeVisible}">
+            <StackPanel Spacing="9">
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <mi:MaterialIcon Kind="InformationOutline" Width="17" Height="17" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+                <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding [Game.SavesSharedTitle], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <TextBlock TextWrapping="Wrap" Text="{Binding [Game.SavesShared], Source={x:Static services:LocalizationService.Instance}}" />
+              <Button Classes="secondary" HorizontalAlignment="Left" Command="{Binding DismissSavesSharedNoticeCommand}"
+                      Content="{Binding [Game.Dismiss], Source={x:Static services:LocalizationService.Instance}}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card" Background="{DynamicResource RaisedBrush}" IsVisible="{Binding SteamConsentCardVisible}">
+            <StackPanel Spacing="9">
+              <TextBlock Classes="sectionTitle" Text="{Binding SteamConfirmHeader}" AutomationProperties.HeadingLevel="2" />
+              <TextBlock Text="{Binding SteamConsentText}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding ShowSteamRestart}">
+                <mi:MaterialIcon Kind="AlertOutline" Width="16" Height="16" Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" />
+                <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding [SteamShortcut.RestartSteam], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="primary" Command="{Binding ConfirmSteamShortcutCommand}" Content="{Binding SteamConsentYes}" />
+                <Button Classes="secondary" Command="{Binding CancelSteamShortcutCommand}"
+                        Content="{Binding [Game.StopConfirmNo], Source={x:Static services:LocalizationService.Instance}}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding [Game.PreparingSaves], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap"
+                     IsVisible="{Binding IsPreparingSaves}" AutomationProperties.LiveSetting="Polite" />
           <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                      TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
           <Border Classes="card" Background="{DynamicResource RaisedBrush}" IsVisible="{Binding Game.IsSelectedSteam}">

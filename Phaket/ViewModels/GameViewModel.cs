@@ -162,6 +162,10 @@ public partial class GameViewModel : ViewModelBase
     private readonly string appDataRoot;
     private string? lastBackup;
 
+    // Seams for PAK-145/146-B tests; the app leaves them at their defaults.
+    internal IReadOnlyList<string>? SteamRoots { get; set; }
+    internal string? SteamUser { get; set; }
+
     public GameViewModel(GameCatalogItem game, Action back,
         Action? openMods = null, Action? openProfiles = null, Action? openBackup = null,
         Action? openCompatibility = null, Action? openInstall = null, Action? openBuilds = null,
@@ -187,6 +191,8 @@ public partial class GameViewModel : ViewModelBase
         Game.ModCount = profile?.Mods.Count(m => m.Enabled) ?? 0;
         // PAK-141: the copies of this game's saves, right where the game's other actions are.
         SaveBackups = SaveBackupsViewModel.ForGame(this.appDataRoot, game.Definition.Slug);
+        // The Steam question and "play" depend on what is on disk, never on a guess.
+        RefreshSteamShortcut();
     }
 
     // "Your game saves": listed when the section appears (SaveBackupsView), not eagerly.
@@ -218,7 +224,7 @@ public partial class GameViewModel : ViewModelBase
     [RelayCommand] private void OpenReport() => openReport();
 
     [RelayCommand]
-    private void Play()
+    private async Task PlayAsync()
     {
         var loc = LocalizationService.Instance;
         if (!Game.IsInstalled)
@@ -231,8 +237,9 @@ public partial class GameViewModel : ViewModelBase
             StatusMessage = loc["Game.EpicLaunchManual"];
             return;
         }
-        var ok = launch.LaunchGame(Game.SteamAppId);
-        StatusMessage = ok ? loc["Game.Launched"] : loc["Game.LaunchFailed"];
+        // Direct launch of the game's own executable (PAK-146 B): the package's saves, or a
+        // clear note that this game shares them. Steam is only the store here.
+        await PlayDirectAsync();
     }
 
     // PAK-143: "stop" only applies to a process we launched ourselves. Another game
