@@ -79,16 +79,19 @@ public class GameLaunchIsolationTests : IDisposable
         if (OperatingSystem.IsWindows())
         {
             var script = Path.Combine(directory, "launch-env.ps1");
+            var output = Path.Combine(directory, "launch-env.txt");
             // A real PE under the definition's executable name: a text file named .exe is not runnable.
             File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
                 "WindowsPowerShell", "v1.0", "powershell.exe"), game);
             File.WriteAllText(script, """
-                $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
+                $target = $args[0]
+                $temporary = "${target}.${PID}.tmp"
                 $lines = @("HOME=$env:HOME", "XDG_CONFIG_HOME=$env:XDG_CONFIG_HOME", "PWD=$($PWD.Path)")
-                [IO.File]::WriteAllLines((Join-Path $dir 'launch-env.txt'), $lines)
+                [IO.File]::WriteAllLines($temporary, $lines)
+                [IO.File]::Move($temporary, $target, $true)
                 Start-Sleep -Seconds 30
                 """);
-            return (game, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"");
+            return (game, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" \"{output}\"");
         }
         File.WriteAllText(game, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
         File.SetUnixFileMode(game, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -169,6 +172,43 @@ public class GameLaunchIsolationTests : IDisposable
         Assert.True(done(), "the command did not finish");
     }
 
+    // PowerShell startup is asynchronous from Play's perspective, especially on a cold Windows
+    // runner. Wait for the fixture's atomic write instead of racing the helper's first instructions.
+    private static string WaitForFile(string path, GameViewModel vm, LaunchService launch)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!File.Exists(path))
+        {
+            Assert.True(DateTime.UtcNow < deadline,
+                $"launch environment was not written within 15 seconds: '{path}'; " +
+                $"{LaunchDiagnostic(vm)}; {HelperDiagnostic(launch)}");
+            Thread.Sleep(100);
+        }
+        return File.ReadAllText(path);
+    }
+
+    private static string HelperDiagnostic(LaunchService launch)
+    {
+        var record = launch.Tracked("945360");
+        if (record is null) return "no tracked helper process";
+        var (found, identity) = ProcessIdentity.TryGetProcessIdentity(record.Pid);
+        if (!found) return $"helper pid {record.Pid} has exited; exit code and stderr are unavailable";
+        if (identity is null || identity.StartValue != record.StartTime || identity.Unit != record.StartTimeUnit ||
+            !string.Equals(identity.BootId, record.BootId, StringComparison.OrdinalIgnoreCase))
+            return $"helper pid {record.Pid} identity is unavailable; exit code and stderr are unavailable";
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(record.Pid);
+            return process.HasExited
+                ? $"helper pid {record.Pid} exited with code {process.ExitCode}; stderr was not redirected"
+                : $"helper pid {record.Pid} is still running; exit code pending; stderr was not redirected";
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return $"helper pid {record.Pid} has exited; exit code and stderr are unavailable ({e.GetType().Name})";
+        }
+    }
+
     // The page says the same sentence on a refused start; the wording checked is the whole answer.
     // A tracked record is what a successful start leaves behind, so the second check names the
     // real cause: there is no PID without a started process. The status mismatch carries the
@@ -226,7 +266,7 @@ public class GameLaunchIsolationTests : IDisposable
         {
             Play(vm, helper);
             AssertLaunched(vm);
-            var seen = File.ReadAllText(Path.Combine(package, "launch-env.txt"));
+            var seen = WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch);
             var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
             Assert.Contains($"HOME={home}", seen);
             Assert.Contains($"XDG_CONFIG_HOME={home}", seen);
@@ -267,7 +307,7 @@ public class GameLaunchIsolationTests : IDisposable
                 Assert.True(vm.IsSavesSharedNoticeVisible, $"no shared-saves notice: {LaunchDiagnostic(vm)}");
                 Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
                 Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
-                    File.ReadAllText(Path.Combine(package, "launch-env.txt")));
+                    WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch));
                 return;
             }
             Assert.Equal("postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
@@ -301,7 +341,7 @@ public class GameLaunchIsolationTests : IDisposable
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową. Nie uruchamiaj obu wersji jednocześnie, żeby nie nadpisać postępu.",
                 LocalizationService.Instance["Game.SavesShared"]);
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową.", LocalizationService.Instance["Game.SavesSharedTitle"]);
-            var seen = File.ReadAllText(Path.Combine(package, "launch-env.txt"));
+            var seen = WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch);
             // A shared launch passes no redirect at all: the game keeps the profile it always
             // had. A console app's HOME is empty, so "empty" is the truthful comparison, not
             // the test runner's real profile (Linux keeps its value and asserts it).
@@ -440,7 +480,7 @@ public class GameLaunchIsolationTests : IDisposable
             AssertLaunched(vm);
             Assert.True(vm.IsSavesSharedNoticeVisible);
             Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
-                File.ReadAllText(Path.Combine(package, "launch-env.txt")));
+                WaitForFile(Path.Combine(package, "launch-env.txt"), vm, launch));
             Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
         }
         finally { Kill(launch); }

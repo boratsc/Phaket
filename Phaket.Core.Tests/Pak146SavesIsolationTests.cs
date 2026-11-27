@@ -208,26 +208,27 @@ public sealed class Pak146SavesIsolationTests : IDisposable
     }
 
     // R3d #5: a file that cannot be copied means no marker (the package would look seeded for
-    // good); what did land stays, and the next launch only fills the gap before marking.
+    // good); the next launch fills the gap before marking. One source file makes the failure
+    // deterministic regardless of the order in which the file system enumerates entries.
     [Fact]
     public void PartialSeedingLeavesNoMarkerAndTheNextLaunchCompletesIt()
     {
-        var source = SaveTree("saves", ("a/a.dat", "one"), ("b/b.dat", "two"));
+        var source = SaveTree("saves", ("a.dat", "one"));
         var home = Path.Combine(root, "package", ".phaket-home", "data");
-        // A directory where the second file must land: the copy inside it fails.
-        var blocker = Path.Combine(home, "b", "b.dat", "inside");
+        // A directory where the file must land: copying over it fails on every OS.
+        var blocker = Path.Combine(home, "a.dat", "inside");
         Directory.CreateDirectory(blocker);
 
         var failed = PackageSavesSeed.Seed([home], [source], "linux");
-        Assert.NotEqual(PackageSavesSeed.SeedStatus.Seeded, failed.Status);
+        Assert.Equal(PackageSavesSeed.SeedStatus.Failed, failed.Status);
         Assert.False(File.Exists(Path.Combine(home, PackageSavesSeed.MarkerFileName)));
-        Assert.Equal("one", File.ReadAllText(Path.Combine(home, "a", "a.dat")));
+        Assert.False(File.Exists(Path.Combine(home, "a.dat")));
 
-        Directory.Delete(Path.Combine(home, "b"), recursive: true);
+        Directory.Delete(Path.Combine(home, "a.dat"), recursive: true);
         var retry = PackageSavesSeed.Seed([home], [source], "linux");
         Assert.Equal(PackageSavesSeed.SeedStatus.Seeded, retry.Status);
         Assert.Equal(1, retry.FilesCopied);
-        Assert.Equal("two", File.ReadAllText(Path.Combine(home, "b", "b.dat")));
+        Assert.Equal("one", File.ReadAllText(Path.Combine(home, "a.dat")));
         Assert.True(File.Exists(Path.Combine(home, PackageSavesSeed.MarkerFileName)));
     }
 
