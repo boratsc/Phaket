@@ -66,13 +66,19 @@ public class LaunchProcessTrackingTests : IDisposable
             Assert.True(DateTime.UtcNow < deadline, $"process {pid} never appeared within {seconds}s");
     }
 
-    // A successful signal only means the kernel accepted it: the pid leaves /proc a few
-    // milliseconds later (p99 ~10 ms under load), so wait for the exit instead of racing it.
-    private static void AssertGoneWithin(int pid, int seconds = 10)
+    // A successful signal only means the kernel accepted it: wait for the recorded process to
+    // leave, not merely its PID — Windows may reuse that PID for an unrelated process at once.
+    private static void AssertGoneWithin(ProcessRecord record, int seconds = 10)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
-        while (Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(pid).found)
-            Assert.True(DateTime.UtcNow < deadline, $"process {pid} still alive after {seconds}s");
+        while (true)
+        {
+            var (found, identity) = Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid);
+            if (!found || identity?.StartValue != record.StartTime) return;
+            Assert.True(DateTime.UtcNow < deadline,
+                $"process {record.Pid} with start time {record.StartTime} still alive after {seconds}s");
+            Thread.Sleep(10);
+        }
     }
 
     [Fact]
@@ -111,7 +117,7 @@ public class LaunchProcessTrackingTests : IDisposable
             Assert.True(result.Status == Phaket.Core.Execution.ProcessStopStatus.Stopped,
                 $"stop answered {result}");
             Assert.Empty(new Phaket.Core.Execution.ProcessTracker(Store).Load());
-            AssertGoneWithin(record.Pid);
+            AssertGoneWithin(record);
         }
         finally { KillTree(record.Pid); }
     }
@@ -167,12 +173,12 @@ public class LaunchProcessTrackingTests : IDisposable
             // Confirmation goes through the real fail-closed tracker; the PID is our fixture.
             var stopped = service.Stop(record);
             Assert.Equal(ProcessStopStatus.Stopped, stopped.Status);
-            AssertGoneWithin(record.Pid);
+            AssertGoneWithin(record);
 
             vm.ConfirmStopCommand.Execute(null);
             Assert.Null(vm.PendingStop);
             Assert.Contains(vm.StatusMessage, new[] { "Gra została zatrzymana.", "Ten proces już nie działa." });
-            AssertGoneWithin(record.Pid);
+            AssertGoneWithin(record);
         }
         finally { KillTree(record.Pid); }
     }

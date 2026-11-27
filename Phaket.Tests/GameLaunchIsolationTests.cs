@@ -251,12 +251,19 @@ public class GameLaunchIsolationTests : IDisposable
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
 
-    // A successful signal can leave the PID visible for a few milliseconds under CI load.
-    private static void AssertGoneWithin(int pid, int seconds = 10)
+    // A successful signal can leave the PID visible briefly, and Windows can then reuse it for
+    // another process: only the recorded process identity has to disappear.
+    private static void AssertGoneWithin(ProcessRecord record, int seconds = 10)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
-        while (ProcessIdentity.TryGetProcessIdentity(pid).found)
-            Assert.True(DateTime.UtcNow < deadline, $"process {pid} still alive after {seconds}s");
+        while (true)
+        {
+            var (found, identity) = ProcessIdentity.TryGetProcessIdentity(record.Pid);
+            if (!found || identity?.StartValue != record.StartTime) return;
+            Assert.True(DateTime.UtcNow < deadline,
+                $"process {record.Pid} with start time {record.StartTime} still alive after {seconds}s");
+            Thread.Sleep(10);
+        }
     }
 
     private void StopHelpers()
@@ -274,7 +281,7 @@ public class GameLaunchIsolationTests : IDisposable
             {
                 KillHelper(record.Pid);
             }
-            AssertGoneWithin(record.Pid);
+            AssertGoneWithin(record);
         }
     }
 

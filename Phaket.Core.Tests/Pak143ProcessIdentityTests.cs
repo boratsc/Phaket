@@ -147,23 +147,24 @@ public sealed class Pak143ProcessTrackerTests
     [Fact]
     public void RecordFromABootBeforeTheCurrentBootIsDeadAndSwept()
     {
+        using var helper = Helpers.Spawn();
         using var temp = new TempStore();
         var tracker = temp.Tracker;
-        var current = ProcessIdentity.TryGetProcessIdentity(Environment.ProcessId).identity!;
+        var current = ProcessIdentity.TryGetProcessIdentity(helper.Id).identity!;
         var start = (current.BootTimeUtc ?? DateTimeOffset.UtcNow.AddHours(-4)).AddMinutes(-1);
-        var beforeBoot = new ProcessRecord(Environment.ProcessId, current.StartValue, current.Unit,
+        var beforeBoot = new ProcessRecord(helper.Id, current.StartValue, current.Unit,
             current.BootId, start, DateTimeOffset.UtcNow, "among-us", null);
         tracker.Save(beforeBoot);
 
         Assert.False(tracker.IsAlive(beforeBoot));
         Assert.Equal(ProcessStopStatus.IdentityMismatch, tracker.TryStop(beforeBoot, force: false).Status);
         Assert.Empty(tracker.Load());
-        Assert.True(Helpers.StillRunning(Environment.ProcessId));
+        Assert.True(Helpers.StillRunning(helper.Id));
 
         tracker.Save(beforeBoot);
         Assert.Equal(1, ProcessTracker.SweepStore(temp.Path));
         Assert.Empty(tracker.Load());
-        Assert.True(Helpers.StillRunning(Environment.ProcessId), "sweeping never signals");
+        Assert.True(Helpers.StillRunning(helper.Id), "sweeping never signals");
     }
 
     [Fact]

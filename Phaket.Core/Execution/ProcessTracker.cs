@@ -200,6 +200,9 @@ public sealed class ProcessTracker
         void Close(IntPtr handle);
     }
 
+    // If a test host ever exits with this code, Phaket's stop path killed it.
+    private const uint StopExitCode = 4242;
+
     private static readonly IWindowsProcessApi Windows = new Win32ProcessApi();
 
     // The mask one handle carries through the whole stop. SYNCHRONIZE is not optional:
@@ -326,7 +329,7 @@ public sealed class ProcessTracker
 
         public bool Terminate(IntPtr handle, out int error)
         {
-            var terminated = TerminateProcess(handle, exitCode: 0);
+            var terminated = TerminateProcess(handle, StopExitCode);
             error = Marshal.GetLastPInvokeError();
             return terminated != 0;
         }

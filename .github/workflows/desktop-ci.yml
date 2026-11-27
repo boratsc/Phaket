@@ -25,4 +25,48 @@ jobs:
       - name: Build
         run: dotnet build Phaket.slnx --configuration Release --no-restore
       - name: Test
+        if: matrix.os == 'ubuntu-26.04'
         run: dotnet test Phaket.slnx --configuration Release --no-build --no-restore
+      # TEMPORARY diagnostics — revert after crash root-caused
+      - name: Test Phaket.Core.Tests (Windows diagnostics)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          DOTNET_DbgEnableMiniDump: 1
+          DOTNET_DbgMiniDumpType: 2
+          DOTNET_DbgMiniDumpName: ${{ runner.temp }}/coredump.%p.dmp
+        run: |
+          dotnet test Phaket.Core.Tests -c Release --no-build --logger "console;verbosity=normal" 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/core-tests.log"
+          exit $LASTEXITCODE
+      - name: Test Phaket.Tests (Windows diagnostics)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          DOTNET_DbgEnableMiniDump: 1
+          DOTNET_DbgMiniDumpType: 2
+          DOTNET_DbgMiniDumpName: ${{ runner.temp }}/coredump.%p.dmp
+        run: |
+          dotnet test Phaket.Tests -c Release --no-build --logger "console;verbosity=normal" 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/app-tests.log"
+          exit $LASTEXITCODE
+      - name: Test InstallerStub (Windows diagnostics)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          DOTNET_DbgEnableMiniDump: 1
+          DOTNET_DbgMiniDumpType: 2
+          DOTNET_DbgMiniDumpName: ${{ runner.temp }}/coredump.%p.dmp
+        run: |
+          dotnet test installer/Phaket.InstallerStub.Tests -c Release --no-build --logger "console;verbosity=normal" 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/installer-tests.log"
+          exit $LASTEXITCODE
+      - name: Upload Windows crash diagnostics
+        if: failure() && matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: windows-crash-diagnostics
+          path: |
+            ${{ runner.temp }}/*.dmp
+            ${{ runner.temp }}/*-tests.log
+          if-no-files-found: warn
