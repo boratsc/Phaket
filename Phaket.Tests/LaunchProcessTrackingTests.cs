@@ -23,36 +23,68 @@ public class LaunchProcessTrackingTests : IDisposable
         return script;
     }
 
+    // Launch and wait until the record is readable: under load the child may not be in /proc yet.
+    private static Phaket.Core.Execution.ProcessRecord LaunchAndTrack(LaunchService service, string appId)
+    {
+        service.LaunchExecutable(HelperScript(), null, appId, "fixture");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            if (service.Tracked(appId) is { } record) return record;
+            Assert.True(DateTime.UtcNow < deadline, $"no launch record for {appId}");
+            Thread.Sleep(10);
+        }
+    }
+
+    // Fail-closed means the helper keeps running; wait for it to appear before asserting that.
+    private static void AssertAliveWithin(int pid, int seconds = 10)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        while (!Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(pid).found)
+            Assert.True(DateTime.UtcNow < deadline, $"process {pid} never appeared within {seconds}s");
+    }
+
+    // A successful signal only means the kernel accepted it: the pid leaves /proc a few
+    // milliseconds later (p99 ~10 ms under load), so wait for the exit instead of racing it.
+    private static void AssertGoneWithin(int pid, int seconds = 10)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        while (Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(pid).found)
+            Assert.True(DateTime.UtcNow < deadline, $"process {pid} still alive after {seconds}s");
+    }
+
     [Fact]
     public void DirectLaunchWritesARecordWithPidAndStartTime()
     {
         var service = new LaunchService(Store);
         var outcome = service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
-
-        Assert.True(outcome.Started);
-        Assert.True(outcome.Tracked);
         var record = Assert.Single(new Phaket.Core.Execution.ProcessTracker(Store).Load());
-        Assert.True(record.Pid > 0);
-        Assert.NotNull(record.StartTime);
-        Assert.NotNull(record.StartTimeUtc);
-        Assert.Equal("among-us", record.AppId);
-        Assert.Equal("fixture", record.SessionLabel);
-        Assert.Equal(record.Pid, service.Tracked("among-us")!.Pid);
+        try
+        {
+            Assert.True(outcome.Started);
+            Assert.True(outcome.Tracked);
+            Assert.True(record.Pid > 0);
+            Assert.NotNull(record.StartTime);
+            Assert.NotNull(record.StartTimeUtc);
+            Assert.Equal("among-us", record.AppId);
+            Assert.Equal("fixture", record.SessionLabel);
+            Assert.Equal(record.Pid, service.Tracked("among-us")!.Pid);
+        }
+        finally { KillTree(record.Pid); }
     }
 
     [Fact]
     public void StopTerminatesTheTrackedHelper()
     {
         var service = new LaunchService(Store);
-        service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
-        var record = service.Tracked("among-us")!;
+        var record = LaunchAndTrack(service, "among-us");
         // The helper script's own shell is the process we started; kill the whole fixture.
         try
         {
             var result = service.Stop(record);
             Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, result.Status);
             Assert.Empty(new Phaket.Core.Execution.ProcessTracker(Store).Load());
-            Assert.False(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            AssertGoneWithin(record.Pid);
         }
         finally { KillTree(record.Pid); }
     }
@@ -72,14 +104,13 @@ public class LaunchProcessTrackingTests : IDisposable
     public void StopWithAMismatchedStartTimeIsRefusedAndSignalsNothing()
     {
         var service = new LaunchService(Store);
-        service.LaunchExecutable(HelperScript(), null, "among-us", "fixture");
-        var record = service.Tracked("among-us")!;
+        var record = LaunchAndTrack(service, "among-us");
         try
         {
             var forged = record with { StartTime = record.StartTime + 1 };
             var result = service.Stop(forged);
             Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.IdentityMismatch, result.Status);
-            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            AssertAliveWithin(record.Pid);
         }
         finally { KillTree(record.Pid); }
     }
@@ -93,26 +124,26 @@ public class LaunchProcessTrackingTests : IDisposable
         {
             Launch = service,
         };
-        service.LaunchExecutable(HelperScript(), null, "945360", vm.Title);
-        var record = service.Tracked("945360")!;
+        var record = LaunchAndTrack(service, "945360");
         try
         {
             Assert.True(vm.CanStopGame);
             // Asking alone signals nothing.
             vm.StopGameCommand.Execute(null);
             Assert.NotNull(vm.PendingStop);
-            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            AssertAliveWithin(record.Pid);
             // Confirmation goes through the real fail-closed tracker; the PID is our fixture.
             Assert.Equal(Phaket.Core.Execution.ProcessStopStatus.Stopped, service.Stop(record).Status);
-            // The record may already be gone (the helper is a short-lived shell): that is
-            // "no longer running", the other truthful fail-closed answer.
+            // The record is gone after the first stop, so a second one reports "no longer
+            // running" — the other truthful fail-closed answer.
+            AssertGoneWithin(record.Pid);
             Assert.Contains(vm.Launch.Stop(record).Status,
                 new[] { Phaket.Core.Execution.ProcessStopStatus.Stopped, Phaket.Core.Execution.ProcessStopStatus.NotRunning });
 
             vm.ConfirmStopCommand.Execute(null);
             Assert.Null(vm.PendingStop);
             Assert.Contains(vm.StatusMessage, new[] { "Gra została zatrzymana.", "Ten proces już nie działa." });
-            Assert.False(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            AssertGoneWithin(record.Pid);
         }
         finally { KillTree(record.Pid); }
     }
@@ -126,8 +157,7 @@ public class LaunchProcessTrackingTests : IDisposable
         {
             Launch = service,
         };
-        service.LaunchExecutable(HelperScript(), null, "945360", vm.Title);
-        var record = service.Tracked("945360")!;
+        var record = LaunchAndTrack(service, "945360");
         try
         {
             // A tampered record (wrong start time) is what a recycled PID looks like.
@@ -135,7 +165,7 @@ public class LaunchProcessTrackingTests : IDisposable
             vm.StopGameCommand.Execute(null);
             vm.ConfirmStopCommand.Execute(null);
             Assert.Contains("Gra nie została zatrzymana", vm.StatusMessage);
-            Assert.True(Phaket.Core.Execution.ProcessIdentity.TryGetProcessIdentity(record.Pid).found);
+            AssertAliveWithin(record.Pid);
         }
         finally { KillTree(record.Pid); }
     }
