@@ -296,6 +296,99 @@ public sealed class PackageMaterializerTests : IDisposable
         // No clone-capable volume on this machine: the platform clone path was not exercised.
     }
 
+    // Review PAK-146a finding 1: a lexical comparison let a target that is an alias of the cache
+    // through. Both sides are canonicalized now.
+    [Fact]
+    public async Task TargetSymlinkToSource_IsRefused()
+    {
+        var cache = CreateCache();
+        var alias = Path.Combine(root, "alias-of-cache");
+        Directory.CreateSymbolicLink(alias, cache);
+
+        var error = await Assert.ThrowsAsync<PhaketException>(() => PackageMaterializer.MaterializeAsync(
+            cache, alias, null, new FakeCloner(probe: false), CT));
+
+        Assert.Equal(ErrorCodes.PathOutOfBounds, error.Error.Code);
+        Assert.False(Directory.Exists(alias + PackageMaterializer.PartialSuffix));
+    }
+
+    [Fact]
+    public async Task TargetUnderSymlinkedParentOfSource_IsRefused()
+    {
+        var cache = CreateCache();
+        // "<root>/cache" reached through a link: the lexical paths differ, the real trees do not.
+        var parent = Path.Combine(root, "linked-root");
+        Directory.CreateSymbolicLink(parent, root);
+
+        var error = await Assert.ThrowsAsync<PhaketException>(() => PackageMaterializer.MaterializeAsync(
+            cache, Path.Combine(parent, "cache", "nested"), null, new FakeCloner(probe: false), CT));
+
+        Assert.Equal(ErrorCodes.PathOutOfBounds, error.Error.Code);
+    }
+
+    [Fact]
+    public async Task SourceSymlinkToTarget_IsRefused()
+    {
+        var cache = CreateCache();
+        var real = Path.Combine(root, "real-target");
+        Directory.CreateDirectory(real);
+        var linkedCache = Path.Combine(root, "linked-cache");
+        Directory.CreateSymbolicLink(linkedCache, real);
+
+        var error = await Assert.ThrowsAsync<PhaketException>(() => PackageMaterializer.MaterializeAsync(
+            linkedCache, Path.Combine(real, "pkg"), null, new FakeCloner(probe: false), CT));
+
+        Assert.Equal(ErrorCodes.PathOutOfBounds, error.Error.Code);
+    }
+
+    // The case-insensitivity itself is Windows-only; the shared rule is asserted through the
+    // comparer PathBoundary uses, which is the one the materializer compares with.
+    [Fact]
+    public void BoundaryComparison_FollowsThePlatformCaseRule()
+    {
+        var same = PathBoundary.IsWithin("/data/Cache", "/data/cache");
+        if (OperatingSystem.IsWindows()) Assert.True(same);
+        else Assert.False(same);
+    }
+
+    // Review PAK-146a finding 3: a crash between the two renames of PromotePartial leaves the
+    // previous package under "partial-old-*" and no target at all.
+    [Fact]
+    public async Task OrphanedPartialOld_WithoutTarget_IsRestored()
+    {
+        var cache = CreateCache();
+        var target = Path.Combine(root, "pkg");
+        var orphan = target + PackageMaterializer.OrphanSuffix + "stale";
+        Directory.CreateDirectory(Path.Combine(orphan, "Among Us_Data"));
+        File.WriteAllText(Path.Combine(orphan, "previous.txt"), "old");
+
+        // Materialization fails after recovery, so the restored tree is the only thing observed.
+        var cloner = new FakeCloner(probe: true, clone: (_, _) => throw new IOException("simulated"));
+        await Assert.ThrowsAsync<IOException>(() => PackageMaterializer.MaterializeAsync(cache, target, null, cloner, CT));
+
+        Assert.Equal("old", File.ReadAllText(Path.Combine(target, "previous.txt")));
+        Assert.False(Directory.Exists(orphan));
+        Assert.False(Directory.Exists(target + PackageMaterializer.PartialSuffix));
+    }
+
+    [Fact]
+    public async Task OrphanedPartialOld_WithTarget_IsDiscarded()
+    {
+        var cache = CreateCache();
+        var target = Path.Combine(root, "pkg");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "previous.txt"), "old");
+        var orphan = target + PackageMaterializer.OrphanSuffix + "stale";
+        Directory.CreateDirectory(orphan);
+        File.WriteAllText(Path.Combine(orphan, "stale.txt"), "stale");
+
+        await PackageMaterializer.MaterializeAsync(cache, target, null, new FakeCloner(probe: false), CT);
+
+        Assert.False(Directory.Exists(orphan));
+        Assert.Equal(Hashes(cache), Hashes(target));
+        Assert.DoesNotContain(Directory.GetDirectories(root), d => d.Contains(PackageMaterializer.OrphanSuffix));
+    }
+
     private static IEnumerable<string> CloneCandidates() =>
         OperatingSystem.IsWindows()
             ? [Path.GetTempPath()]
