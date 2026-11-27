@@ -140,7 +140,7 @@ public class ConflictDecisionDialogTests
         {
             var vm = new ModCatalogViewModel("among-us", root, autoSync: false);
             vm.PrepareOverride = (_, _, _, _, _) => Task.FromResult(Preparation(ConflictPlan()));
-            vm.ExecuteOverride = (_, _, _) => Task.FromResult(new InstallOutcome(false,
+            vm.ExecuteOverride = (_, _, _, _) => Task.FromResult(new InstallOutcome(false,
                 Phaket.Core.Omrl.ErrorCodes.FileConflictRequiresDecision, []));
             UiTest.Run(() => vm.BeginInstallAsync("Owner-Mod", "2.0", new InstallTarget(root, "steam", true) with { Arch = "x86" }));
             Assert.True(vm.HasPreview);
@@ -159,7 +159,7 @@ public class ConflictDecisionDialogTests
 
             // The accepted answer runs the install once more and reports the outcome.
             var runs = 0;
-            vm.ExecuteOverride = (_, _, _) => { runs++; return Task.FromResult(new InstallOutcome(true, null, [])); };
+            vm.ExecuteOverride = (_, _, _, _) => { runs++; return Task.FromResult(new InstallOutcome(true, null, [])); };
             executing = vm.ExecuteInstallCommand.ExecuteAsync(null);
             UiTest.Until(() => dialog.IsOpen);
             dialog.TakeRecipeCommand.Execute(null);

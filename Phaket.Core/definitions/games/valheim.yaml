@@ -37,6 +37,12 @@ loaderLayouts:
 # PAK-141/146: per-character folders under one profile root.
 savePaths:
   - profile://steam/892970
+# Where the GAME really keeps its saves; read once on Linux to seed a package (Windows: LocalLow
+# cannot be redirected, so a package there shares the user's saves and seeds nothing).
+saveLocations:
+  os:
+    linux:
+      - "~/.config/unity3d/IronGate/Valheim"
 # PAK-146 (model B), Unity: same rule as Among Us — HOME/XDG redirect works on Linux (worlds
 # live under ~/.config/unity3d/IronGate/Valheim), while %USERPROFILE%\AppData\LocalLow comes
 # from SHGetKnownFolderPath and cannot be redirected by environment on Windows.

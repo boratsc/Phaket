@@ -11,7 +11,7 @@ public static class SavesLaunchPreparation
     // redirect/seed run inside the managed folder; gameRoot null = vanilla launch.
     public static PackageSavesIsolation.Result Prepare(string os, GameDefinition definition, string? gameRoot, string profileRoot) =>
         PackageSavesIsolation.Prepare(new PackageSavesIsolation.Request(os, definition.SavesIsolationFor(os),
-            gameRoot, definition.SavePaths, profileRoot));
+            gameRoot, definition.SaveSourcesFor(os), profileRoot));
 
     // The same hash InstallViewModel uses for one installation (profile/state keys).
     public static string Hash(string gameRoot) => Convert.ToHexStringLower(

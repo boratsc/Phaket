@@ -22,6 +22,14 @@ public sealed record GameLaunchRequirement(
     string Kind, string Name, string Value, string Status,
     IReadOnlyList<string>? Os = null, string? Source = null, string? ObservedAt = null);
 
+// What lives at each declared save path per OS, when it is not the profile folder itself
+// (Unity: ~/.config/unity3d/<company>/<game>). A path without an entry here holds saves only
+// on Windows; an empty per-OS list means "not on this system", so nothing is seeded there.
+public sealed record SaveLocationsByOs(IReadOnlyDictionary<string, IReadOnlyList<string>>? Os = null)
+{
+    public IReadOnlyList<string>? For(string os) => Os?.GetValueOrDefault(os);
+}
+
 // Minimal declarative game definition (spec §6.3). Full schema: game-definition/v0alpha1.
 public sealed record GameDefinition(
     string Slug,
@@ -47,10 +55,27 @@ public sealed record GameDefinition(
     IReadOnlyList<string>? SavePaths = null,
     // PAK-146 (model B): per OS, whether a package can keep its saves beside itself.
     // Absent = unknown, and an unknown package is never declared parallel with vanilla.
-    SavesIsolation? SavesIsolation = null)
+    SavesIsolation? SavesIsolation = null,
+    // Where the GAME really keeps saves per OS (Linux: ~/.config/unity3d/...), separate from
+    // SavePaths, which is Phaket's own copy under the profile. Null = the game is Windows-only.
+    SaveLocationsByOs? SaveLocations = null)
 {
     public bool AllowsWrite(string relativePath) =>
         WritableAreas.Any(pattern => Glob.IsMatch(pattern, relativePath));
+
+    // The declared save paths when they hold saves on this OS, else the game's real folders;
+    // both may be absent. Only these are ever read to seed a package.
+    public IReadOnlyList<string>? SaveSourcesFor(string os) =>
+        SaveLocations is null ? SavePaths : SaveLocations.For(os) ?? [];
+
+    // A definition path: "~/..." in the user's home, otherwise absolute. Anything else (a
+    // "profile://" copy, a relative path) is not where the game reads its saves: null.
+    public static string? ResolveLocation(string path, string home)
+    {
+        if (path.Length > 1 && path[0] == '~' && (path[1] == '/' || path[1] == '\\'))
+            return Path.Combine(home, path[2..]);
+        return Path.IsPathRooted(path) ? path : null;
+    }
 
     // OS to download/install the artifact for: the game's own platform, never the host's.
     public string ArtifactOs(string hostOs) =>
@@ -133,6 +158,7 @@ public static class GameDefinitionLoader
         public GameSources? Sources { get; init; }
         public IReadOnlyList<string>? SavePaths { get; init; }
         public SavesIsolation? SavesIsolation { get; init; }
+        public SaveLocationsByOs? SaveLocations { get; init; }
     }
 
     private sealed record DetectionDto
@@ -152,7 +178,18 @@ public static class GameDefinitionLoader
             throw new PhaketException(ErrorCodes.UnsupportedSchemaVersion, ("schemaVersion", dto.SchemaVersion));
         return new GameDefinition(dto.Slug, dto.WritableAreas, dto.StoreIds, dto.LoaderLayouts,
             dto.Detection?.Strategy, dto.Title, dto.MainExecutable, dto.LaunchRequirements,
-            dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths, ValidatedIsolation(dto.SavesIsolation));
+            dto.Platforms, dto.DefaultArch, dto.Sources, dto.SavePaths, ValidatedIsolation(dto.SavesIsolation),
+            ValidatedLocations(dto.SaveLocations));
+    }
+
+    // Only the two systems the rest of the definition names; anything else is a typo, not data.
+    private static SaveLocationsByOs? ValidatedLocations(SaveLocationsByOs? locations)
+    {
+        if (locations is null) return null;
+        foreach (var (os, paths) in locations.Os)
+            if (os is not ("windows" or "linux"))
+                throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"unknown save locations os: {os}"));
+        return locations;
     }
 
     // An unsafe or unknown mode is refused here, not silently downgraded: a definition that

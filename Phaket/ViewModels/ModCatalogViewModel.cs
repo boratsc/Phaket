@@ -28,7 +28,7 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
     private InstallTarget target = new("", "steam", true);
     private readonly Dictionary<string, string> overrides = new(StringComparer.OrdinalIgnoreCase);
     internal Func<string, string, string, InstallTarget, IReadOnlyDictionary<string, string>?, Task<InstallPreparation>>? PrepareOverride;
-    internal Func<InstallPreparation, bool, IProgress<InstallProgress>, Task<InstallOutcome>>? ExecuteOverride;
+    internal Func<InstallPreparation, bool, IProgress<InstallProgress>, IReadOnlyDictionary<string, ConflictDecision>?, Task<InstallOutcome>>? ExecuteOverride;
     private readonly ICatalogTransport? transport;
     private readonly SemaphoreSlim gate = new(1, 1);
     // A page replaced by a game switch stops its own refresh instead of writing into a dead view.
@@ -380,7 +380,7 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
         {
             var progress = new Progress<InstallProgress>(p => InstallProgress = p.Fraction * 100);
             InstallOutcome result;
-            if (ExecuteOverride is not null) result = await ExecuteOverride(acceptedPlan, true, progress);
+            if (ExecuteOverride is not null) result = await ExecuteOverride(acceptedPlan, true, progress, decisions);
             else
             {
                 // PAK-102: a full package provisions the pinned vanilla; Steam auth uses the
@@ -396,7 +396,9 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
                 var service = new ModInstallService(appDataRoot, new ModCatalogClient(transport ?? new HttpCatalogTransport(http!), db),
                     steamCredentials: new SteamCredentialStore(), steamPrompt: (p, ct) => prompt.RequestAsync(p, ct, context),
                     epicTokens: epicTokens, steamMobileConfirmation: SteamPromptViewModel.MobileConfirmationSink());
-                result = await Task.Run(() => service.ExecuteAsync(acceptedPlan, true, progress));
+                // The user's answer travels with the plan: without it the executor refuses
+                // before the first write, and "keep mine" never reaches the copy.
+                result = await Task.Run(() => service.ExecuteAsync(acceptedPlan, true, progress, decisions: decisions));
             }
             var loc = LocalizationService.Instance;
             // PAK-141: a failed install whose transaction took a save backup says where the

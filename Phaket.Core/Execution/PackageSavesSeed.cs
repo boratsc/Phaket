@@ -29,9 +29,9 @@ public static class PackageSavesSeed
     private sealed record Marker(string SchemaVersion, string Os, IReadOnlyList<string> Sources, DateTimeOffset SeededAt);
 
     // targets: the redirected directories the game will see (one per environment variable,
-    // e.g. HOME -> .phaket-home/config); sources: existing save locations of the vanilla
-    // profile (SavePaths, "profile://" honoured). Each target is seeded once, or never when
-    // the save trees are over the limit — an empty destination would look seeded.
+    // e.g. HOME -> .phaket-home/config); sources: where the vanilla game keeps its saves
+    // (~/.config/unity3d/..., never Phaket's profile copy). Each target is seeded once, or never
+    // when the save trees are over the limit — an empty destination would look seeded.
     public static SeedResult Seed(IEnumerable<string> targets, IReadOnlyList<string> sources, string os,
         long limitBytes = DefaultLimitBytes, Func<string, long>? freeBytes = null)
     {
@@ -159,16 +159,17 @@ public static class PackageSavesIsolation
         var isolation = SavesIsolationPlanner.Plan(request.Os, request.Mode, request.PackageRoot);
         if (isolation.Mode != SavesIsolationMode.EnvRedirect)
             return new Result(isolation, null);
-        var sources = SaveSources(request.SavePaths, request.ProfileRoot);
+        // Only the game's real folders are read: a copy Phaket keeps under the profile is not
+        // the user's progress (it would seed an empty or stale tree).
+        var sources = SaveSources(request.SavePaths).Where(Directory.Exists).ToArray();
         var seed = PackageSavesSeed.Seed(isolation.Environment.Values, sources, request.Os, limitBytes);
         return new Result(isolation, seed);
     }
 
-    // "profile://" like a save backup path, anything else absolute; a path that leaves the
-    // profile root is not a save location (same rule as PlanLifecycle.ResolveSavePath).
-    public static string[] SaveSources(IReadOnlyList<string>? savePaths, string profileRoot) =>
+    // A save location in the user's home ("~/...") or an absolute path; nothing else qualifies.
+    public static string[] SaveSources(IReadOnlyList<string>? savePaths) =>
         (savePaths ?? [])
-            .Select(path => PlanLifecycle.ResolveSavePath(path, profileRoot))
+            .Select(path => GameDefinition.ResolveLocation(path, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)))
             .Where(path => path is not null)
             .Select(path => path!)
             .ToArray();

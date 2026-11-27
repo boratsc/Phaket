@@ -116,15 +116,19 @@ public sealed class LaunchService
     // Win32 STILL_ACTIVE: also what a suspended process reports before it is resumed.
     private const int StillActiveExitCode = 259;
 
-    // PAK-146 B: "Graj" through Steam when a Phaket shortcut exists. Steam runs the shortcut
-    // exactly as written in its file (its own StartDir, no extra variables), so the caller's
-    // save plan is only reported, never applied here; whether the saves ended up shared comes
-    // from that plan. A steam:// launch leaves no PID of ours, so nothing to track or stop,
-    // and the same diagnostic Failure travels back when Steam refuses the request.
-    public LaunchOutcome LaunchShortcut(string? steamAppId, string? sessionLabel, bool savesShared) =>
-        LaunchGame(steamAppId ?? "")
-            ? new LaunchOutcome(true, false, savesShared)
-            : LaunchOutcome.Failed with { Failure = $"steam:// launch refused for '{steamAppId}'", SavesShared = savesShared };
+    // PAK-146 B: "Graj" through Steam. The shortcut's own id runs the modded package (Steam
+    // knows its Exe); the store id runs the vanilla game. Steam passes its own environment, so
+    // a launch that goes through it ALWAYS shares saves with the base game — never claim the
+    // package's redirect here. A steam:// launch leaves no PID of ours: nothing to track or stop.
+    // The same diagnostic Failure travels back when Steam refuses the request.
+    public LaunchOutcome LaunchShortcut(string? shortcutAppId, string? storeAppId, string? sessionLabel) =>
+        LaunchGame(shortcutAppId ?? storeAppId ?? "")
+            ? new LaunchOutcome(true, false, SavesShared: true)
+            : LaunchOutcome.Failed with
+            {
+                Failure = $"steam:// launch refused for '{shortcutAppId ?? storeAppId}'",
+                SavesShared = true,
+            };
 
     // The newest record of this app, or null when Phaket never launched the game directly.
     public ProcessRecord? Tracked(string? appId) =>

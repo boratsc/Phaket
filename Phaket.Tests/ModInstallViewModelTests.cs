@@ -66,7 +66,7 @@ public class ModInstallViewModelTests
         var refreshed = 0; var executed = 0;
         var vm = new ModCatalogViewModel("among-us", "/tmp/opencode/ui4-test", autoSync: false, installedChanged: () => refreshed++);
         vm.PrepareOverride = (_, _, _, _, _) => Task.FromResult(Preparation());
-        vm.ExecuteOverride = (_, accepted, _) => { Assert.True(accepted); executed++; return Task.FromResult(new InstallOutcome(true, null, [])); };
+        vm.ExecuteOverride = (_, accepted, _, _) => { Assert.True(accepted); executed++; return Task.FromResult(new InstallOutcome(true, null, [])); };
         await vm.BeginInstallAsync("Owner-Mod", "2.0", Target);
         Assert.False(vm.ExecuteInstallCommand.CanExecute(null));
         await vm.ExecuteInstallCommand.ExecuteAsync(null);
@@ -138,7 +138,7 @@ public class ModInstallViewModelTests
             var vm = new ModsViewModel(game, () => { }, root);
             if (vm.Catalog.RefreshCommand.ExecutionTask is { } initial) await initial;
             vm.Catalog.PrepareOverride = (_, _, _, _, _) => Task.FromResult(Preparation());
-            vm.Catalog.ExecuteOverride = (_, _, _) => {
+            vm.Catalog.ExecuteOverride = (_, _, _, _) => {
                 new InstallRegistry(Path.Combine(root, "installs.json")).Add(new InstalledRecipe("mod", "2", "among-us", "steam", "/game", "/profile", "/stage", "/state", null, DateTimeOffset.UnixEpoch, "Owner-Mod", "2.0"));
                 return Task.FromResult(new InstallOutcome(true, null, []));
             };

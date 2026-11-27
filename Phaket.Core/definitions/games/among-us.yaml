@@ -59,6 +59,13 @@ launchRequirements:
 # PAK-141/146: one save tree, no per-account ambiguity: the profile is a single folder.
 savePaths:
   - profile://steam/945360
+# Where the GAME really keeps its saves (settings, playerPrefs, gameData). Phaket never writes
+# here; on Linux a package launch reads it ONCE to start from the user's progress. Windows is
+# left out because a Unity game's LocalLow folder cannot be redirected (see savesIsolation).
+saveLocations:
+  os:
+    linux:
+      - "~/.config/unity3d/Innersloth/Among Us"
 # PAK-146 (model B), Unity/IL2CPP: on Linux the engine resolves ~/.config/unity3d/<company>/<game>
 # through HOME/XDG_CONFIG_HOME, so a package launch can keep its saves beside itself. On Windows
 # Unity asks SHGetKnownFolderPath for %USERPROFILE%\AppData\LocalLow, which no environment

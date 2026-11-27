@@ -154,7 +154,7 @@ public partial class GameViewModel
             // The shortcut starts the game as it is (the managed folder when Phaket has one),
             // with no arguments: a plain double-click works, Steam only adds its overlay.
             var result = remove
-                ? await SteamService.RemoveShortcutAsync(target.Root, target.User, null, LaunchExe, consent: true)
+                ? await SteamService.RemoveShortcutAsync(target.Root, target.User, null, SteamShortcutsFile.Quote(LaunchExe), consent: true)
                 : await SteamService.AddShortcutAsync(target.Root, target.User,
                     new SteamShortcut(Game.Title, LaunchExe, LaunchRoot, "", CoverJpg(), null, null), consent: true);
             if (result is not null) RecordedAppId = remove ? 0 : result.AppId;
@@ -200,19 +200,22 @@ public partial class GameViewModel
         }
     }
 
-    // "Graj": the game starts from its folder (by Steam when a shortcut exists, otherwise by
-    // Phaket) with its saves kept beside it when the definition allows that (PAK-146 B).
+    // "Graj": a Phaket shortcut means Steam starts the package (its own id); with no shortcut the
+    // game starts by Steam (the store id) or, for a package without Steam, from its folder. Saves
+    // kept beside the package only for a direct launch (PAK-146 B): Steam never carries our env.
     private async Task PlayDirectAsync()
     {
         var root = LaunchRoot;
         var managed = ManagedGameRoot();
+        // Exists only when this page really wrote the shortcut; a stale record is a store id.
+        var shortcutAppId = HasSteamShortcut ? RecordedAppId : 0;
         try
         {
             IsBusy = true;
             IsSavesSharedNoticeVisible = false;
             StatusMessage = "";
-            // Only a package has saves to keep beside it: a vanilla launch passes no plan at all
-            // and keeps the user's own profile, exactly as before.
+            // Only a direct launch of a package has saves to keep beside it: vanilla (no plan)
+            // keeps the user's own profile, exactly as before.
             var plan = new PackageSavesIsolation.Result(SavesIsolationPlanner.Plan(HostOs,
                 Game.Definition.SavesIsolationFor(HostOs), null), null);
             if (managed is not null)
@@ -222,17 +225,18 @@ public partial class GameViewModel
                 plan = await Task.Run(() => SavesLaunchPreparation.Prepare(HostOs, Game.Definition, managed, ProfileRootFor(managed)));
                 IsPreparingSaves = plan.Seed?.Status == PackageSavesSeed.SeedStatus.Seeded;
             }
-            // A Steam shortcut starts the game through Steam: no environment of ours follows it,
-            // so only a direct launch of a package gets the redirect.
-            var started = managed is not null && !HasSteamShortcut
-                ? Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName, null,
-                    plan.Isolation.Environment, plan.Isolation.SavesShared)
-                : HasSteamShortcut
-                    ? Launch.LaunchShortcut(Game.SteamAppId, Game.ProfileName, plan.Isolation.SavesShared)
-                    : Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName);
+            LaunchOutcome started;
+            if (shortcutAppId != 0 || managed is null)
+                // Through Steam: the shortcut runs the package, the store id the vanilla game.
+                // Either way Steam starts it, so the saves are the user's own (SavesShared).
+                started = Launch.LaunchShortcut(shortcutAppId != 0 ? shortcutAppId.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+                    Game.SteamAppId, Game.ProfileName);
+            else
+                started = Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName, null,
+                    plan.Isolation.Environment, plan.Isolation.SavesShared);
             if (!started.Started) { StatusMessage = Loc["Game.LaunchFailed"]; return; }
             // Saves that cannot be kept beside the game are said once and the game still starts.
-            IsSavesSharedNoticeVisible = plan.Isolation.SavesShared;
+            IsSavesSharedNoticeVisible = started.SavesShared;
             StatusMessage = Loc["Game.Launched"];
             OnPropertyChanged(nameof(CanStopGame));
         }

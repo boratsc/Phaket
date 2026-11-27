@@ -286,7 +286,7 @@ public sealed class ModInstallServiceTests
             vm.SelectedTarget = Assert.Single(vm.Targets, t => !t.Target.Sandbox);
             InstallPreparation? plan = null;
             vm.PrepareOverride = async (name, version, endpoint, target, overrides) => plan = await service.PrepareAsync("among-us", name, version, endpoint, target with { Arch = "x86" }, overrides);
-            vm.ExecuteOverride = (p, accepted, progress) => service.ExecuteAsync(p, accepted, progress);
+            vm.ExecuteOverride = (p, accepted, progress, _) => service.ExecuteAsync(p, accepted, progress);
             // The details lookup is not part of this test; keep it off the network and close it
             // before the fixture directory is deleted.
             vm.Endpoint = "http://127.0.0.1:1";

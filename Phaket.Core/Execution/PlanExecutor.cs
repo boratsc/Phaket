@@ -147,6 +147,10 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
 
     // After an uninstall, or a rollback that returned the tree to its base state, the
     // agreed state is the tree as it is now; nothing is written when the game is gone.
+    // Also the orchestrator's post-step: it verifies only executed operations and then records
+    // the same baseline a one-shot Execute would (see Complete).
+    internal void SaveBaselineAfter(OperationPlan plan) => SaveBaseline(plan.InstallationRef);
+
     private void SaveBaseline(string? planInstallationId = null)
     {
         if (!Directory.Exists(context.GameRoot)) return;
@@ -163,8 +167,9 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
 
     // Every requires-user-decision conflict needs an answer before the first write. The plan
     // is filtered PER PATH: a "keep local" file skips the writes touching it (and only those),
-    // a "take recipe" file runs them; writes of unrelated files always run.
-    private IReadOnlyList<PlannedOperation> ResolveConflicts(OperationPlan plan, ExecutionJournal journal,
+    // a "take recipe" file runs them; writes of unrelated files always run. Internal so a
+    // host that drives operations itself (InstallOrchestrator) applies the same answer.
+    internal IReadOnlyList<PlannedOperation> ResolveConflicts(OperationPlan plan, ExecutionJournal journal,
         IReadOnlyDictionary<string, ConflictDecision>? decisions)
     {
         if (!PlanLifecycle.HasConflict(plan)) return plan.Operations;

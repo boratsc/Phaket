@@ -32,24 +32,30 @@ public sealed class InstallOrchestrator
         // Hold the installation lock across approval, every operation and
         // completion: a concurrent install/rollback must not interleave.
         using var gate = executor.LockInstallation();
-        // PAK-141: the save backup happens before Approve; a plan whose conflicts the user
-        // has not answered throws here, before anything is written.
-        if (lifecycle is PlanLifecycle full)
-            full.BeginAsync(plan, ct: cancellationToken,
-                waitsForDecision: decisions is null ? plan.Conflicts.Any(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision) : false)
-                .GetAwaiter().GetResult();
-        else
-            lifecycle?.Begin(plan);
+        // The answer only counts for a plan that is approved with it: with no answer the
+        // lifecycle refuses before the save backup, and the steps below write nothing.
+        var approval = lifecycle is PlanLifecycle full
+            ? full.BeginAsync(plan, ct: cancellationToken, waitsForDecision: decisions is null)
+                .GetAwaiter().GetResult().Approval
+            : lifecycle?.Begin(plan) ?? PlanApproval.Accept;
+        if (!approval.Accepted)
+            throw new PhaketException(ErrorCodes.FileConflictRequiresDecision,
+                ("path", plan.Conflicts.First(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision).Path));
         // The baseline is keyed by the installation, which only the plan carries.
         plan = plan with { InstallationRef = executor.InstallationIdFor(plan) };
         var journal = executor.Approve(plan);
-        var count = plan.Operations.Count;
+        // The user's answer per path must reach the write loop, or "keep mine" would still
+        // copy the recipe's file: the executor's per-path filter decides what really runs.
+        var operations = executor.ResolveConflicts(plan, journal, decisions);
+        // What the per-path answer skipped: a "keep mine" file or anything that writes over it.
+        bool SkippedBy(PlannedOperation step) => !operations.Contains(step);
+        var count = operations.Count;
         try
         {
             for (var i = 0; i < count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var operation = plan.Operations[i];
+                var operation = operations[i];
                 progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "running", (double)i / count));
                 journal = executor.ExecuteOperation(plan, journal, operation.OpId);
                 progress?.Report(new InstallProgress(i, count, operation.OpId, operation.Kind, "done", (double)(i + 1) / count));
@@ -65,8 +71,14 @@ public sealed class InstallOrchestrator
             if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "failed", (ex as PhaketException)?.Error.Code ?? ex.GetType().Name, cancellationToken);
             throw;
         }
-        // Complete(plan, journal, decisions) also records the new agreed baseline.
-        journal = executor.Complete(plan, journal, decisions);
+        // Complete(plan, journal) also records the new agreed baseline. The plan's own
+        // verification steps would fail on a file the user kept (they carry the recipe's hash),
+        // so what runs is the same verification minus any step the answer skipped. A conflict
+        // without an answer wrote no baseline, so that half is not decided here.
+        var verify = plan with { Verification = operations.Any(SkippedBy) ? [] : plan.Verification };
+        journal = executor.Complete(verify, journal);
+        if (plan.Conflicts.All(c => c.Resolution != PlanLifecycle.ConflictsRequireDecision
+                || decisions?.ContainsKey(c.Path) == true)) executor.SaveBaselineAfter(plan);
         if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "installed", cancellationToken: cancellationToken);
         progress?.Report(new InstallProgress(count, count, "", "verify", "done", 1.0));
         return journal;

@@ -76,8 +76,14 @@ public static class SteamShortcutsFile
 
     // The fields of one entry, in the order Heroic writes them. No tags: collections are the
     // user's, so the caller adds the "phaket" tag when it wants the entry listed under it.
+    // Exe and StartDir are quoted the way the reference writes them, so a path with spaces
+    // ("Program Files") still starts; the id hashes the same quoted values it stores.
     public static BinaryVdfNode CreateEntry(string appName, string exe, string startDir, string launchOptions, string icon = "")
     {
+        // The id hashes exactly the values stored below: the quoted ones, like every entry in
+        // the file (Steam's own convention, and what the service matches when removing).
+        exe = Quote(exe);
+        startDir = Quote(startDir);
         var entry = new BinaryVdfNode();
         entry.Set("appid", GenerateShortcutId(exe, appName));
         entry.Set("AppName", appName);
@@ -97,6 +103,11 @@ public static class SteamShortcutsFile
         entry.Set("FlatpakAppID", "");
         return entry;
     }
+
+    // The path Steam runs: one pair of quotes, whatever form the caller passed (a raw path,
+    // or the quoted value another helper already produced).
+    public static string Quote(string path) =>
+        path.Length == 0 ? path : "\"" + path.Trim('"') + "\"";
 
     // Marks the entry as ours: a collection named "phaket" (tags "0", like Heroic writes them).
     public static void TagPhaket(BinaryVdfNode entry) =>

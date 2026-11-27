@@ -37,6 +37,18 @@
       "description": "PAK-141 save locations: \"profile://...\" or an absolute path.",
       "type": "array", "items": { "type": "string", "minLength": 1 }
     },
+    "saveLocations": {
+      "description": "PAK-146: where the game itself keeps saves per OS (Linux Unity: ~/.config/unity3d/<company>/<game>). Where a system is listed, its paths are what a package is seeded from; savePaths stays Phaket's own copy under the profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "object",
+          "propertyNames": { "enum": ["windows", "linux"] },
+          "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
     "savesIsolation": {
       "description": "PAK-146: per OS, whether a package keeps its saves beside itself (\"env\", redirected env keys) or shares them with the user profile (\"shared\", with a reason). An OS left out is unknown.",
       "type": "object",
