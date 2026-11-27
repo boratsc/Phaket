@@ -20,6 +20,13 @@ public partial class LibraryViewModel
     internal Action<string>? FolderOpener { get; set; }
     // Where the scan looks; a test points it at its own Steam fixture instead of the real home.
     internal string? SteamHome { get; set; }
+    // Same seam one level deeper: the Steam roots the scan reads. On Windows the fixture must
+    // live in temp, never under the real Program Files, so a test sets this instead.
+    internal static Func<string, string, IReadOnlyList<string>?>? SteamRootsOverride
+    {
+        get => SteamAdapter.RootsOverrideForTests;
+        set => SteamAdapter.RootsOverrideForTests = value;
+    }
 
     [ObservableProperty] private bool hasPinUpdateWarning;
     [ObservableProperty] private string pinUpdateMessage = "";

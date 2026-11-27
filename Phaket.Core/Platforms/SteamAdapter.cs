@@ -30,8 +30,13 @@ public sealed class SteamAdapter
 
     public SteamAdapter(IReadOnlyList<GameDefinition> definitions) => this.definitions = definitions;
 
+    // Test seam: a fixture points every root at its own temp tree, so a scan never reads
+    // (or writes) a real Steam installation on any OS. Null in production.
+    internal static Func<string, string, IReadOnlyList<string>?>? RootsOverrideForTests { get; set; }
+
     public static IReadOnlyList<string> DefaultSteamRoots(string os, string home)
     {
+        if (RootsOverrideForTests?.Invoke(os, home) is { } overridden) return overridden;
         if (os == "windows")
             return [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam")];
         return

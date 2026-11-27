@@ -272,14 +272,13 @@ public sealed class Pak142ReviewFixTests
         var home = Directory.CreateTempSubdirectory("phaket-fixc-scan-").FullName;
         // The scan also lists the signed-in Steam library; keep it offline and empty.
         var emptySteam = new NoSteam();
+        // Every OS reads one root: the fixture under temp. Never the real Program Files (Windows)
+        // or the user's ~/.local/share/Steam — the test must not touch a real installation.
+        var steamHome = Path.Combine(home, "Program Files (x86)", "Steam");
+        LibraryViewModel.SteamRootsOverride = (_, _) => [steamHome];
         try
         {
-            // Build the library the way the scanner looks for it on THIS OS: a Linux layout
-            // under the temp home is invisible to the Windows Program Files root.
-            var steamRoot = OperatingSystem.IsWindows()
-                ? Path.Combine("C:\\Program Files (x86)", "Steam")
-                : Path.Combine(home, ".local", "share", "Steam");
-            var steamApps = Path.Combine(steamRoot, "steamapps");
+            var steamApps = Path.Combine(steamHome, "steamapps");
             var gameRoot = Path.Combine(steamApps, "common", "Among Us");
             Directory.CreateDirectory(gameRoot);
             File.WriteAllText(Path.Combine(steamApps, "appmanifest_945360.acf"), """
@@ -316,7 +315,7 @@ public sealed class Pak142ReviewFixTests
             Assert.Contains("12345678", vm.PinUpdateMessage);
             Assert.Contains("87654321", vm.PinUpdateMessage);
         }
-        finally { Directory.Delete(home, recursive: true); }
+        finally { LibraryViewModel.SteamRootsOverride = null; Directory.Delete(home, recursive: true); }
     }
 
     // --- (6) render helper: two names never collide, and the readable part stays first ---
