@@ -98,33 +98,45 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
         if (journal.State is not (JournalState.Approved or JournalState.Interrupted or JournalState.Failed or JournalState.Executing))
             throw new PhaketException(ErrorCodes.ValidationFailed, ("detail", $"journal state {journal.State} cannot execute"));
         using var gate = LockInstallation();
+        var executionStarted = journal.State == JournalState.Executing;
         try
         {
             // Save backup before the FIRST mutation; a journal write is not a game-tree change,
             // so a refused plan leaves the journal Approved. The conflict gate is ResolveConflicts.
             if (journal.State != JournalState.Executing) Lifecycle.Begin(plan);
             var operations = ResolveConflicts(plan, journal, decisions);
+            // A journal with entries is a resume: run every remaining operation. ExecuteOperation
+            // skips only verified entries, so Complete cannot claim a write it never made.
             journal = journal with { State = JournalState.Executing };
             Persist(journal);
+            executionStarted = true;
             foreach (var operation in operations)
             {
                 ct.ThrowIfCancellationRequested();
                 journal = ExecuteOperation(plan, journal, operation.OpId);
             }
-            return Complete(plan, journal, decisions);
+            // The plan's own verification steps carry the recipe's hash: a file the user kept
+            // would fail it, so those steps are checked for existence only.
+            return Complete(PlanWithKeptVerification(plan, decisions), journal, decisions);
         }
         catch (OperationCanceledException)
         {
             // Reload the latest persisted journal: ExecuteOperation may have
             // recorded the current operation's intent/backup before failing.
-            var latest = LoadJournal(context.ProfileRoot) ?? journal;
-            Persist(latest with { State = JournalState.Interrupted });
+            if (executionStarted)
+            {
+                var latest = LoadJournal(context.ProfileRoot) ?? journal;
+                Persist(latest with { State = JournalState.Interrupted });
+            }
             throw;
         }
         catch
         {
-            var latest = LoadJournal(context.ProfileRoot) ?? journal;
-            Persist(latest with { State = JournalState.Failed });
+            if (executionStarted)
+            {
+                var latest = LoadJournal(context.ProfileRoot) ?? journal;
+                Persist(latest with { State = JournalState.Failed });
+            }
             throw;
         }
     }
@@ -187,27 +199,68 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
             throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", open[0]));
 
         // A resumed transaction already wrote part of the tree; its per-path answer is not in
-        // the journal, so the only safe answers are a no-op or an explicit re-confirmation.
+        // the journal, so a path whose write this transaction already made and then ran cannot
+        // be re-answered ("both sides edited" answers "use the mod's version"), and a file the
+        // user kept has no write to reverse: that contradiction is refused before anything runs.
         if (journal.Entries.Count > 0)
         {
-            var fresh = decisions!;
-            if (fresh.Values.All(decision => decision == ConflictDecision.KeepLocal)) return [];
-            var applied = plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
-                    && fresh.TryGetValue(c.Path, out var answer) && answer == ConflictDecision.TakeRecipe)
-                .Select(c => Path.GetFullPath(Path.Combine(context.GameRoot, c.Path)))
-                .ToArray();
-            var written = journal.Entries.Where(e => e.Intent.Kind is "file.copy" && e.Applied)
-                .Select(e => Path.GetFullPath(e.Intent.TargetPath));
-            if (written.Any(applied.Contains))
-                throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", plan.Conflicts[0].Path));
-            return [];
+            foreach (var conflict in plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision))
+            {
+                if (decisions!.TryGetValue(conflict.Path, out var answer) && answer == ConflictDecision.TakeRecipe
+                    && WrittenBy(plan, journal, conflict.Path))
+                    throw new PhaketException(ErrorCodes.FileConflictRequiresDecision, ("path", conflict.Path));
+            }
         }
 
-        var kept = plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
+        // Resume included: a kept file skips only the writes touching it. Reporting an empty
+        // list here let a resume Complete with the rest unwritten (R3d #3). A plan written
+        // before the resume (its first run) legitimately carries no journal yet.
+        var kept = KeptPaths(plan, decisions);
+        // A plan written before the resume (its first run) has an empty journal: nothing to check.
+        var nothingSkipped = plan.Operations.Where(o => !TouchesKept(o, kept)).ToArray();
+        return nothingSkipped;
+    }
+
+    // True when this journal says the transaction's write of the path succeeded.
+    private bool WrittenBy(OperationPlan plan, ExecutionJournal journal, string path)
+    {
+        var full = Path.GetFullPath(Path.Combine(context.GameRoot, path));
+        var opIds = plan.Operations.Where(o => Matches(o)).Select(o => o.OpId).ToHashSet(StringComparer.Ordinal);
+        return journal.Entries.Any(entry => entry.Applied
+            && string.Equals(Path.GetFullPath(entry.Intent.TargetPath), full, StringComparison.Ordinal)
+            || entry.Applied && entry.Intent.Kind is "archive.extract" or "loader.ensure" or "game.provision"
+                && opIds.Contains(entry.Intent.OpId)
+                && (entry.CreatedFiles ?? []).Any(file => string.Equals(Path.GetFullPath(file), full, StringComparison.Ordinal)));
+
+        bool Matches(PlannedOperation operation) =>
+            string.Equals(BaselineComparison.RelativeToGame(operation.TargetPath, context.GameRoot), path, StringComparison.Ordinal)
+            || Omrl.BaselineSync.OperationTouches(operation, [path], context.GameRoot,
+                operation.Kind is "archive.extract" or "loader.ensure" ? PlanArchiveWrites(operation) : null);
+    }
+
+    // The paths a "keep mine" answer protects: the user's bytes must survive every write.
+    private static IReadOnlyList<string> KeptPaths(OperationPlan plan,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions) =>
+        plan.Conflicts.Where(c => c.Resolution == PlanLifecycle.ConflictsRequireDecision
                 && decisions!.TryGetValue(c.Path, out var answer) && answer == ConflictDecision.KeepLocal)
             .Select(c => c.Path).ToArray();
-        return plan.Operations.Where(o => !Omrl.BaselineSync.OperationTouches(o, kept, context.GameRoot,
-            o.Kind is "archive.extract" or "loader.ensure" ? PlanArchiveWrites(o) : null)).ToArray();
+
+    private bool TouchesKept(PlannedOperation operation, IReadOnlyList<string> kept) =>
+        Omrl.BaselineSync.OperationTouches(operation, kept, context.GameRoot,
+            operation.Kind is "archive.extract" or "loader.ensure" ? PlanArchiveWrites(operation) : null);
+
+    // The verification a plan really leaves: a kept file cannot carry the recipe's hash as its
+    // post-condition — the user's file is the answer, so only its existence is checked.
+    internal OperationPlan PlanWithKeptVerification(OperationPlan plan,
+        IReadOnlyDictionary<string, ConflictDecision>? decisions)
+    {
+        var kept = KeptPaths(plan, decisions);
+        return kept.Count == 0 ? plan : plan with
+        {
+            Verification = [.. plan.Verification.Select(step =>
+                Omrl.BaselineSync.OperationTouches(step, kept, context.GameRoot, plannedFiles: null)
+                    ? step with { Sha256 = null } : step)],
+        };
     }
 
     public ExecutionJournal Interrupt(ExecutionJournal journal)

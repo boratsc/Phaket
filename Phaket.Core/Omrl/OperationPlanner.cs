@@ -201,6 +201,7 @@ public static class OperationPlanner
             }
         }
 
+        ResolveProducedFileFacts(operations, context);
         var conflicts = DetectConflicts(writes, context.ExistingOwners ?? [], context.GameRoot).ToList();
         var warnings = ExecutableWarnings(operations).ToList();
         if (archUnknown) warnings.Add("ARCH_UNKNOWN");
@@ -247,12 +248,26 @@ public static class OperationPlanner
         // per conflict path. Cutting every write instead would block unrelated files too.
         if (context.Baseline is { } baseline)
         {
-            var compared = BaselineSync.Compare(operations, baseline, context.GameRoot);
-            foreach (var conflict in compared.Where(c => c.RequiresUserDecision))
-                conflicts.Add(new PlanConflict(conflict.Path,
-                    [.. (conflict.Local is null ? [] : new[] { "local:" + context.InstallationId }),
-                        .. (conflict.Remote is null ? [] : new[] { "remote:" + recipe.Id })],
+            // A tree write's bytes are not in the operation, but its planned write list is: the
+            // entry names the hash of what the archive would leave, so a two-sided edit of an
+            // extracted or loader file is a conflict like a single-file copy (R3d #1).
+            var treeWrites = new Dictionary<string, Dictionary<string, BaselineFileState>>(StringComparer.Ordinal);
+            foreach (var operation in operations.Where(o => o.Kind is "archive.extract" or "loader.ensure"))
+                if (ArchiveWrites(context, operation) is { } entries) treeWrites[operation.OpId] = entries;
+            var writtenByAnyTree = operations.Where(o => treeWrites.ContainsKey(o.OpId))
+                .SelectMany(o => treeWrites[o.OpId].Keys).ToHashSet(StringComparer.Ordinal);
+            // A tree write replaces each entry it contains. If the user also changed that
+            // entry since the agreed baseline, it is a two-sided conflict even when the recipe
+            // would restore the baseline bytes: otherwise the archive silently overwrites it.
+            var decided = BaselineSync.Compare(operations, baseline, context.GameRoot,
+                operation => treeWrites.GetValueOrDefault(operation.OpId),
+                replacesEveryPath: writtenByAnyTree)
+                .Where(comparison => comparison.RequiresUserDecision)
+                .Select(comparison => new PlanConflict(comparison.Path,
+                    [.. (comparison.Local is null ? [] : new[] { "local:" + context.InstallationId }),
+                        .. (comparison.Remote is null ? [] : new[] { "remote:" + recipe.Id })],
                     "requires-user-decision"));
+            conflicts.AddRange(decided);
         }
 
         return new OperationPlan(
@@ -263,6 +278,110 @@ public static class OperationPlanner
             warnings,
             requiresDownload,
             verification);
+    }
+
+    // A generated archive recipe extracts to staging, then copies one file at a time to the
+    // game tree. Carry each archive entry's content hash onto that copy so baseline comparison
+    // can detect a user edit before the executor overwrites it (R3d #1).
+    private static void ResolveProducedFileFacts(List<PlannedOperation> operations, PlannerContext context)
+    {
+        foreach (var index in Enumerable.Range(0, operations.Count))
+        {
+            var copy = operations[index];
+            if (copy.Kind != "file.copy" || copy.SourceRef is null) continue;
+            var (scheme, sourcePath) = VirtualUri.Parse(copy.SourceRef);
+            if (scheme != "staging") continue;
+            string stagedFile;
+            try { stagedFile = PathBoundary.Resolve(context.StagingRoot, sourcePath); }
+            catch (PhaketException) { continue; }
+            var producer = operations.FirstOrDefault(operation => operation.Kind == "archive.extract"
+                && PathBoundary.IsWithin(Path.GetFullPath(operation.TargetPath), stagedFile));
+            if (producer is null || ArchiveSource(context, producer) is not { } archive || !File.Exists(archive)) continue;
+            var relative = Path.GetRelativePath(producer.TargetPath, stagedFile).Replace('\\', '/');
+            var strip = producer.Parameters?.TryGetValue("stripComponents", out var rawStrip) == true
+                ? int.Parse(rawStrip) : 0;
+            try
+            {
+                using var zip = ZipFile.OpenRead(archive);
+                foreach (var entry in zip.Entries)
+                {
+                    if (entry.FullName.Replace('\\', '/').EndsWith('/')) continue;
+                    var parts = entry.FullName.Replace('\\', '/').Split('/');
+                    if (parts.Length <= strip || !string.Equals(string.Join('/', parts[strip..]), relative, StringComparison.Ordinal)) continue;
+                    using var stream = entry.Open();
+                    operations[index] = copy with
+                    {
+                        Sha256 = Convert.ToHexStringLower(SHA256.HashData(stream)),
+                        SizeBytes = entry.Length,
+                    };
+                    break;
+                }
+            }
+            catch (InvalidDataException) { }
+        }
+    }
+
+    private static string? ArchiveSource(PlannerContext context, PlannedOperation operation)
+    {
+        var (scheme, path) = VirtualUri.Parse(operation.SourceRef ?? "");
+        var root = scheme switch { "package" => context.PackageRoot, "staging" => context.StagingRoot, _ => null };
+        if (root is null) return null;
+        var file = PathBoundary.Resolve(root, path);
+        return File.Exists(file) ? file : File.Exists(file + ".zip") ? file + ".zip" : null;
+    }
+
+    // What a tree write WOULD leave in the game tree, hashed from the archive itself: an edit
+    // of one of those files is compared like a single-file write (R3d #1). An archive that is
+    // not downloaded yet means null: the file is not judged instead of guessed.
+    private static Dictionary<string, BaselineFileState>? ArchiveWrites(PlannerContext context,
+        PlannedOperation operation)
+    {
+        var (scheme, path) = VirtualUri.Parse(operation.SourceRef ?? "");
+        var archive = scheme switch
+        {
+            "package" => Path.Combine(context.PackageRoot, path.Split('/')[0]),
+            "staging" => PathBoundary.Resolve(context.StagingRoot, path),
+            _ => null,
+        };
+        if (archive is null || !File.Exists(archive)) return null;
+        try
+        {
+            var targetRoot = operation.Kind == "loader.ensure" ? context.GameRoot : operation.TargetPath;
+            var parameters = operation.Parameters ?? new Dictionary<string, string>();
+            var strip = parameters.TryGetValue("stripComponents", out var declared) ? int.Parse(declared) : 0;
+            var include = parameters.TryGetValue("include", out var raw) && raw is not null
+                ? System.Text.Json.JsonSerializer.Deserialize<string[]>(raw) : null;
+            var states = new Dictionary<string, BaselineFileState>(StringComparer.Ordinal);
+            foreach (var written in SafeArchive.PlanWrites(archive, targetRoot, operation.SourceRef!, strip, include))
+                if (BaselineComparison.RelativeToGame(written, context.GameRoot) is { } relative
+                    && EntryState(archive, written, targetRoot, strip) is { } state)
+                    states[relative] = state;
+            return states;
+        }
+        catch (Exception e) when (e is PhaketException or IOException or InvalidDataException
+            or UnauthorizedAccessException or System.Text.Json.JsonException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    // The entry's bytes exactly as the archive stores them (no symlink is followed).
+    private static BaselineFileState? EntryState(string archive, string written, string targetRoot, int strip)
+    {
+        var root = Path.GetFullPath(targetRoot);
+        using var zip = ZipFile.OpenRead(archive);
+        foreach (var entry in zip.Entries)
+        {
+            var name = entry.FullName.Replace('\\', '/');
+            if (name.EndsWith('/')) continue;
+            var parts = name.Split('/');
+            if (parts.Length <= strip) continue;
+            var destination = Path.GetFullPath(Path.Combine(root, string.Join('/', parts[strip..])));
+            if (!string.Equals(destination, Path.GetFullPath(written), StringComparison.Ordinal)) continue;
+            using var stream = entry.Open();
+            return new BaselineFileState(Convert.ToHexStringLower(SHA256.HashData(stream)), DateTimeOffset.UnixEpoch, entry.Length);
+        }
+        return null;
     }
 
     // The artifact a step takes its bytes from, when that artifact declares an arch:

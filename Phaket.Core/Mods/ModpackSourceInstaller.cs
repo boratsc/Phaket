@@ -101,10 +101,7 @@ public sealed class ModpackSourceInstaller
             var generated = RecipeGenerator.GenerateModpackPackage(item.Source, name, version, sourceRef,
                 sha256, size, archiveEntries, context.Game, recipeId, item.Repo, item.Tag, item.AssetName);
             var planner = new PlannerContext(context.InstallationId, context.ProfileId, gameRoot, itemProfileRoot,
-                itemStagingRoot, itemPackageRoot, context.Game, context.Facts, context.ExistingOwners,
-                // PAK-142: the same agreed state ModInstallService plans against, so a
-                // two-sided edit is a per-file decision here too.
-                Baseline: InstallBaseline.LoadForPlan(context.StateRoot, context.InstallationId));
+                itemStagingRoot, itemPackageRoot, context.Game, context.Facts, context.ExistingOwners);
             var plan = OperationPlanner.Plan(generated.Recipe, planner,
                 generated.Ownership.ToDictionary(owner => owner.StepId, owner => owner.Ownership));
             var execution = new PlanExecutionContext(gameRoot, itemProfileRoot, itemStagingRoot,

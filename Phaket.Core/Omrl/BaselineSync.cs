@@ -6,27 +6,48 @@ namespace Phaket.Core.Omrl;
 public static class BaselineSync
 {
     public static IReadOnlyList<BaselineComparison> Compare(
-        IReadOnlyList<PlannedOperation> operations, InstallBaseline baseline, string gameRoot) =>
-        BaselineComparison.Compare(operations, baseline, gameRoot);
+        IReadOnlyList<PlannedOperation> operations, InstallBaseline baseline, string gameRoot,
+        Func<PlannedOperation, IReadOnlyDictionary<string, BaselineFileState>?>? treeWrites = null,
+        Func<BaselineComparison, bool>? keptLocal = null,
+        IReadOnlySet<string>? replacesEveryPath = null) =>
+        BaselineComparison.Compare(operations, baseline, gameRoot, treeWrites, null, replacesEveryPath);
 
-    // True when a write OP lands on one of the decided paths. The operation is the final word:
-    // an extract may write a conflicted file the comparison only saw as a directory target.
+    // True when the operation can WRITE one of the decided (kept-local) paths: exactly that file,
+    // or a tree write (extract/loader) whose planned writes include it. Without a write list a
+    // tree write under the path is conservatively treated as touching it: a "keep mine" answer
+    // must never let an archive overwrite the file the user chose to keep.
     public static bool OperationTouches(PlannedOperation operation, IReadOnlyList<string> conflictPaths,
         string gameRoot, IEnumerable<string>? plannedFiles)
     {
         var relative = BaselineComparison.RelativeToGame(operation.TargetPath, gameRoot);
-        if (relative is null) return false;
+        // An extract over the game root has no game-relative target of its own: it is a tree
+        // write, so every conflicting path is under it and the write list is the only evidence.
+        var treeOverRoot = relative is null && IsTreeWrite(operation) && IsGameRoot(operation.TargetPath, gameRoot);
+        if (relative is null && !treeOverRoot) return false;
+        var planned = (plannedFiles ?? []).Select(file => BaselineComparison.RelativeToGame(file, gameRoot))
+            .Where(file => file is not null).ToArray();
         foreach (var path in conflictPaths)
         {
-            if (string.Equals(path, relative, StringComparison.Ordinal)) return true;
-            // A tree write (extract/provision/loader) is conflict-free only when it cannot
-            // produce the conflicted file.
-            if (path.StartsWith(relative.TrimEnd('/') + "/", StringComparison.Ordinal)
-                && !(plannedFiles ?? []).Any(file => string.Equals(BaselineComparison.RelativeToGame(file, gameRoot), path, StringComparison.Ordinal)))
+            if (!treeOverRoot)
+            {
+                if (string.Equals(path, relative, StringComparison.Ordinal)) return true;
+                if (!path.StartsWith(relative!.TrimEnd('/') + "/", StringComparison.Ordinal)) continue;
+            }
+            // A planned write list is the final word; a missing one means "cannot prove it won't".
+            if (plannedFiles is null || planned.Any(file => string.Equals(file, path, StringComparison.Ordinal)))
                 return true;
         }
         return false;
     }
+
+    private static bool IsTreeWrite(PlannedOperation operation) =>
+        operation.Kind is "archive.extract" or "loader.ensure" or "game.provision";
+
+    // The write target IS the game root (an extract over the whole tree).
+    private static bool IsGameRoot(string targetPath, string gameRoot) =>
+        string.Equals(System.IO.Path.GetFullPath(targetPath).TrimEnd(System.IO.Path.DirectorySeparatorChar),
+            System.IO.Path.GetFullPath(gameRoot).TrimEnd(System.IO.Path.DirectorySeparatorChar),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }
 
 public enum BaselineChangeKind
@@ -83,13 +104,30 @@ public sealed record BaselineComparison(
 
     // Compares the baseline entries rewritten by single-file writes with the game tree.
     // A configured key lives in a shared file the ledger owns, so it is not judged here.
+    // A tree write (extract/loader) passes the states of the files it would leave and is
+    // judged by those instead of by its staging or game-root target. An archive rewrites every
+    // file it carries, so a local edit of one of them is a two-sided edit: keptLocal names the
+    // paths a whole-file decision already covers, and those are not asked about again.
     public static IReadOnlyList<BaselineComparison> Compare(
-        IReadOnlyList<PlannedOperation> operations, InstallBaseline baseline, string gameRoot)
+        IReadOnlyList<PlannedOperation> operations, InstallBaseline baseline, string gameRoot,
+        Func<PlannedOperation, IReadOnlyDictionary<string, BaselineFileState>?>? treeWrites = null,
+        Func<BaselineComparison, bool>? keptLocal = null,
+        IReadOnlySet<string>? replacesEveryPath = null)
     {
         var local = new Dictionary<string, BaselineFileState?>(StringComparer.Ordinal);
         var remote = new Dictionary<string, BaselineFileState?>(StringComparer.Ordinal);
         foreach (var operation in operations)
         {
+            if (treeWrites?.Invoke(operation) is { } writes)
+            {
+                foreach (var (path, state) in writes)
+                {
+                    if (!baseline.Files.ContainsKey(path)) continue;
+                    local[path] = InstallBaseline.LocalState(System.IO.Path.Combine(gameRoot, path));
+                    remote[path] = state;
+                }
+                continue;
+            }
             if (operation.Kind is "archive.extract" or "loader.ensure" or "game.provision" or "config.set") continue;
             if (RelativeToGame(operation.TargetPath, gameRoot) is not { } relative) continue;
             local[relative] = InstallBaseline.LocalState(System.IO.Path.Combine(gameRoot, relative));
@@ -101,17 +139,29 @@ public sealed record BaselineComparison(
                 remote[relative] = new BaselineFileState(sha256.ToLowerInvariant(),
                     baseline.Files[relative].Mtime, operation.SizeBytes ?? baseline.Files[relative].Size);
         }
-        return Compare(local, remote, baseline.Files);
+        // An archive replaces every entry it carries, so an edited file under it is a two-sided
+        // edit even when only the user changed it: the question is the file, not the diff kind.
+        return Compare(local, remote, baseline.Files)
+            .Select(comparison => replacesEveryPath?.Contains(comparison.Path) == true
+                    && comparison.Kind is not (BaselineChangeKind.TrueConflict or BaselineChangeKind.Unchanged
+                        or BaselineChangeKind.RemoteOnly or BaselineChangeKind.IdenticalChange)
+                ? comparison with { Kind = BaselineChangeKind.TrueConflict }
+                : comparison)
+            .ToArray();
     }
 
-    // Game-relative path of a write target, or null for profile/staging writes.
+    // Game-relative path of a write target (null for profile/staging writes and for the game
+    // root itself: an extract over the whole tree is a tree write, not one file).
     public static string? RelativeToGame(string targetPath, string gameRoot)
     {
         var root = System.IO.Path.GetFullPath(gameRoot);
         var full = System.IO.Path.GetFullPath(targetPath);
-        return PathBoundary.IsWithin(root, full)
+        // A write target that IS the game root (an extract over the whole tree) is the root,
+        // not a game-relative file: an empty string would wrongly match a path prefix.
+        var relative = PathBoundary.IsWithin(root, full)
             ? full[root.Length..].TrimStart(System.IO.Path.DirectorySeparatorChar).Replace('\\', '/')
             : null;
+        return string.IsNullOrEmpty(relative) ? null : relative;
     }
 
     private static BaselineChangeKind Classify(
