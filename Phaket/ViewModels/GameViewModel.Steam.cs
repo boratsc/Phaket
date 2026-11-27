@@ -17,6 +17,12 @@ public partial class GameViewModel
     internal string? SteamHome { get; set; }
     internal string HostOs { get; set; } = OperatingSystem.IsWindows() ? "windows" : "linux";
 
+    // Seams for tests: a fixture game that is not really its MainExecutable passes its own
+    // arguments (on Windows the game is a shell script), and LastLaunch keeps the diagnostic of
+    // the last attempt, which LaunchOutcome.Failed alone cannot (it is one shared instance).
+    internal string? HelperArguments { get; set; }
+    internal LaunchOutcome? LastLaunch { get; private set; }
+
     // Where a managed launch points: the modded copy Phaket installed (registry.first is the
     // newest), its saves stay beside it; otherwise the game folder the library detected.
     internal string LaunchRoot => ManagedGameRoot() ?? Game.SelectedInstallation?.RootPath ?? "";
@@ -232,8 +238,9 @@ public partial class GameViewModel
                 started = Launch.LaunchShortcut(shortcutAppId != 0 ? shortcutAppId.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
                     Game.SteamAppId, Game.ProfileName);
             else
-                started = Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName, null,
-                    plan.Isolation.Environment, plan.Isolation.SavesShared);
+                started = Launch.LaunchExecutable(LaunchExe, root, Game.SteamAppId, Game.ProfileName,
+                    HelperArguments ?? null, plan.Isolation.Environment, plan.Isolation.SavesShared);
+            LastLaunch = started;
             if (!started.Started) { StatusMessage = Loc["Game.LaunchFailed"]; return; }
             // Saves that cannot be kept beside the game are said once and the game still starts.
             IsSavesSharedNoticeVisible = started.SavesShared;

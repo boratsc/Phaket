@@ -194,7 +194,8 @@ public sealed class ProcessTracker
         bool HasExited(IntPtr handle);
 
         // WaitForSingleObject's result: WAIT_OBJECT_0 (0) means the process handle is signalled.
-        uint Wait(IntPtr handle, uint waitMilliseconds);
+        // waitError carries GetLastError() only when the result is WAIT_FAILED; 0 otherwise.
+        uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError);
 
         void Close(IntPtr handle);
     }
@@ -252,8 +253,17 @@ public sealed class ProcessTracker
             // confirmation TerminateProcess itself does not give. One bounded wait is enough;
             // the loop only covers an early wake before the deadline.
             var deadline = DateTime.UtcNow + exitTimeout;
-            var wait = WaitObject0;
-            while ((wait = api.Wait(handle, Remaining(deadline))) != WaitObject0 && DateTime.UtcNow < deadline) { }
+            uint wait;
+            int waitError;
+            while (true)
+            {
+                wait = api.Wait(handle, Remaining(deadline), out waitError);
+                // A real wait failure is final: retrying the same handle only multiplies it.
+                if (wait == WaitFailed || wait == WaitObject0 || DateTime.UtcNow >= deadline) break;
+            }
+            // WAIT_FAILED alone names nothing, so the diagnostic carries GetLastError instead of
+            // the raw 0xFFFFFFFF (-1) that a log reader cannot tell from a negative errno.
+            if (wait == WaitFailed) return StopResult(ProcessStopStatus.Failed, "wait", waitError);
             if (!api.HasExited(handle)) return StopResult(ProcessStopStatus.Failed, "wait", (int)wait);
             // Access denied from TerminateProcess on a process that then finished is "success", but a
             // refusal with the process still alive is not something to report as stopped.
@@ -300,9 +310,14 @@ public sealed class ProcessTracker
             return terminated != 0;
         }
 
-        public bool HasExited(IntPtr handle) => Wait(handle, waitMilliseconds: 0) == WaitObject0;
+        public bool HasExited(IntPtr handle) => Wait(handle, waitMilliseconds: 0, out _) == WaitObject0;
 
-        public uint Wait(IntPtr handle, uint waitMilliseconds) => WaitForSingleObject(handle, waitMilliseconds);
+        public uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError)
+        {
+            var result = WaitForSingleObject(handle, waitMilliseconds);
+            waitError = result == WaitFailed ? Marshal.GetLastPInvokeError() : 0;
+            return result;
+        }
 
         public void Close(IntPtr handle) => CloseHandle(handle);
     }
@@ -368,10 +383,18 @@ public sealed class ProcessTracker
     // WAIT_OBJECT_0 from WaitForSingleObject: the kernel object is signalled, i.e. the process has exited.
     private const uint WaitObject0 = 0;
 
+    // WAIT_FAILED from WaitForSingleObject: the call itself failed, and GetLastError names why.
+    private const uint WaitFailed = uint.MaxValue;
+
     // The wait left until a deadline, clamped to what WaitForSingleObject accepts (INFINITE is -1).
     // At least 1 ms: a 0 wait is a poll, so a clamped 0 would spin the loop until the deadline.
+    // INFINITE - 1 (0x7FFFFFFE) is the largest legal timeout: passing INFINITE itself makes every
+    // call block forever and 0x7FFFFFFF makes it fail with WAIT_FAILED (ERROR_INVALID_PARAMETER).
     private static uint Remaining(DateTime deadline) =>
-        (uint)Math.Clamp((deadline - DateTime.UtcNow).TotalMilliseconds, 1, int.MaxValue);
+        (uint)Math.Clamp((deadline - DateTime.UtcNow).TotalMilliseconds, 1, MaxWaitMilliseconds);
+
+    // INFINITE - 1: the largest timeout WaitForSingleObject accepts.
+    private const uint MaxWaitMilliseconds = 0x7FFFFFFE;
 
     // int, not bool: the runtime must not marshal the BOOL, and the last error is read right
     // after the call, so no wrapper can overwrite it first.

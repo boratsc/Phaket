@@ -69,31 +69,47 @@ public class GameLaunchIsolationTests : IDisposable
 
     // The helper stands in for the game: it writes the directory it started in and its path
     // variables into the package folder, which is what the game would read for its saves.
-    // POSIX: a sh script. Windows: text is not an executable, so a real pwsh (Windows PowerShell
-    // 5.1 as the fallback) runs the script; a console app in a non-interactive process has an
-    // empty HOME, so the plan's HOME/XDG_CONFIG_HOME are what the launch asserts.
-    private static string InstallHelper(string directory)
+    // POSIX: a sh script named like the game. Windows: text is not an executable, so the fixture
+    // returns the real Windows PowerShell as the executable and the script as its arguments (a
+    // console app in a non-interactive process has an empty HOME, so the plan's HOME/
+    // XDG_CONFIG_HOME are what the launch asserts). -NoProfile keeps the runner's profile out.
+    private static (string Executable, string Arguments) InstallHelper(string directory)
     {
         Directory.CreateDirectory(directory);
-        var exe = Path.Combine(directory, "Among Us.exe");
+        var script = Path.Combine(directory, "launch-env.ps1");
+        var game = Path.Combine(directory, "Among Us.exe");
         if (OperatingSystem.IsWindows())
         {
+            // System32\WindowsPowerShell\v1.0\powershell.exe exists on every Windows and is absent
+            // from the per-runner "latest" PowerShell installs; pwsh 7 is only preferred when present.
             var windowsPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
                 "WindowsPowerShell", "v1.0", "powershell.exe");
             var pwsh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 "PowerShell", "7", "pwsh.exe");
-            File.WriteAllText(exe, File.Exists(pwsh) ? pwsh : windowsPowerShell);
-            File.WriteAllText(Path.Combine(directory, "launch-env.ps1"), """
+            var shell = File.Exists(pwsh) ? pwsh : windowsPowerShell;
+            File.WriteAllText(script, """
                 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
                 $lines = @("HOME=$env:HOME", "XDG_CONFIG_HOME=$env:XDG_CONFIG_HOME", "PWD=$($PWD.Path)")
                 [IO.File]::WriteAllLines((Join-Path $dir 'launch-env.txt'), $lines)
                 Start-Sleep -Seconds 30
                 """);
-            return exe;
+            return (shell, $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"");
         }
-        File.WriteAllText(exe, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
-        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return exe;
+        File.WriteAllText(game, "#!/bin/sh\nprintf 'HOME=%s\\nXDG_CONFIG_HOME=%s\\nPWD=%s\\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$PWD\" > \"$(dirname \"$0\")/launch-env.txt\"\nsleep 30\n");
+        File.SetUnixFileMode(game, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return (game, "");
+    }
+
+    // The launch the page performs: the helper as the game exe, with the fixture's own arguments.
+    // Its default suits the Steam-only tests, whose game never starts.
+    private static void Play(GameViewModel vm, (string Executable, string Arguments) helper = default)
+    {
+        var task = vm.PlayCommand.ExecuteAsync(null);
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (!task.IsCompleted && DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(task.IsCompleted, "play did not finish");
+        task.GetAwaiter().GetResult();
     }
 
     private string SteamInstallationFolder()
@@ -158,31 +174,22 @@ public class GameLaunchIsolationTests : IDisposable
         Assert.True(done(), "the command did not finish");
     }
 
-    private static void Play(GameViewModel vm)
-    {
-        var task = vm.PlayCommand.ExecuteAsync(null);
-        var deadline = DateTime.UtcNow.AddSeconds(20);
-        while (!task.IsCompleted && DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(task.IsCompleted, "play did not finish");
-        task.GetAwaiter().GetResult();
-    }
-
     // The page says the same sentence on a refused start; the wording checked is the whole answer.
     // A tracked record is what a successful start leaves behind, so the second check names the
-    // real cause: there is no PID without a started process. Both failures carry the launcher's
-    // own diagnostic (LaunchOutcome.Failure), which is what a CI run needs to see.
+    // real cause: there is no PID without a started process. The status mismatch carries the
+    // launcher's own diagnostic too, so a CI log names the failure on the first failing line.
     private static void AssertLaunched(GameViewModel vm)
     {
         var expected = LocalizationService.Instance["Game.Launched"];
-        Assert.True(expected == vm.StatusMessage, $"status '{vm.StatusMessage}', expected '{expected}'");
+        Assert.True(expected == vm.StatusMessage,
+            $"status '{vm.StatusMessage}', expected '{expected}': {LaunchDiagnostic(vm)}");
         Assert.True(vm.Launch.Tracked("945360") is not null,
             $"the launch was refused before any process started: {LaunchDiagnostic(vm)}");
     }
 
     // What the launcher refused with, or the exe it was asked to start.
     private static string LaunchDiagnostic(GameViewModel vm) =>
-        $"{LaunchOutcome.Failed.Failure ?? "no failure recorded"} (exe '{vm.LaunchRoot}')";
+        $"{vm.LastLaunch?.Failure ?? "no failure recorded"} (exe '{vm.LaunchRoot}')";
 
     // The helper is ours: end it by PID, so no ping/pwsh sleep outlives the run.
     private static void KillHelper(int pid)
@@ -213,14 +220,15 @@ public class GameLaunchIsolationTests : IDisposable
             return;
         }
         var package = PackageRoot();
-        InstallHelper(package);
+        var helper = InstallHelper(package);
         // The Steam install must look real to the page: an exe alone is not an installation,
         // the Steam manifest is what the library scan trusts.
         var game = SteamInstallationFolder();
         var vm = Create(Item(game), out var launch);
+        vm.HelperArguments = helper.Arguments;
         try
         {
-            Play(vm);
+            Play(vm, helper);
             AssertLaunched(vm);
             var seen = File.ReadAllText(Path.Combine(package, "launch-env.txt"));
             var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
@@ -238,7 +246,7 @@ public class GameLaunchIsolationTests : IDisposable
     public void SeedingRunsOnceAndStartsFromTheExistingSaves()
     {
         var package = PackageRoot();
-        InstallHelper(package);
+        var helper = InstallHelper(package);
         var game = SteamInstallationFolder();
         // The vanilla saves: where the GAME keeps them (~/.config/unity3d), never Phaket's own
         // profile copy. Windows Unity reads LocalLow, which no environment moves, so a package
@@ -251,16 +259,19 @@ public class GameLaunchIsolationTests : IDisposable
         var previousHome = Environment.GetEnvironmentVariable("HOME");
         Environment.SetEnvironmentVariable("HOME", sandboxHome);
         var vm = Create(Item(game, saveLocations: ["~/.config/unity3d/Innersloth/Among Us"]), out var launch);
+        vm.HelperArguments = helper.Arguments;
         var home = Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName, "config");
         try
         {
-            Play(vm);
+            Play(vm, helper);
             if (OperatingSystem.IsWindows())
             {
                 // Windows: shared saves, no redirect and no seed — said once, game still starts.
-                Assert.True(vm.IsSavesSharedNoticeVisible);
+                // A refused start must say so here, not only die on a missing file below.
+                Assert.True(vm.IsSavesSharedNoticeVisible, $"no shared-saves notice: {LaunchDiagnostic(vm)}");
                 Assert.False(Directory.Exists(Path.Combine(package, SavesIsolationPlanner.HomeDirectoryName)));
-                Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName, File.ReadAllText(Path.Combine(package, "launch-env.txt")));
+                Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,
+                    File.ReadAllText(Path.Combine(package, "launch-env.txt")));
                 return;
             }
             Assert.Equal("postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
@@ -268,7 +279,7 @@ public class GameLaunchIsolationTests : IDisposable
             var firstWrite = File.GetLastWriteTimeUtc(marker);
             // The game writes its own save on the first run: the seed must never overwrite it.
             File.WriteAllText(Path.Combine(home, "Player.txt"), "nowszy postęp");
-            Play(vm);
+            Play(vm, helper);
             Assert.Equal("nowszy postęp", File.ReadAllText(Path.Combine(home, "Player.txt")));
             Assert.Equal(firstWrite, File.GetLastWriteTimeUtc(marker));
         }
@@ -284,12 +295,13 @@ public class GameLaunchIsolationTests : IDisposable
     public void SharedSavesAreSaidOnceAndTheGameStillStarts()
     {
         var package = PackageRoot();
-        InstallHelper(package);
+        var helper = InstallHelper(package);
         var vm = Create(Item(SteamInstallationFolder(), "shared"), out var launch);
+        vm.HelperArguments = helper.Arguments;
         try
         {
-            Play(vm);
-            Assert.True(vm.IsSavesSharedNoticeVisible);
+            Play(vm, helper);
+            Assert.True(vm.IsSavesSharedNoticeVisible, $"no shared-saves notice: {LaunchDiagnostic(vm)}");
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową. Nie uruchamiaj obu wersji jednocześnie, żeby nie nadpisać postępu.",
                 LocalizationService.Instance["Game.SavesShared"]);
             Assert.Equal("Ta gra współdzieli zapisy z wersją podstawową.", LocalizationService.Instance["Game.SavesSharedTitle"]);
@@ -423,11 +435,12 @@ public class GameLaunchIsolationTests : IDisposable
     private void ManagedPackageSharesSavesOnWindows()
     {
         var package = PackageRoot();
-        InstallHelper(package);
+        var helper = InstallHelper(package);
         var vm = Create(Item(SteamInstallationFolder()), out var launch);
+        vm.HelperArguments = helper.Arguments;
         try
         {
-            Play(vm);
+            Play(vm, helper);
             AssertLaunched(vm);
             Assert.True(vm.IsSavesSharedNoticeVisible);
             Assert.DoesNotContain(SavesIsolationPlanner.HomeDirectoryName,

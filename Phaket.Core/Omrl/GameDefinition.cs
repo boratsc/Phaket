@@ -70,10 +70,12 @@ public sealed record GameDefinition(
 
     // A definition path: "~/..." in the user's home, otherwise absolute. Anything else (a
     // "profile://" copy, a relative path) is not where the game reads its saves: null.
+    // A definition always writes "/" (one catalog for every OS), so the separator is rewritten to
+    // the host's here: Path.Combine keeps "/" inside a segment, which no Windows path may hold.
     public static string? ResolveLocation(string path, string home)
     {
         if (path.Length > 1 && path[0] == '~' && (path[1] == '/' || path[1] == '\\'))
-            return Path.Combine(home, path[2..]);
+            return Path.Combine(home, path[2..].Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar));
         return Path.IsPathRooted(path) ? path : null;
     }
 

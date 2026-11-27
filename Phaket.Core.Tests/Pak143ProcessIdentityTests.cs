@@ -331,6 +331,25 @@ public sealed class Pak143ProcessTrackerTests
         Assert.True(api.Closed);
     }
 
+    // A failed WaitForSingleObject answers WAIT_FAILED, which names nothing: the stage carries
+    // GetLastError instead, so a CI log points at the call that really failed and never at "-1".
+    [Fact]
+    public void WindowsWaitFailureIsReportedWithItsLastErrorAndNotTheRawResult()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true) { WaitError = 6 };
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(ProcessStopStatus.Failed, result.Status);
+        Assert.Equal("wait", result.Stage);
+        Assert.Equal(6, result.Win32Error); // ERROR_INVALID_HANDLE, not -1
+        Assert.Contains("stage=wait win32=6", result.ToString());
+        // One failure is final: the wait is not retried against a handle that already failed.
+        Assert.Equal(1, api.WaitCalls);
+        Assert.True(api.Closed);
+    }
+
     // A record whose Windows start value is the fake's creation time; one constant, so both agree.
     private static ProcessRecord LiveWindowsRecord() => new(4242, FakeWindowsApi.CreationTime,
         ProcessStartTimeUnit.WindowsFileTime100Ns, null, DateTimeOffset.FromFileTime(FakeWindowsApi.CreationTime),
@@ -390,14 +409,27 @@ internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTermina
         return exited;
     }
 
-    public uint Wait(IntPtr handle, uint waitMilliseconds)
+    // WAIT_FAILED with the errno a bad handle answers (6 = ERROR_INVALID_HANDLE); any non-zero
+    // ExitCode turns the fake's wait into a real failure instead of WAIT_TIMEOUT.
+    public int WaitError { get; init; }
+
+    public uint Wait(IntPtr handle, uint waitMilliseconds, out int waitError)
     {
+        WaitCalls++;
         if (TerminateCalls > 0 && waitMilliseconds > 0) WaitsAfterTerminate++;
+        if (WaitError != 0)
+        {
+            waitError = WaitError;
+            return uint.MaxValue; // WAIT_FAILED
+        }
+        waitError = 0;
         // A bounded wait answers WAIT_OBJECT_0 once the exit happens; an exited process answers at once.
         return HasExited(handle) ? 0u : 258u; // WAIT_TIMEOUT
     }
 
     public int WaitsAfterTerminate { get; private set; }
+
+    public int WaitCalls { get; private set; }
 
     public void Close(IntPtr handle)
     {
