@@ -163,11 +163,11 @@ public static class SourcePolicy
     // registered none) and returns the new ones; production never installs the hook.
     private static Action<Func<ImmutableHashSet<string>?, ImmutableHashSet<string>?>>? githubReposHook;
 
+    // Compiled in Release too: CI runs the suites with -c Release, where a DEBUG-only seam
+    // would leave the process-wide allowlist unisolated.
     internal static void UseIsolatedGitHubRepos(Action<Func<ImmutableHashSet<string>?, ImmutableHashSet<string>?>> set)
     {
-#if DEBUG
         githubReposHook = set;
-#endif
         set(_ => []);
     }
 
