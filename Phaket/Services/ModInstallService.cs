@@ -63,6 +63,10 @@ public sealed class ModInstallService
     private static readonly ConcurrentDictionary<string, DateTimeOffset> UnresolvedBuilds = new(StringComparer.Ordinal);
     private static readonly TimeSpan UnresolvedBuildsTtl = TimeSpan.FromMinutes(10);
 
+    // Test seam for offline end-to-end fixtures. Null in the app, so shipped loader URLs,
+    // versions and SHA-256 pins are unchanged.
+    internal Func<GameDefinition, string?, RecipeArtifact>? LoaderArtifactOverride { get; set; }
+
     public ModInstallService(string appDataRoot, ModCatalogClient catalog,
         IPackageTransport? packageTransport = null, IReceiptTransport? receiptTransport = null, ProfileStore? profiles = null,
         IBaseGameSource? baseGameSource = null, ICatalogTransport? catalogTransport = null,
@@ -210,6 +214,7 @@ public sealed class ModInstallService
             string[] entries = [];
             byte[]? packageBytes = null;
             GeneratedRecipe generated;
+            var loaderArtifactOverride = LoaderArtifactOverride?.Invoke(definition, arch);
             // A full package pins a concrete vanilla build; when the registry publishes a
             // manifest for that build and store, the provision step uses it verbatim.
             var pinnedVersion = mod.Packaging == "full" ? RecipeGenerator.NormalizeGameVersion(mod.AmongVersion) : null;
@@ -246,9 +251,9 @@ public sealed class ModInstallService
                     using var stagedZip = ZipFile.OpenRead(staged);
                     entries = stagedZip.Entries.Select(e => e.FullName).ToArray();
                 }
-                generated = RecipeGenerator.GenerateCatalogPackage(mod.FullName, mod.Version, mod.Packaging,
+                generated = RecipeGenerator.GenerateCatalogPackageWithLoaderArtifact(mod.FullName, mod.Version, mod.Packaging,
                     selected.Url, hash, selected.SizeBytes ?? length, selected.Arch ?? arch, mod.AmongVersion, entries, definition,
-                    selected.AssetName, provisionManifests.Count == 0 ? null : provisionManifests, selected.Stores);
+                    selected.AssetName, provisionManifests.Count == 0 ? null : provisionManifests, selected.Stores, loaderArtifactOverride);
             }
             else
             {
@@ -268,8 +273,8 @@ public sealed class ModInstallService
                     }
                     SafeArchive.ValidateEntryNames(entries, mod.FullName);
                 }
-                generated = RecipeGenerator.Generate(mod.FullName, mod.Version, mod.DownloadUrl, hash,
-                    entries, definition, arch);
+                generated = RecipeGenerator.GenerateWithLoaderArtifact(mod.FullName, mod.Version, mod.DownloadUrl, hash,
+                    entries, definition, arch, loaderArtifactOverride);
             }
             var recipe = generated.Recipe;
             if (loader && arch is null) throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", "unknown"));

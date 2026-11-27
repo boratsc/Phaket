@@ -13,7 +13,14 @@ public static class RecipeGenerator
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static GeneratedRecipe Generate(string fullName, string version, string downloadUrl,
-        string? sha256, IEnumerable<string> archiveEntries, GameDefinition game, string? arch = null)
+        string? sha256, IEnumerable<string> archiveEntries, GameDefinition game, string? arch = null) =>
+        GenerateWithLoaderArtifact(fullName, version, downloadUrl, sha256, archiveEntries, game, arch, null);
+
+    // Test seam: the shipped loader pins are unchanged unless a host explicitly supplies an
+    // internal fixture artifact. This keeps end-to-end tests offline and deterministic.
+    internal static GeneratedRecipe GenerateWithLoaderArtifact(string fullName, string version, string downloadUrl,
+        string? sha256, IEnumerable<string> archiveEntries, GameDefinition game, string? arch,
+        RecipeArtifact? loaderArtifactOverride)
     {
         if (string.IsNullOrWhiteSpace(fullName) || !Regex.IsMatch(fullName, @"^[A-Za-z0-9_]+-[A-Za-z0-9_]+$"))
             throw new ArgumentException("Expected Thunderstore owner-Name.", nameof(fullName));
@@ -27,7 +34,7 @@ public static class RecipeGenerator
 
         var recipeId = "thunderstore." + Regex.Replace(fullName.ToLowerInvariant().Replace('-', '.'), "[^a-z0-9.\\-]", "-");
         return GenerateArchive(fullName, version, downloadUrl, sha256, null, archiveEntries, game, arch, recipeId,
-            fullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase));
+            fullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase), loaderArtifactOverride);
     }
 
     // Generates the same safe OMRL install plan for a pinned GitHub or local Nexus ZIP.
@@ -70,7 +77,15 @@ public static class RecipeGenerator
     public static GeneratedRecipe GenerateCatalogPackage(string fullName, string version, string packaging,
         string artifactSource, string? sha256, long? sizeBytes, string? arch, string? amongVersion,
         IEnumerable<string> archiveEntries, GameDefinition game, string? assetName = null,
-        IReadOnlyDictionary<string, string>? provisionManifests = null, IReadOnlyList<string>? stores = null)
+        IReadOnlyDictionary<string, string>? provisionManifests = null, IReadOnlyList<string>? stores = null) =>
+        GenerateCatalogPackageWithLoaderArtifact(fullName, version, packaging, artifactSource, sha256, sizeBytes,
+            arch, amongVersion, archiveEntries, game, assetName, provisionManifests, stores, null);
+
+    internal static GeneratedRecipe GenerateCatalogPackageWithLoaderArtifact(string fullName, string version, string packaging,
+        string artifactSource, string? sha256, long? sizeBytes, string? arch, string? amongVersion,
+        IEnumerable<string> archiveEntries, GameDefinition game, string? assetName,
+        IReadOnlyDictionary<string, string>? provisionManifests, IReadOnlyList<string>? stores,
+        RecipeArtifact? loaderArtifactOverride)
     {
         if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 160)
             throw new PhaketException(ErrorCodes.ModSourceInvalid, ("source", "susmodder"), ("detail", "invalid mod name"));
@@ -100,7 +115,7 @@ public static class RecipeGenerator
 
         return packaging == "full"
             ? GenerateFullCatalog(fullName, recipeId, recipeVersion, artifactSource, sha256, sizeBytes, targetArch, pinnedVersion, game,
-                archiveEntries, provisionManifests, editions)
+                archiveEntries, provisionManifests, editions, loaderArtifactOverride)
             : GenerateDllCatalog(fullName, name, recipeId, recipeVersion, artifactSource, sha256, sizeBytes,
                 arch, pinnedVersion, archiveEntries, game, assetName, editions);
     }
@@ -108,13 +123,13 @@ public static class RecipeGenerator
     private static GeneratedRecipe GenerateFullCatalog(string fullName, string recipeId, string version,
         string artifactSource, string sha256, long? sizeBytes, string? arch, string? amongVersion, GameDefinition game,
         IEnumerable<string> archiveEntries, IReadOnlyDictionary<string, string>? provisionManifests = null,
-        IReadOnlyList<string>? editions = null)
+        IReadOnlyList<string>? editions = null, RecipeArtifact? loaderArtifactOverride = null)
     {
         // A full package must be pinned to a concrete vanilla build: Phaket
         // provisions that exact game version and merges only writableAreas.
         if (amongVersion is null)
             throw new PhaketException(ErrorCodes.GameBuildUnavailable, ("detail", "full package without a pinned game version"));
-        var loader = LoaderPackage(game, arch);
+        var loader = LoaderPackage(game, arch, loaderArtifactOverride);
         var artifact = new RecipeArtifact
         {
             Id = "package", Source = artifactSource, Sha256 = sha256, SizeBytes = sizeBytes, Arch = arch,
@@ -321,11 +336,11 @@ public static class RecipeGenerator
 // `requires.loaders` version ranges can actually match it.
     private sealed record LoaderSelection(RecipeArtifact Artifact, string Version, string RequirementVersion, int StripComponents);
 
-    private static LoaderSelection LoaderPackage(GameDefinition game, string? arch)
+    private static LoaderSelection LoaderPackage(GameDefinition game, string? arch, RecipeArtifact? artifactOverride = null)
     {
         // Among Us ships an IL2CPP BepInEx build; the x86 Thunderstore pack wraps
         // its files in one folder, the x64 bepinex.dev build does not.
-        return game.Slug switch
+        LoaderSelection selected = game.Slug switch
         {
             "valheim" when arch == "x86" => throw new PhaketException("LOADER_ARCH_UNAVAILABLE", ("arch", arch)),
             "valheim" => new(new RecipeArtifact
@@ -347,18 +362,19 @@ public static class RecipeGenerator
                 Sha256 = "88bbefc79b4f30fe42e10dadb9f536dbe669532b8d4b9e3b08239d88146e1564",
             }, "6.0.700", "6.0.700", 1),
         };
+        return artifactOverride is null ? selected : selected with { Artifact = artifactOverride };
     }
 
     private static GeneratedRecipe GenerateArchive(string fullName, string version, string artifactSource,
         string? sha256, long? sizeBytes, IEnumerable<string> archiveEntries, GameDefinition game,
-        string? arch, string recipeId, bool loader)
+        string? arch, string recipeId, bool loader, RecipeArtifact? loaderArtifactOverride = null)
     {
         var entries = archiveEntries.Select(NormalizeEntry).Where(x => x is not null).Select(x => x!).Distinct(StringComparer.Ordinal).ToArray();
         const string artifactId = "package";
         var artifact = new RecipeArtifact { Id = artifactId, Source = artifactSource, Sha256 = sha256, SizeBytes = sizeBytes };
         if (loader)
         {
-            var package = LoaderPackage(game, arch);
+            var package = LoaderPackage(game, arch, loaderArtifactOverride);
             artifact = artifact with
             {
                 Arch = package.Artifact.Arch, Source = package.Artifact.Source, Sha256 = package.Artifact.Sha256,
@@ -382,7 +398,7 @@ public static class RecipeGenerator
         else
         {
             var layout = game.Loader("bepinex") ?? throw new ArgumentException("Game has no BepInEx layout.", nameof(game));
-            var package = LoaderPackage(game, arch);
+            var package = LoaderPackage(game, arch, loaderArtifactOverride);
             steps.Add(Step("extract", "loader.ensure", new Dictionary<string, object?> { ["id"] = layout.Id, ["artifact"] = artifactId,
                 ["version"] = package.Version, ["stripComponents"] = package.StripComponents }));
         }
