@@ -35,7 +35,9 @@
 #   Stąd URL pobrania = https://phaket.app/releases/<channel>/<os>/<File> (downloadBaseUrl kończy się
 #   na /releases/, więc File w manifeście MUSI być względne wobec katalogu kanału).
 # Volumeny Dockera nie są katalogami hosta: skrypty scripts/server-deploy.py kopiują pliki przez
-# `docker cp` w repozytorium serwera (~/PhaketServer). Plik trafia PRZED manifestem.
+# `docker cp` w repozytorium serwera (~/PhaketServer), wykrywając kontenery przez `docker compose ps`
+# na usługi compose (paczki → www, manifesty → api; www nie montuje wolumenu manifestów). Plik
+# trafia PRZED manifestem, Setup.exe atomowo (temp + mv wewnątrz wolumenu).
 # =============================================================================================
 
 name: Release
@@ -93,8 +95,15 @@ jobs:
             echo "::error::Wersja '$VERSION' nie jest semver 0.1.1 lub 0.1.1-beta.1"; exit 1; }
           prerelease=0; [[ "$VERSION" == *-* ]] && prerelease=1
           [[ "$CHANNEL" == beta ]] && want=1 || want=0
-          [[ "$prerelease" == "$want" ]] || {
-            echo "::error::Kanał $CHANNEL wymaga wersji $([[ $want == 1 ]] && echo 'z przyrostkiem -beta' || echo 'bez przyrostka prerelease')"; exit 1; }
+          # Kanał beta przyjmuje WYŁĄCZNIE przyrostek -beta / -beta.N; release nie ma go wcale
+          # (inaczej beta z -rc.1 przechodzi, a Velopack widzi inny prerelease niż kanał).
+          if [[ $want == 1 ]]; then
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]] || {
+              echo "::error::Kanał beta wymaga wersji -beta lub -beta.N, np. 0.1.1-beta.1"; exit 1; }
+          else
+            [[ $prerelease == 0 ]] || {
+              echo "::error::Kanał release wymaga wersji bez przyrostka prerelease"; exit 1; }
+          fi
 
   build-windows:
     needs: validate
@@ -138,7 +147,8 @@ jobs:
         shell: bash
         run: |
           cd releases/win-x64
-          setup=$(find releases/win-x64 -maxdepth 1 -name 'Phaket-*-Setup.exe' -print -quit)
+          # Ścieżka względna: po `cd` katalog roboczy to już releases/win-x64.
+          setup=$(find . -maxdepth 1 -name 'Phaket-*-Setup.exe' -print -quit)
           [[ -n "$setup" ]] || { echo "vpk nie utworzył Setup.exe" >&2; exit 1; }
           mv "$setup" Phaket-Setup.exe
 
@@ -253,6 +263,34 @@ jobs:
           chmod 600 ~/.ssh/deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
+      # KOMPLET przed jakimkolwiek rsync: manifesty obu systemów muszą powstać i wskazywać wyłącznie
+      # pliki obecne w artefaktach. Brak pliku Linux nie może wysłać Windows na serwer.
+      - name: Build manifests and check the file set
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          mkdir -p manifests
+          for os in win linux; do
+            [[ -d "assets/$os-x64" ]] || { echo "::error::brak artefaktów $os-x64 — wydanie niekompletne"; exit 1; }
+            # SHA256SUMS.txt jedzie tylko do GitHub Release (rsync go wyklucza), nie do feedu.
+            mapfile -t files < <(find "assets/$os-x64" -maxdepth 1 -type f ! -name SHA256SUMS.txt -print | sort)
+            (( ${#files[@]} > 0 )) || { echo "::error::assets/$os-x64 bez paczek"; exit 1; }
+            python3 scripts/feed-manifest.py --version "${{ inputs.version }}" \
+              --out "manifests/releases.$CHANNEL.$os.json" -- "${files[@]}"
+            python3 - "manifests/releases.$CHANNEL.$os.json" "assets/$os-x64" <<'PY'
+          import json, pathlib, sys
+          manifest, folder = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          names = [entry["File"] for entry in json.loads(manifest.read_text(encoding="utf-8"))["Releases"]]
+          on_disk = sorted(p.name for p in folder.iterdir() if p.is_file() and p.name != "SHA256SUMS.txt")
+          if missing := sorted(set(on_disk) - set(names)):
+              sys.exit(f"{folder}: pliki bez wpisu w manifeście: {', '.join(missing)}")
+          if absent := sorted(set(names) - set(on_disk)):
+              sys.exit(f"{folder}: manifest wskazuje brakujące pliki: {', '.join(absent)}")
+          print(f"{manifest}: {len(names)} wpisów zgodnych z {folder}")
+          PY
+          done
+
       - name: Upload release files to the server volumes
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -268,17 +306,13 @@ jobs:
             rsync -az --exclude SHA256SUMS.txt -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
               "assets/$os-x64"/ "$DEPLOY_USER@$DEPLOY_HOST:$SERVER_ROOT/staging/$os/"
           done
-          # Manifesty z tych samych paczek, które zaraz trafią na serwer (Setup.exe bierze wersję wydania);
-          # kolejność wydań liczy serwer.
-          for os in win linux; do
-            python3 scripts/feed-manifest.py --version "${{ inputs.version }}" \
-              --out "manifests/releases.$CHANNEL.$os.json" staging/$os/*
-          done
           rsync -az -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" manifests/ \
             "$DEPLOY_USER@$DEPLOY_HOST:$SERVER_ROOT/staging/manifests/"
 
       # Plik w wolumenie paczek PRZED manifestem; przerwany deploy zostawia stary manifest, więc
-      # użytkownik nie dostanie 404 na brakującej paczce. --clean czyści katalog staging.
+      # użytkownik nie dostanie 404 na brakującej paczce. Skrypt najpierw waliduje komplet obu
+      # systemów (nic nie kopiuje), potem paczki, Phaket-Setup.exe (temp+mv) i manifesty na końcu.
+      # --clean czyści katalog staging.
       - name: Commit release into the server volumes
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}

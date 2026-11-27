@@ -10,24 +10,38 @@ import sys
 from pathlib import Path
 
 
+SUFFIXES = ("-full.nupkg", "-delta.nupkg")
+
+
 def version_of(name: str) -> str:
-    # Velopack: <Id>-<wersja>-full.nupkg / -delta.nupkg.
-    parts = name.split("-")
-    return parts[1] if len(parts) >= 3 else ""
+    # Velopack: <Id>-<wersja>-full.nupkg / -delta.nupkg, gdzie <wersja> może zawierać
+    # "-" (np. 0.1.1-beta.1). Wersja to wszystko między prefiksem Id a ostatnim sufiksem.
+    for suffix in SUFFIXES:
+        if name.endswith(suffix):
+            stem = name[: -len(suffix)]
+            return stem.split("-", 1)[1] if "-" in stem else ""
+    return ""
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True, help="np. manifests/releases.release.win.json")
     parser.add_argument("files", nargs="+", help="paczki .nupkg z katalogu kanału+systemu")
-    parser.add_argument("--version", help="wersja dla plików bez wersji w nazwie (Phaket-Setup.exe)")
-    args = parser.parse_args()
+    parser.add_argument("--version", help="wersja dla plików bez wersji w nazwie (Phaket-Setup.exe); po niej -- i pliki")
+    # "--" przed plikami: argparse myli --version z akcją version, gdy po nim idą pozycyjne.
+    args = parser.parse_args(sys.argv[1:])
 
     releases = []
     for name in args.files:
         package = Path(name)
-        version = version_of(package.name) if package.suffix == ".nupkg" else args.version
-        if not version or not all(part.isdigit() for part in version.split("+")[0].split("-")[0].split(".")):
+        version = version_of(package.name) if package.suffix == ".nupkg" else args.version or ""
+        # Wersję plików bez numeru (Setup.exe) bierze --version. Bez niej i bez numeru w nazwie
+        # (Portable.zip) pomijamy z ostrzeżeniem: odrzucenie całości kazałoby wydać paczki bez
+        # Phaket-Setup.exe, a stub spadłby na seed-install.
+        if not version:
+            print(f"OSTRZEŻENIE: pomijam {package.name} — brak wersji (podaj --version)", file=sys.stderr)
+            continue
+        if not all(part.isdigit() for part in version.split("+")[0].split("-")[0].split(".")):
             print(f"BŁĄD: nie odczytam wersji z nazwy {package.name} (podaj --version)", file=sys.stderr)
             return 1
         data = package.read_bytes()

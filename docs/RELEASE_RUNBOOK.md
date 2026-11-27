@@ -85,8 +85,15 @@ brak sekretów płatnych (release.yml, nagłówek sekcji „Konfiguracja”).
 
 - SSH `debian@vps-b99a39c3.vps.ovh.net` z klucza w pkt 1.1.
 - Na serwerze: repozytorium serwera w `~/PhaketServer` (workflow używa `SERVER_ROOT: ~/PhaketServer`)
-  i działający stack compose (`api`, `nginx/www`) z wolumenami `releases_packages`
-  i `releases_manifests` (PhaketServer/compose.yaml; release.yml, nagłówek).
+  i działający stack compose z wolumenami `releases_packages` i `releases_manifests`
+  (PhaketServer/compose.yaml; release.yml, nagłówek).
+- **Mounty (potwierdzone `docker inspect` na stage 27.11.2026, docker 29.10.0):**
+  `phaketserver-www-1` montuje `<projekt>_releases_packages` → `/usr/share/nginx/html/releases`
+  (**ro**), `phaketserver-api-1` montuje `<projekt>_releases_manifests` → `/data/releases` (**ro**)
+  i `_signing_keys`. Kontener **www nie montuje wolumenu manifestów, a api nie montuje wolumenu
+  paczek** — dlatego `server-deploy.py` kopiuje paczki przez `docker cp` do www, a manifesty do api
+  (zapis przez `:ro` działa, bo `docker cp` wykonuje daemon jako root). Serwisy compose to `www`
+  i `api` (`docker compose ps`), nazwy kontenerów `<projekt>-www-1` / `<projekt>-api-1`.
 
 ### Checklist wstępny
 
@@ -117,9 +124,9 @@ Kanał beta = wersja z przyrostkiem prerelease, np. `0.1.1-beta.1` (release.yml,
      | `github-draft` | tak | **nie** | nie — draft zostaje, publikacja ręczna |
      | `github-draft+server` | tak | tak | tak (`gh release edit --draft=false` na końcu) |
 3. Job `validate` (pierwszy, bez niego nie rusza build) wymaga `version` semver i zgodności
-   z kanałem: `beta` → wersja **z** przyrostkiem prerelease (np. `-beta.1`), `release` → **bez**
-   niego. Niezgodność zatrzymuje przebieg przed pakowaniem (release.yml, krok „Version matches
-   the channel”).
+   z kanałem: `beta` → wyłącznie przyrostek `-beta` / `-beta.N` (np. `0.1.1-beta.1`; `-rc.1` jest
+   odrzucany), `release` → **bez** żadnego przyrostka. Niezgodność zatrzymuje przebieg przed
+   pakowaniem (release.yml, krok „Version matches the channel”).
 4. `concurrency: release-<channel>` blokuje dwa przebiegi tego samego kanału i nie kasuje
    przebiegu w toku (release.yml, `concurrency`).
 
@@ -130,7 +137,7 @@ Kanał beta = wersja z przyrostkiem prerelease, np. `0.1.1-beta.1` (release.yml,
 | `validate`: `Version matches the channel` | semver + zgodność `version`↔`channel`; przy błędzie reszta jobów nie startuje |
 | `build-windows`: `Build and test` | `dotnet build` solucji **przed** pakowaniem — wydanie nie może powstać z kodu, który nie przechodzi testów (release.yml) |
 | `build-windows`: `Publish win-x64` → `Pack Setup.exe and Portable.zip` | self-contained publish; `vpk pack` bez `--channel` (kanał należy do serwera) |
-| `build-windows`: `Name the installer for the feed` | `Phaket-<wersja>-Setup.exe` → `Phaket-Setup.exe` (stała nazwa, bo stub szuka dokładnie tego wpisu; plik jest per kanał) |
+| `build-windows`: `Name the installer for the feed` | `Phaket-<wersja>-Setup.exe` → `Phaket-Setup.exe` (stała nazwa, bo stub szuka dokładnie tego wpisu; plik jest per kanał). `find .` po `cd releases/win-x64` |
 | `build-windows`: `SHA256SUMS (Windows)` | `sha256sum -- * > SHA256SUMS.txt` w `releases/win-x64` |
 | `build-linux`: `Publish` → `Pack AppImage` | AppImage, `--categories Utility`, `--compression gzip` (release.yml) |
 | `build-linux`: `SHA256SUMS (Linux)` | sumy w `releases/linux-x64` |
@@ -138,14 +145,20 @@ Kanał beta = wersja z przyrostkiem prerelease, np. `0.1.1-beta.1` (release.yml,
 | `draft-release`: `Draft GitHub Release` | **tylko dla `publishTarget != none`**: `gh release create "v<wersja>" --draft` z paczkami (`assets/*`); note odsyła do `https://phaket.app/download/PhaketSetup.exe` (§6, §7) |
 | `deploy`: `Check the download base URL matches the channel` | **tylko dla `github-draft+server`**: `RELEASES_DOWNLOAD_BASE_URL` musi wskazywać `<base>/releases/<channel>/` |
 | `deploy`: `Configure SSH` | dekoduje klucz, `ssh-keyscan` hosta |
-| `deploy`: `Upload release files to the server volumes` | seria `ssh`: `server-deploy.py` bez `--clean` (tworzy `~/PhaketServer/staging/{win,linux,manifests}` i katalogi `/releases/<channel>/<os>` w wolumenie paczek), potem `rsync` paczek i `rsync` manifestów |
-| `deploy`: manifesty | `feed-manifest.py --version <wersja> --out releases.beta.<os>.json` z paczek w stagingu |
-| `deploy`: `Commit release into the server volumes` | `server-deploy.py --clean`: waliduje manifesty, `docker cp` paczek → wolumen nginx (`/releases/<channel>/<os>`), **potem** manifestów → wolumen api; czyści staging |
+| `deploy`: `Build manifests and check the file set` | `feed-manifest.py --version <wersja> --out manifests/releases.<channel>.<os>.json -- assets/<os>-x64/*` dla obu systemów, potem kontrola: każdy plik artefaktu ma wpis w manifeście i odwrotnie. **Przed jakimkolwiek rsync** — brak paczki Linux nie wyśle Windows |
+| `deploy`: `Upload release files to the server volumes` | seria `ssh`: `server-deploy.py` bez `--clean` (tworzy `~/PhaketServer/staging/{win,linux,manifests}` i katalogi `/releases/<channel>/<os>` w wolumenie paczek przez `docker compose ps -q www`), potem `rsync` paczek i `rsync` manifestów |
+| `deploy`: `Commit release into the server volumes` | `server-deploy.py --clean`, 4 fazy: **(1)** walidacja kompletu obu systemów (manifesty + paczki: żadnego brakującego pliku, żadnej paczki bez wpisu) — nic nie kopiuje; **(2)** `docker cp` paczek → www (`/releases/<channel>/<os>`, bez `Phaket-Setup.exe`); **(3)** `Phaket-Setup.exe` per kanał przez temp + `mv` **wewnątrz wolumenu**; **(4)** manifesty → api (`/data/releases`). Czyści staging |
 | `deploy`: `Publish GitHub Release` | `gh release edit "v<wersja>" --draft=false` — tylko przy `github-draft+server` |
 
 Kolejność jest wymuszona: pliki paczek trafiają do wolumenu **przed** manifestem, więc
 przerwany deploy zostawia stary manifest i klient nie dostanie 404 na brakującej paczce
 (release.yml, komentarz przy `Commit release`; server-deploy.py, nagłówek).
+
+`Phaket-Setup.exe` jest nadpisywany per kanał. Okno niespójności: między fazami 2 a 3 w katalogu
+kanału leży nowa paczka ze starym Setup.exe — żaden wpis manifestu go wtedy nie wskazuje (stary
+manifest wskazuje stary Setup.exe, który wciąż leży na miejscu do `mv`), a nowy manifest publikuje
+się dopiero w fazie 4. `mv` jest atomowy w obrębie jednego systemu plików, więc klient widzi
+starą **albo** nową wersję pliku, nigdy częściową.
 
 ### 2.3 Gdzie wylądują artefakty
 
@@ -313,7 +326,8 @@ rollback to cofnięcie **manifestu** — aplikacja przestaje widzieć nową wers
 
 1. **Manifesty na serwerze** (jedyna rzecz, którą czyta API): przywróć poprzedni
    `releases.<channel>.<os>.json` do wolumenu `releases_manifests`
-   (`docker cp <plik> <kontener-api>:/data/releases/...`). Paczki poprzedniej wersji
+   (`docker cp <plik> $(docker compose ps -q api):/data/releases/...`; wolumen jest montowany
+   w api jako `:ro`, ale `docker cp` zapisuje przez daemon jako root). Paczki poprzedniej wersji
    **zostają** w wolumenie `releases_packages` (katalogi kanału nie są czyszczone —
    server-deploy.py). Jeśli manifest był publikowany z worktree, możesz go odtworzyć
    `feed-manifest.py` z poprzednich paczek albo wziąć kopię sprzed deploy.
@@ -333,15 +347,16 @@ rollback to cofnięcie **manifestu** — aplikacja przestaje widzieć nową wers
 | Objaw | Przyczyna | Co zrobić |
 |---|---|---|
 | Deploy: `BŁĄD: manifest wskazuje brakujący plik` | manifest i paczki z różnych przebiegów / ręczne podmiany | przebuduj manifest z tych samych paczek (`feed-manifest.py`) i powtórz deploy |
-| Deploy: `BŁĄD: brak manifestów` | `rsync` manifests nie dotarł albo zły katalog | sprawdź `~/PhaketServer/staging/manifests` |
 | Deploy: `BŁĄD: --stage-dir musi być ~/PhaketServer/staging` | zły `SERVER_ROOT` | popraw `SERVER_ROOT`/ścieżkę na VPS |
-| Deploy: `BŁĄD: brak działającego kontenera nginx na hoście` | stack compose nie działa albo serwis nginx ma inną nazwę | `docker compose ps` w `~/PhaketServer`; nazwę kontenera skrypt wykrywa przez `docker ps --filter name=nginx` |
+| Deploy: `BŁĄD: brak działającego kontenera usługi www (docker compose ps www)` | stack compose nie działa albo usługa ma inną nazwę | `docker compose ps` w `~/PhaketServer`; skrypt szuka usługi `www` (paczki) i `api` (manifesty) w compose.yaml |
+| Deploy: `BŁĄD: paczki bez wpisu w manifeście` / `manifest wskazuje brakujące pliki` | paczki i manifest z różnych przebiegów albo ręczna podmiana | przebuduj manifest `feed-manifest.py` z dokładnie tych paczek i powtórz deploy |
+| Deploy: `BŁĄD: brak manifestów` | `rsync` manifests nie dotarł albo zły katalog | `manifests/releases.<channel>.{win,linux}.json` w stagingu (generuje je krok `Build manifests and check the file set`) |
 | Deploy: `Check the download base URL matches the channel` | `vars.RELEASES_DOWNLOAD_BASE_URL` wskazuje inny katalog niż kanał przebiegu | popraw zmienną (§1.1) lub usuń ją (domyślne `https://phaket.app/releases/`) |
 | Validate: `Kanał ... wymaga wersji ...` | `beta` z wersją bez `-beta` albo `release` z `-beta` | podaj wersję zgodną z kanałem |
 | API: `400 {"error":"INVALID_PARAMETER"}` | zły `channel`/`os` (tylko `beta|release`, `win|linux`) | popraw URL; serwer waliduje przed dostępem do pliku |
 | API: `404 {"error":"NOT_FOUND"}` | brak manifestu kanału (pusty feed do pierwszego wydania) | wydaj na ten kanał; brak domyślnego kanału jest zamierzony |
 | API: `500 {"error":"INVALID_MANIFEST"}` | uszkodzony/niezgodny manifest (zły `SHA256`, `File` ze ścieżką, duplikat) | przebuduj manifest generatorem |
-| Stub: `E403 downloadBaseUrl` | `downloadBaseUrl` nie-HTTPS | ustaw HTTPS w `RELEASES_DOWNLOAD_BASE_URL` |
+| Stub: `E403 downloadBaseUrl` / `E403 manifest` | adres nie-HTTPS: `downloadBaseUrl` w odpowiedzi API albo nadpisanie `PHAKET_INSTALLER_MANIFEST` / `PHAKET_INSTALLER_DOWNLOAD_BASE` | stub odrzuca każdy nie-HTTPS **przed** żądaniem; ustaw HTTPS w `RELEASES_DOWNLOAD_BASE_URL` (serwer) i w env testów |
 | Stub: `install=seed` | brak `Phaket-Setup.exe` w manifeście | sprawdź krok `Name the installer for the feed` w release.yml |
 | Aplikacja: „Tryb deweloperski” | build nie jest instalacją Velopack (dev / seed-install) | testuj na instalacji przez Setup.exe |
 | Aplikacja: błąd sieci | feed nieosiągalny / `PHAKET_UPDATE_FEED` źle sformułowany | sprawdź `curl` na feed i zmienną |
@@ -413,7 +428,14 @@ domknięte; zostały tylko fakty serwera opisane jako blokery w §7.
 | 8 | In-app update na Linux wymaga `IsInstalled` dla AppImage | **otwarte**: wymaga testu e2e na prawdziwym AppImage (§3.1); poza zakresem workflow |
 | 9 | Runbook niesprawdzany przez CI | **bez zmian**: zgodność utrzymywana ręcznie |
 
+**Przegląd R3b (27.11.2026)** — domknięte w tym samym PR: `find` po `cd` w kroku Setup.exe
+(ścieżka względna), detekcja kontenera przez `docker compose ps` na usługę `www`/`api`
+(`docker ps --filter name=nginx` nie trafiał — serwis to `www`), publikacja manifestów do wolumenu
+**api** (www go nie montuje), pełna wersja beta w manifeście (`version_of` gubił `-beta.N`),
+stub odmawia HTTP przed żądaniem (env i `downloadBaseUrl`), walidacja kompletu przed deployem
+i Setup.exe przez temp+mv, `validate` wymaga `-beta`/`-beta.N`.
+
 Dodatkowo w tej naprawie: job `validate` wymusza zgodność wersji z kanałem (bez niego dało się
-wydać `0.1.1-beta.1` na `release`), `server-deploy.py` wykrywa kontener `nginx` przez `docker ps`
-zamiast `docker compose` (nazwa projektu compose zależy od katalogu, więc `docker compose exec`
-w `~/PhaketServer` wywracał się przy zmianie nazwy katalogu repozytorium serwera).
+wydać `0.1.1-beta.1` na `release`), a `server-deploy.py` wykrywa kontener przez
+`docker compose ps -q <usługa>` uruchamiane w `~/PhaketServer` (nazwa projektu compose zależy od
+katalogu — dlatego skrypt zawsze ustawia `cwd` na repozytorium serwera i nie zgaduje nazwy kontenera).

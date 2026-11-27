@@ -18,9 +18,7 @@ public sealed record StubOptions
 
     public static StubOptions FromEnvironment() => new()
     {
-        ManifestUri = Environment.GetEnvironmentVariable(InstallRunner.ManifestVariable) is { Length: > 0 } url
-            ? new Uri(url)
-            : new Uri(DefaultManifestUrl),
+        ManifestUri = ReadUri(InstallRunner.ManifestVariable) ?? new Uri(DefaultManifestUrl),
         WorkDirectory = Path.Combine(Path.GetTempPath(), "PhaketSetup-" + Environment.ProcessId),
         LocalAppData = Environment.GetEnvironmentVariable(InstallRunner.LocalAppDataVariable) is { Length: > 0 } dir
             ? dir
@@ -29,7 +27,21 @@ public sealed record StubOptions
 
     // Skąd brać pliki: pola File są nazwami plików, puste/null → katalog manifestu, tak jak u Velopack.
     // Produkcja: downloadBaseUrl z kontraktu PAK-110 (CDN paczek). Nadpisanie dla CI/testów.
-    public static Uri? OverrideDownloadBase => Environment.GetEnvironmentVariable("PHAKET_INSTALLER_DOWNLOAD_BASE") is { Length: > 0 } url
-        ? new Uri(url)
-        : null;
+    public static Uri? OverrideDownloadBase => ReadUri("PHAKET_INSTALLER_DOWNLOAD_BASE");
+
+    // Tylko HTTPS: nadpisanie z env nie może skierować instalatora na HTTP (MITM podmienia paczkę
+    // razem z hashem). Zły/niewspierany adres → null i błąd E403 przed pierwszym żądaniem.
+    private static Uri? ReadUri(string variable) =>
+        Environment.GetEnvironmentVariable(variable) is { Length: > 0 } url
+            ? Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps ? uri : null
+            : null;
+
+    // Ustawione, ale nie-HTTPS (albo niepoprawne): nazwa pola do kodu błędu E403.
+    public static string? InvalidOverride =>
+        IsInvalid("PHAKET_INSTALLER_MANIFEST", ReadUri(InstallRunner.ManifestVariable))
+            ? "manifest"
+            : IsInvalid("PHAKET_INSTALLER_DOWNLOAD_BASE", OverrideDownloadBase) ? "downloadBaseUrl" : null;
+
+    private static bool IsInvalid(string variable, Uri? parsed) =>
+        parsed is null && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(variable));
 }

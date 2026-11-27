@@ -32,18 +32,26 @@ public static class InstallRunner
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PhaketSetup/0.1 (+https://phaket.app)");
 
         ui.Report(StubStage.Downloading, 0);
+        // Nadpisania env: rozpoznane i odrzucone przed pierwszym żądaniem (zły/niewspierany adres).
+        if (StubOptions.InvalidOverride is { } invalid) { ui.Fail($"E403 {invalid}"); return Failed; }
         try
         {
+            // PRZED pierwszym żądaniem: HTTP (=MITM podmienia paczkę i hash) jest odrzucany.
+            RequireHttps(options.ManifestUri, "manifest");
             var feed = await ReadManifestAsync(http, options.ManifestUri, cts.Token);
             var entry = ManifestParser.SelectLatest(feed) ?? throw new InstallException("E404 full.nupkg");
+            // Baza z downloadBaseUrl odpowiedzi nie może zejść na HTTP — wpisy mają hashe z tego
+            // manifestu, więc każdy serwer z takim manifestem musiałby być zaufany z góry.
+            var baseUri = DownloadBase.Resolve(options.ManifestUri, feed);
+            RequireHttps(baseUri, "downloadBaseUrl");
 
             var package = await Downloader.DownloadVerifiedAsync(http, NetworkTimeout,
-                DownloadBase.Resolve(options.ManifestUri, feed), entry, options.WorkDirectory, new PercentSink(ui), cts.Token);
+                baseUri, entry, options.WorkDirectory, new PercentSink(ui), cts.Token);
 
             if (FirstInstall.SetupEntry(feed) is { } setup)
             {
                 var setupPath = await Downloader.DownloadVerifiedAsync(http, NetworkTimeout,
-                    DownloadBase.Resolve(options.ManifestUri, feed), setup, options.WorkDirectory, null, cts.Token);
+                    baseUri, setup, options.WorkDirectory, null, cts.Token);
                 ui.Report(StubStage.Installing, 100);
                 log?.WriteLine("install=setup.exe");
                 var exit = FirstInstall.RunSetup(setupPath);
@@ -80,6 +88,11 @@ public static class InstallRunner
         {
             Cleanup(options.WorkDirectory);
         }
+    }
+
+    private static void RequireHttps(Uri uri, string detail)
+    {
+        if (uri.Scheme != Uri.UriSchemeHttps) throw new InstallException($"E403 {detail}");
     }
 
     private static async Task<Manifest> ReadManifestAsync(HttpClient http, Uri manifestUri, CancellationToken ct)
