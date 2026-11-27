@@ -253,6 +253,9 @@ public static class PackageMaterializer
     internal static CloneResult TryCloneFile(string source, string destination) =>
         OperatingSystem.IsWindows() ? Windows.TryClone(source, destination) : Linux.TryClone(source, destination);
 
+    // ReFS needs a cluster-aligned clone range; 0 when the volume reported no cluster size.
+    internal static long CloneAlignment(long size, long alignment) => Windows.AlignUp(size, alignment);
+
     // ioctl(FICLONE) shares extents between two files on one btrfs/XFS filesystem.
     private static class Linux
     {
@@ -301,8 +304,10 @@ public static class PackageMaterializer
     // STATUS_INVALID_PARAMETER, which this method would read as "unsupported" while leaving an
     // empty destination behind, so those are fixed up here instead. A non-ReFS volume answers
     // ERROR_INVALID_PARAMETER / ERROR_NOT_SUPPORTED, which is still the fallback signal.
+    // R3d #8: the cluster size comes from GetDiskFreeSpaceW (sectorspercluster * bytespersector),
+    // the destination is grown to the aligned size before any clone and trimmed back after.
     // shortcut: ReFS/Windows has no CI runner yet, so neither the ioctl nor its alignment is
-    // exercised; the raw extent copy is anyway gated by the hash check in MaterializeAsync.
+    // exercised; verify on a real ReFS volume at the first Windows release.
     // Re-check at the first Windows run of release.yml.
     private static class Windows
     {
@@ -335,8 +340,10 @@ public static class PackageMaterializer
         [DllImport("kernel32", EntryPoint = "SetEndOfFile", SetLastError = true)]
         private static extern bool SetEndOfFile(IntPtr handle);
 
-        [DllImport("kernel32", EntryPoint = "GetVolumeInformationW", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern bool GetVolumeInformation(string root, char[]? volumeName, int volumeNameSize, out int serial, out int maxComponentLength, out int flags, char[]? fileSystemName, int fileSystemNameSize);
+        // SectorsPerCluster, BytesPerSector: their product is the volume's cluster size.
+        // GetVolumeInformationW returns a max-component length and flags, not a cluster size.
+        [DllImport("kernel32", EntryPoint = "GetDiskFreeSpaceW", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool GetDiskFreeSpace(string root, out uint sectorsPerCluster, out uint bytesPerSector, out uint freeClusters, out uint totalClusters);
 
         [DllImport("kernel32", EntryPoint = "CloseHandle")]
         private static extern bool CloseHandle(IntPtr handle);
@@ -365,14 +372,21 @@ public static class PackageMaterializer
                 // overwrites it instead of tripping over a missing parent.
                 destinationHandle = CreateFile(destination, DestinationAccess, ShareAll, IntPtr.Zero, 2 /* CREATE_ALWAYS */, NoBuffering, IntPtr.Zero);
                 if (destinationHandle == Invalid) return CloneResult.Failed;
-                if (!SetFilePointerEx(destinationHandle, size, out _, 0) || !SetEndOfFile(destinationHandle))
-                    return CloneResult.Failed;
+                // An unknown geometry cannot be aligned, so no clone is attempted: the caller copies.
                 var align = ClusterSize(destination);
+                if (align <= 0) return CloneResult.Unsupported;
+                // "The destination region must not extend past the end of the file, and neither
+                // may an offset be aligned to a position beyond the destination file size"
+                // (Block cloning on ReFS): the target is grown to the aligned size first, so a
+                // clone request rounded up past the real size still fits inside the file.
+                var aligned = CloneAlignment(size, align);
+                if (!SetFilePointerEx(destinationHandle, aligned, out _, 0) || !SetEndOfFile(destinationHandle))
+                    return CloneResult.Failed;
                 var request = new DuplicateExtentsData { FileHandle = sourceHandle };
                 for (long offset = 0; offset < size;)
                 {
                     request.SourceFileOffset = request.TargetFileOffset = offset;
-                    request.ByteCount = Math.Min((size - offset + align - 1) / align * align, MaxCloneBytes);
+                    request.ByteCount = Math.Min(CloneAlignment(size - offset, align), MaxCloneBytes);
                     if (!DeviceIoControl(destinationHandle, FsctlDuplicateExtentsToFile, ref request, Marshal.SizeOf<DuplicateExtentsData>(), IntPtr.Zero, 0, out _, IntPtr.Zero))
                     {
                         var error = Marshal.GetLastPInvokeError();
@@ -380,9 +394,12 @@ public static class PackageMaterializer
                     }
                     offset += request.ByteCount;
                 }
-                // The fallback copy is skipped on Success, so the size is the only check that the
-                // clone left the whole file behind; a mismatch must not reach the caller as Success.
-                if (!GetFileSizeEx(destinationHandle, out var written) || written != size) return CloneResult.Failed;
+                // Trim the allocation the clone needed back to the source's exact length. The clone
+                // itself may legitimately grow the file to its rounded range, so a size below the
+                // source is the only evidence of a broken copy; anything else is trimmed here.
+                if (!GetFileSizeEx(destinationHandle, out var written) || written < size) return CloneResult.Failed;
+                if (written != size && (!SetFilePointerEx(destinationHandle, size, out _, 0) || !SetEndOfFile(destinationHandle)))
+                    return CloneResult.Failed;
                 return CloneResult.Success;
             }
             finally
@@ -392,13 +409,18 @@ public static class PackageMaterializer
             }
         }
 
-        // ReFS documents a 64 KiB cluster and refuses a non-cluster-aligned range; the sector is
-        // its divisor, so it is a safe alignment when the volume cannot report the cluster.
+        // Bytes per cluster of the volume holding path; 0 when the volume cannot report it, which
+        // makes the caller fall back to a plain copy.
         private static long ClusterSize(string path)
         {
-            if (Path.GetPathRoot(path) is { } root && GetVolumeInformation(root, null, 0, out _, out var sector, out var cluster, null, 0))
-                return Math.Max(cluster >= sector ? cluster : sector, 1);
-            return 1;
+            if (Path.GetPathRoot(Path.GetFullPath(path)) is { Length: > 0 } root
+                && GetDiskFreeSpace(root, out var sectorsPerCluster, out var bytesPerSector, out _, out _))
+                return (long)sectorsPerCluster * bytesPerSector;
+            return 0;
         }
+
+        // The smallest cluster multiple holding size; both ReFS offsets and lengths must be aligned.
+        internal static long AlignUp(long size, long alignment) =>
+            alignment <= 1 ? size : (size + alignment - 1) / alignment * alignment;
     }
 }

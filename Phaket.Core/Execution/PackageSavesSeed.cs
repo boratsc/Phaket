@@ -80,6 +80,9 @@ public static class PackageSavesSeed
         int copied = 0;
         long bytes = 0;
         var used = new HashSet<string>(StringComparer.Ordinal);
+        // R3d #5: the marker claims "this destination holds the user's saves", so it is written
+        // only when every file landed. A failure leaves the copies already made in place and no
+        // marker; the next launch copies what is still missing (copy-if-absent) and marks it then.
         // Several save locations can hold the same relative file (a per-store prefix is not
         // part of the key): the first save tree keeps its layout, the next ones land under
         // saves/<n>/ so no file silently replaces another.
@@ -88,21 +91,27 @@ public static class PackageSavesSeed
             var candidate = used.Add(relative) ? relative : $"saves/{used.Count}/{relative}";
             string destination;
             try { destination = PathBoundary.Resolve(fullTarget, candidate); }
-            catch (PhaketException) { continue; }
+            catch (PhaketException) { return new SeedResult(SeedStatus.Failed, copied, bytes); }
             // The game may already have written this file: the package's own state wins.
             if (File.Exists(destination)) continue;
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             var length = new FileInfo(source).Length;
             try
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 File.Copy(source, destination, overwrite: false);
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new SeedResult(SeedStatus.Failed, copied, bytes); }
             copied++;
             bytes += length;
         }
 
-        WriteMarker(marker, new Marker("package-saves-seed/v1", os, roots, DateTimeOffset.UtcNow));
+        // A marker that cannot be written is the same failure: without it the next launch seeds
+        // again, which is harmless (every copied file is skipped).
+        try { WriteMarker(marker, new Marker("package-saves-seed/v1", os, roots, DateTimeOffset.UtcNow)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new SeedResult(SeedStatus.Failed, copied, bytes);
+        }
         return new SeedResult(SeedStatus.Seeded, copied, bytes);
     }
 

@@ -169,7 +169,9 @@ public class ConflictDecisionDialogTests
             Assert.Equal(1, runs);
             Assert.Equal([ModFile], answer!.Keys);
             Assert.All(answer.Values, decision => Assert.Equal(ConflictDecision.TakeRecipe, decision));
-            Assert.Equal(LocalizationService.Instance["ModInstall.Success"], vm.InstallStatus);
+            // The executor here is a stub, so this run took no save copy: the honest status
+            // says the install succeeded and that it ran without that protection (R3d #7).
+            Assert.StartsWith(LocalizationService.Instance["ModInstall.Success"], vm.InstallStatus, StringComparison.Ordinal);
         }
         finally
         {

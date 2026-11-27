@@ -618,5 +618,7 @@
   "Conflict.Cancel": "Anuluj instalację",
   "Conflict.Hint": "Nic nie zostanie zapisane, dopóki nie wybierzesz.",
   "Conflict.FilesTitle": "Pliki do wyboru",
-  "Conflict.OpenLocation": "Pełna ścieżka"
+  "Conflict.OpenLocation": "Pełna ścieżka",
+  "SaveBackup.NotCopiedWarning": "Nie udało się zrobić kopii Twoich zapisów przed tą instalacją. Możesz grać dalej, ale bez zabezpieczenia.",
+  "SaveBackup.OlderCopyHint": "Nie udało się zrobić nowej kopii zapisów. W sekcji Twoje zapisy gry jest tylko starsza kopia — pamiętaj, że ta instalacja może zmienić zapisy."
 }

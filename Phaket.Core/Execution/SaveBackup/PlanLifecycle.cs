@@ -7,11 +7,13 @@ namespace Phaket.Core.Execution.SaveBackup;
 
 // PAK-141: what must happen before a plan may touch the game tree. An unaccepted
 // plan writes nothing, and a save backup over the limit becomes a profile record.
-public sealed record PlanApproval(bool Accepted, bool SaveBackupIsProfile = false)
+// SaveBackupFailed: the copy was attempted and did not happen (the install still runs).
+public sealed record PlanApproval(bool Accepted, bool SaveBackupIsProfile = false, bool SaveBackupFailed = false)
 {
     public static PlanApproval Accept { get; } = new(true);
     public static PlanApproval Refuse { get; } = new(false);
     public static PlanApproval ProfileOnTooLarge { get; } = new(true, SaveBackupIsProfile: true);
+    public static PlanApproval WithoutBackup { get; } = new(true, SaveBackupFailed: true);
 }
 
 // The save backup one transaction captured, and where it lives.
@@ -80,8 +82,9 @@ public sealed class PlanLifecycle : IPlanLifecycle
         {
             // A copy that could not be made must not block the install: the user's files stay
             // where they are, and the executor still restores the tree from its base copies.
+            // The answer says so, because the UI must not imply a copy this run never made.
             System.Diagnostics.Trace.TraceWarning("phaket: save backup failed for {0}: {1}", context.GameRoot, e.Message);
-            return (PlanApproval.Accept, null);
+            return (PlanApproval.WithoutBackup, null);
         }
     }
 
@@ -116,13 +119,20 @@ public sealed class PlanLifecycle : IPlanLifecycle
     // Distinct save locations — Phaket's profile copies plus where the game itself keeps its
     // saves on this OS; null when the definition has none (behaviour before PAK-141) or no
     // chance of them exists yet.
+    // R3d #4: a sandbox lives in a temporary game root. Its profile copy ("profile://...") is
+    // the throwaway one under that root, so the install reads and keeps it; the game's real
+    // locations (the user's home, ~/.config/unity3d/...) are the player's real progress and are
+    // never read by a sandbox install.
     public SaveBackupRequest? SaveBackupRequest()
     {
         var os = OperatingSystem.IsWindows() ? "windows" : "linux";
+        var sandbox = IsSandbox();
         var locations = (context.Game.SavePaths ?? [])
-            .Concat(context.Game.SaveLocations?.For(os) ?? [])
+            .Concat(sandbox ? [] : context.Game.SaveLocations?.For(os) ?? [])
             .Select(path => ResolveSavePath(path, context.ProfileRoot))
-            .Where(path => path is not null && Directory.Exists(path))
+            .Where(path => path is not null)
+            .Select(path => path!)
+            .Where(path => sandbox ? path.StartsWith(context.ProfileRoot, PathComparison) : Directory.Exists(path))
             .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .Select(path => path!)
             .ToArray();
@@ -133,6 +143,18 @@ public sealed class PlanLifecycle : IPlanLifecycle
         var stateKey = context.StateRoot ?? context.ProfileRoot;
         return new SaveBackupRequest(title, $"{context.ProfileId}-{StableKey(stateKey)}", locations);
     }
+
+    // A sandbox is the temporary game root ModInstallService/InstallViewModel creates: its
+    // game root sits beside its profile directory ("<temp>/game" and "<temp>/profile").
+    private bool IsSandbox()
+    {
+        var gameRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(context.GameRoot));
+        var profileRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(context.ProfileRoot));
+        return string.Equals(Path.GetDirectoryName(gameRoot), Path.GetDirectoryName(profileRoot), PathComparison);
+    }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     // A definition path: "profile://..." under the profile root, "~/..." in the user's home
     // (where the game itself keeps saves), otherwise absolute. Anything else is ignored.

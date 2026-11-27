@@ -618,5 +618,7 @@
   "Conflict.Cancel": "Cancel the install",
   "Conflict.Hint": "Nothing is written until you choose.",
   "Conflict.FilesTitle": "Files to choose",
-  "Conflict.OpenLocation": "Full path"
+  "Conflict.OpenLocation": "Full path",
+  "SaveBackup.NotCopiedWarning": "Your saves could not be copied before this install. You can continue, but without that protection.",
+  "SaveBackup.OlderCopyHint": "No new copy of your saves was made. The Your game saves section holds only an older copy — this install may still change your saves."
 }

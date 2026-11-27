@@ -207,6 +207,30 @@ public sealed class Pak146SavesIsolationTests : IDisposable
         Assert.Equal("package-progress", File.ReadAllText(Path.Combine(home, "playerPrefs")));
     }
 
+    // R3d #5: a file that cannot be copied means no marker (the package would look seeded for
+    // good); what did land stays, and the next launch only fills the gap before marking.
+    [Fact]
+    public void PartialSeedingLeavesNoMarkerAndTheNextLaunchCompletesIt()
+    {
+        var source = SaveTree("saves", ("a/a.dat", "one"), ("b/b.dat", "two"));
+        var home = Path.Combine(root, "package", ".phaket-home", "data");
+        // A directory where the second file must land: the copy inside it fails.
+        var blocker = Path.Combine(home, "b", "b.dat", "inside");
+        Directory.CreateDirectory(blocker);
+
+        var failed = PackageSavesSeed.Seed([home], [source], "linux");
+        Assert.NotEqual(PackageSavesSeed.SeedStatus.Seeded, failed.Status);
+        Assert.False(File.Exists(Path.Combine(home, PackageSavesSeed.MarkerFileName)));
+        Assert.Equal("one", File.ReadAllText(Path.Combine(home, "a", "a.dat")));
+
+        Directory.Delete(Path.Combine(home, "b"), recursive: true);
+        var retry = PackageSavesSeed.Seed([home], [source], "linux");
+        Assert.Equal(PackageSavesSeed.SeedStatus.Seeded, retry.Status);
+        Assert.Equal(1, retry.FilesCopied);
+        Assert.Equal("two", File.ReadAllText(Path.Combine(home, "b", "b.dat")));
+        Assert.True(File.Exists(Path.Combine(home, PackageSavesSeed.MarkerFileName)));
+    }
+
     [Fact]
     public void SeedingSkipsOverTheLimitAndWritesNothing()
     {

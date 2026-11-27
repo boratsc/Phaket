@@ -389,6 +389,19 @@ public sealed class PackageMaterializerTests : IDisposable
         Assert.DoesNotContain(Directory.GetDirectories(root), d => d.Contains(PackageMaterializer.OrphanSuffix));
     }
 
+    // R3d #8: ReFS clones need cluster-aligned ranges, so the size is rounded up to a whole
+    // cluster before the clone and trimmed back afterwards. The arithmetic is platform-neutral.
+    [Fact]
+    public void CloneAlignmentRoundsToTheSmallestClusterMultiple()
+    {
+        Assert.Equal(0, PackageMaterializer.CloneAlignment(0, 65536));
+        Assert.Equal(65536, PackageMaterializer.CloneAlignment(1, 65536));
+        Assert.Equal(65536, PackageMaterializer.CloneAlignment(65536, 65536));
+        Assert.Equal(131072, PackageMaterializer.CloneAlignment(65537, 65536));
+        Assert.Equal(100, PackageMaterializer.CloneAlignment(100, 0)); // no geometry: unchanged
+        Assert.Equal(100, PackageMaterializer.CloneAlignment(100, 1));
+    }
+
     private static IEnumerable<string> CloneCandidates() =>
         OperatingSystem.IsWindows()
             ? [Path.GetTempPath()]

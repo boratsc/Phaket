@@ -376,6 +376,9 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
     {
         if (preparation is not { } acceptedPlan) return;
         IsPreparing = true; InstallStatus = ""; InstallProgress = 0;
+        // R3d #7: the newest full copy before the run, so the status can tell this run's copy
+        // from an older one (the install runs even when the copy fails).
+        var copyBefore = SaveBackupMessages.LastFor(Path.GetFullPath(acceptedPlan.Target.Sandbox ? Path.Combine(acceptedPlan.SandboxRoot, "game") : acceptedPlan.Target.GameRoot), acceptedPlan.StateRoot);
         try
         {
             var progress = new Progress<InstallProgress>(p => InstallProgress = p.Fraction * 100);
@@ -401,13 +404,14 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
                 result = await Task.Run(() => service.ExecuteAsync(acceptedPlan, true, progress, decisions: decisions));
             }
             var loc = LocalizationService.Instance;
-            // PAK-141: a failed install whose transaction took a save backup says where the
-            // user's saves went, so the copy is not a secret of the state folder.
-            var backup = SaveBackupMessages.LastFor(acceptedPlan.Target.GameRoot, acceptedPlan.StateRoot);
-            InstallStatus = result.Success ? loc["ModInstall.Success"]
+            // PAK-141: the outcome says where the copy of the user's saves went, or — when this
+            // run took none — that the install ran without that protection (R3d #7).
+            var gameRoot = Path.GetFullPath(acceptedPlan.Target.Sandbox ? Path.Combine(acceptedPlan.SandboxRoot, "game") : acceptedPlan.Target.GameRoot);
+            var hint = SaveBackupMessages.NewCopyHint(copyBefore, SaveBackupMessages.LastFor(gameRoot, acceptedPlan.StateRoot));
+            InstallStatus = (result.Success ? loc["ModInstall.Success"]
                 : result.ErrorCode is { } code && ErrorMessages.TryGetTemplate(code, loc.CurrentLanguage, out _)
-                    ? ErrorMessages.Format(code, loc.CurrentLanguage, result.ErrorParameters) + SaveBackupMessages.Suffix(backup)
-                    : loc["ModInstall.Failed"] + SaveBackupMessages.Suffix(backup);
+                    ? ErrorMessages.Format(code, loc.CurrentLanguage, result.ErrorParameters)
+                    : loc["ModInstall.Failed"]) + hint;
             ClearInstall(); installedChanged?.Invoke();
         }
         catch (Exception) { ClearInstall(); installedChanged?.Invoke(); InstallStatus = LocalizationService.Instance["ModInstall.Failed"]; }

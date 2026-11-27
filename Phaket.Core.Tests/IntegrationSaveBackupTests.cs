@@ -157,6 +157,7 @@ public sealed class IntegrationSaveBackupTests : IDisposable
     {
         if (OperatingSystem.IsWindows()) return; // the fixture names a home-relative Linux folder
         var real = Directory.CreateTempSubdirectory("phaket-real-saves-").FullName;
+        var game = Directory.CreateTempSubdirectory("phaket-real-game-").FullName;
         try
         {
             File.WriteAllText(Path.Combine(real, "Player.log"), "real-progress");
@@ -167,7 +168,7 @@ public sealed class IntegrationSaveBackupTests : IDisposable
                     ["linux"] = [real],
                 }),
             };
-            var context = Context(definition);
+            var context = Context(definition) with { GameRoot = game };
             var lifecycle = new Phaket.Core.Execution.SaveBackup.PlanLifecycle(context);
 
             var request = lifecycle.SaveBackupRequest();
@@ -176,7 +177,88 @@ public sealed class IntegrationSaveBackupTests : IDisposable
             Assert.Contains(real, request!.Locations);
             Assert.DoesNotContain(profileRoot, request.Locations);
         }
-        finally { Directory.Delete(real, true); }
+        finally { Directory.Delete(real, true); Directory.Delete(game, true); }
+    }
+
+    // R3d #4: a sandbox install must never read the player's real saves. Its profile copy
+    // belongs to the throwaway root, the game's real locations do not.
+    [Fact]
+    public void SandboxBackupRequestKeepsTheThrowawayProfileButNotTheRealSaves()
+    {
+        if (OperatingSystem.IsWindows()) return; // the fixture names a home-relative Linux folder
+        var real = Directory.CreateTempSubdirectory("phaket-real-saves-").FullName;
+        var sandbox = Directory.CreateTempSubdirectory("phaket-sandbox-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(real, "Player.log"), "real-progress");
+            var definition = Definition() with
+            {
+                SaveLocations = new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>>
+                {
+                    ["linux"] = [real],
+                }),
+            };
+            var sandboxProfile = Path.Combine(sandbox, "profile");
+            Directory.CreateDirectory(Path.Combine(sandboxProfile, "saveData"));
+            var context = Context(definition) with { GameRoot = Path.Combine(sandbox, "game"), ProfileRoot = sandboxProfile };
+
+            var request = new PlanLifecycle(context).SaveBackupRequest();
+
+            Assert.NotNull(request);
+            Assert.Contains(Path.Combine(sandboxProfile, "saveData"), request!.Locations);
+            Assert.DoesNotContain(real, request.Locations);
+        }
+        finally
+        {
+            Directory.Delete(real, true);
+            Directory.Delete(sandbox, true);
+        }
+    }
+
+    // The install itself, end to end: a sandbox backup holds no file from the real locations.
+    [Fact]
+    public async Task SandboxInstallNeverCopiesTheRealSaveFiles()
+    {
+        if (OperatingSystem.IsWindows()) return; // the fixture names a home-relative Linux folder
+        var sandbox = Directory.CreateTempSubdirectory("phaket-sandbox-").FullName;
+        var real = Directory.CreateTempSubdirectory("phaket-real-saves-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(real, "Player.log"), "real-progress");
+            var definition = Definition() with
+            {
+                SaveLocations = new SaveLocationsByOs(new Dictionary<string, IReadOnlyList<string>>
+                {
+                    ["linux"] = [real],
+                }),
+            };
+            var gameRoot = Path.Combine(sandbox, "game");
+            var profileRoot = Path.Combine(sandbox, "profile");
+            var stateRoot = Path.Combine(sandbox, "state");
+            Directory.CreateDirectory(gameRoot);
+            Directory.CreateDirectory(Path.Combine(profileRoot, "saveData"));
+            File.WriteAllText(Path.Combine(profileRoot, "saveData", "Player.log"), "sandbox-progress");
+            var context = new PlanExecutionContext(gameRoot, profileRoot, stagingRoot, packageRoot, definition, "test.recipe", "profile-1", stateRoot);
+            var planner = new PlannerContext(
+                "install-1", "profile-1", gameRoot, profileRoot, stagingRoot, packageRoot,
+                definition, new PlanFacts("linux", "steam", "2026.3.5", OperationCatalog.Capabilities, _ => false,
+                    new Dictionary<string, string> { ["bepinex"] = "6.0.0" }, Arch: "x86"));
+            var plan = OperationPlanner.Plan(Recipe("content-v1"), planner);
+
+            var begin = await new PlanLifecycle(context).BeginAsync(plan, ct: Ct);
+
+            var backup = Assert.IsType<SaveBackupRef>(begin.Backup);
+            var copies = Directory.GetFiles(Path.Combine(backup.Directory, "files"), "*.log", SearchOption.AllDirectories);
+            var copy = Assert.Single(copies);
+            Assert.Equal("sandbox-progress", File.ReadAllText(copy));
+            Assert.All(copies, file => Assert.NotEqual("real-progress", File.ReadAllText(file)));
+            Assert.Equal("real-progress", File.ReadAllText(Path.Combine(real, "Player.log")));
+        }
+        finally
+        {
+            Directory.Delete(sandbox, true);
+            Directory.Delete(real, true);
+        }
     }
 
     [Fact]
