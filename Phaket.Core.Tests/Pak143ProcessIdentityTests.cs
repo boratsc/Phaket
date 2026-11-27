@@ -207,6 +207,133 @@ public sealed class Pak143ProcessTrackerTests
         Assert.Throws<System.Text.Json.JsonException>(() => temp.Tracker.Load());
         Assert.Equal("{ not json", File.ReadAllText(temp.Path));
     }
+
+    // The Windows stop is asserted through the OS seam on every platform: the CI failure was a
+    // silent "Stopped" while the process kept running, so each refusal must stay a refusal.
+    [Fact]
+    public void WindowsTerminateRefusalIsNeverReportedAsStopped()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: false, exitsOnTerminate: false);
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(ProcessStopStatus.Failed, result.Status);
+        Assert.Contains("nie miał uprawnień", result.MessagePl);
+        Assert.Contains("not allowed", result.MessageEn);
+        Assert.Equal(1, api.TerminateCalls);
+        Assert.True(api.Closed, "the handle must be closed on every path");
+    }
+
+    [Fact]
+    public void WindowsSignalWithoutTheProcessExitingIsReportedAsFailed()
+    {
+        // The kernel accepts the request but the process stays alive: no confirmation, no "Stopped".
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: false);
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(ProcessStopStatus.Failed, result.Status);
+        Assert.True(api.Closed);
+    }
+
+    [Fact]
+    public void WindowsStopReportsStoppedOnlyAfterTheExitIsConfirmed()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true, exitPollsBeforeGone: 2);
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(ProcessStopStatus.Stopped, result.Status);
+        Assert.Contains("Gra została zatrzymana.", result.MessagePl);
+        Assert.True(api.PollsAfterTerminate >= 3, "the exit has to be confirmed by polling the handle");
+        Assert.True(api.Closed);
+        Assert.False(api.ClosedBeforeTerminate, "the handle must outlive the signal it carries");
+    }
+
+    [Fact]
+    public void WindowsStopOfAMismatchedStartTimeNeverSignals()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true);
+        var record = LiveWindowsRecord() with { StartTime = 1_300_000_000_000_000_001 };
+
+        var result = ProcessTracker.StopWindows(record, force: true, api,
+            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(ProcessStopStatus.IdentityMismatch, result.Status);
+        Assert.Equal(0, api.TerminateCalls);
+        Assert.True(api.Closed);
+    }
+
+    [Fact]
+    public void WindowsStopOfAnAlreadyFinishedProcessIsNotRunning()
+    {
+        var api = new FakeWindowsApi(terminateAccepted: true, exitsOnTerminate: true, exitedBeforeSignal: true);
+
+        var result = ProcessTracker.StopWindows(LiveWindowsRecord(), force: true, api,
+            TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(5));
+
+        Assert.Equal(ProcessStopStatus.NotRunning, result.Status);
+        Assert.Equal(0, api.TerminateCalls);
+        Assert.True(api.Closed);
+    }
+
+    // A record whose Windows start value is the fake's creation time; one constant, so both agree.
+    private static ProcessRecord LiveWindowsRecord() => new(4242, FakeWindowsApi.CreationTime,
+        ProcessStartTimeUnit.WindowsFileTime100Ns, null, DateTimeOffset.FromFileTime(FakeWindowsApi.CreationTime),
+        DateTimeOffset.UtcNow, "among-us", "fake");
+}
+
+// Stands in for kernel32 on any OS: it answers exactly like the real calls on a living process.
+internal sealed class FakeWindowsApi(bool terminateAccepted, bool exitsOnTerminate,
+    int exitPollsBeforeGone = 0, bool exitedBeforeSignal = false) : ProcessTracker.IWindowsProcessApi
+{
+    internal const long CreationTime = 1_330_000_000_000_000_000;
+
+    private bool exited = exitedBeforeSignal;
+
+    public int TerminateCalls { get; private set; }
+
+    public int PollsAfterTerminate { get; private set; }
+
+    public bool Closed { get; private set; }
+
+    public bool ClosedBeforeTerminate { get; private set; }
+
+    public IntPtr Open(int pid, out int error)
+    {
+        error = 0;
+        return pid == 4242 ? new IntPtr(1) : IntPtr.Zero;
+    }
+
+    public bool StartTime(IntPtr handle, out long fileTime100Ns)
+    {
+        fileTime100Ns = CreationTime;
+        return true;
+    }
+
+    public bool Terminate(IntPtr handle, out int error)
+    {
+        TerminateCalls++;
+        error = terminateAccepted ? 0 : 5;
+        return terminateAccepted;
+    }
+
+    public bool HasExited(IntPtr handle)
+    {
+        if (TerminateCalls > 0) PollsAfterTerminate++;
+        if (!exited && exitsOnTerminate && TerminateCalls > 0 && PollsAfterTerminate > exitPollsBeforeGone)
+            exited = true;
+        return exited;
+    }
+
+    public void Close(IntPtr handle)
+    {
+        Closed = true;
+        if (TerminateCalls == 0) ClosedBeforeTerminate = true;
+    }
 }
 
 internal static class Helpers

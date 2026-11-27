@@ -164,60 +164,115 @@ public sealed class ProcessTracker
             "Phaket was not allowed to stop the process, or the system rejected the signal."),
     };
 
-    private ProcessStopResult StopWindows(ProcessRecord record, bool force)
+    // The OS calls behind the Windows stop, so a test can prove the failure paths without Windows.
+    internal interface IWindowsProcessApi
     {
-        const uint terminate = 0x0001;
-        const uint queryLimitedInformation = 0x1000;
+        // Opens with PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION so one handle both
+        // verifies the start time and carries the right to terminate.
+        IntPtr Open(int pid, out int error);
+
+        bool StartTime(IntPtr handle, out long fileTime100Ns);
+
+        bool Terminate(IntPtr handle, out int error);
+
+        // True once the kernel object reports a finished process; false while it is still active
+        // or the answer cannot be read.
+        bool HasExited(IntPtr handle);
+
+        void Close(IntPtr handle);
+    }
+
+    private static readonly IWindowsProcessApi Windows = new Win32ProcessApi();
+
+    private ProcessStopResult StopWindows(ProcessRecord record, bool force) =>
+        StopWindows(record, force, Windows, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(10));
+
+    internal static ProcessStopResult StopWindows(ProcessRecord record, bool force, IWindowsProcessApi api,
+        TimeSpan exitTimeout, TimeSpan pollInterval)
+    {
         const int errorInvalidParameter = 87;
         const int errorAccessDenied = 5;
 
-        var handle = OpenProcess(terminate | queryLimitedInformation, inheritHandle: false, record.Pid);
+        var handle = api.Open(record.Pid, out var openError);
         if (handle == IntPtr.Zero)
         {
-            var error = Marshal.GetLastPInvokeError();
-            return error == errorInvalidParameter
-                ? RemoveAndResult(record, ProcessStopStatus.NotRunning)
-                : error == errorAccessDenied
-                    ? StopResult(ProcessStopStatus.Failed)
-                    : StopResult(ProcessStopStatus.IdentityUnknown);
+            return openError == errorInvalidParameter
+                ? Localized(ProcessStopStatus.NotRunning)
+                : openError == errorAccessDenied
+                    ? Localized(ProcessStopStatus.Failed)
+                    : Localized(ProcessStopStatus.IdentityUnknown);
         }
 
         try
         {
-            if (!GetProcessTimes(handle, out var creation, out _, out _, out _))
-            {
-                return Marshal.GetLastPInvokeError() == errorInvalidParameter
-                    ? RemoveAndResult(record, ProcessStopStatus.NotRunning)
-                    : StopResult(ProcessStopStatus.IdentityUnknown);
-            }
-
-            var raw = ((long)creation.High << 32) | creation.Low;
-            if (raw <= 0) return StopResult(ProcessStopStatus.IdentityUnknown);
+            if (!api.StartTime(handle, out var raw))
+                return Localized(ProcessStopStatus.IdentityUnknown);
+            if (raw <= 0) return Localized(ProcessStopStatus.IdentityUnknown);
             ProcessIdentity identity;
             try
             {
                 identity = new ProcessIdentity(record.Pid, DateTimeOffset.FromFileTime(raw), raw,
-                    ProcessStartTimeUnit.WindowsFileTime100Ns,
-                    BootTimeUtc: DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(GetTickCount64()));
+                    ProcessStartTimeUnit.WindowsFileTime100Ns);
             }
             catch (ArgumentOutOfRangeException)
             {
-                return StopResult(ProcessStopStatus.IdentityUnknown);
+                return Localized(ProcessStopStatus.IdentityUnknown);
             }
 
-            if (!Matches(record, identity)) return RemoveAndResult(record, ProcessStopStatus.IdentityMismatch);
+            if (!Matches(record, identity)) return Localized(ProcessStopStatus.IdentityMismatch);
 
             // shortcut: Windows has no portable graceful stop signal, so both modes use TerminateProcess;
             // upgrade when the UI needs a window-close request before forced termination.
             _ = force;
-            return TerminateProcess(handle, exitCode: 0)
-                ? RemoveAndResult(record, ProcessStopStatus.Stopped)
-                : StopResult(ProcessStopStatus.Failed);
+            // Ask first: a process that is already gone is a truthful "not running".
+            if (api.HasExited(handle)) return Localized(ProcessStopStatus.NotRunning);
+
+            // The request is asynchronous, and its result alone does not say the process died.
+            var accepted = api.Terminate(handle, out _);
+            var deadline = DateTime.UtcNow + exitTimeout;
+            while (!api.HasExited(handle) && DateTime.UtcNow < deadline) Thread.Sleep(pollInterval);
+            if (!api.HasExited(handle)) return Localized(ProcessStopStatus.Failed);
+            // Access denied from TerminateProcess on a finished process is "success", but a refusal
+            // with the process still exiting on its own is not something to report as stopped.
+            if (!accepted) return Localized(ProcessStopStatus.Failed);
+            return Localized(ProcessStopStatus.Stopped);
         }
         finally
         {
-            CloseHandle(handle);
+            api.Close(handle);
         }
+    }
+
+    private sealed class Win32ProcessApi : IWindowsProcessApi
+    {
+        public IntPtr Open(int pid, out int error)
+        {
+            const uint processTerminate = 0x0001;
+            const uint processQueryLimitedInformation = 0x1000;
+            var handle = OpenProcess(processTerminate | processQueryLimitedInformation, inheritHandle: false, pid);
+            error = Marshal.GetLastPInvokeError();
+            return handle;
+        }
+
+        public bool StartTime(IntPtr handle, out long fileTime100Ns)
+        {
+            fileTime100Ns = 0;
+            if (!GetProcessTimes(handle, out var creation, out _, out _, out _)) return false;
+            fileTime100Ns = ((long)creation.High << 32) | creation.Low;
+            return true;
+        }
+
+        public bool Terminate(IntPtr handle, out int error)
+        {
+            var terminated = TerminateProcess(handle, exitCode: 0);
+            error = Marshal.GetLastPInvokeError();
+            return terminated;
+        }
+
+        public bool HasExited(IntPtr handle) =>
+            WaitForSingleObject(handle, waitMilliseconds: 0) == WaitObject0;
+
+        public void Close(IntPtr handle) => CloseHandle(handle);
     }
 
     private ProcessStopResult StopLinux(ProcessRecord record, bool force)
@@ -278,6 +333,9 @@ public sealed class ProcessTracker
 
     private enum ProcessCheck { Alive, Missing, Mismatch, Unknown }
 
+    // WAIT_OBJECT_0 from WaitForSingleObject: the kernel object is signalled, i.e. the process has exited.
+    private const uint WaitObject0 = 0;
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
 
@@ -287,6 +345,9 @@ public sealed class ProcessTracker
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(IntPtr handle, uint waitMilliseconds);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
