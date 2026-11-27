@@ -23,6 +23,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // Window-level auth dialog: the mod provision starts several pages deep, so its
     // Steam password / Guard prompt is shown by the shell (PAK-102).
     public SteamPromptViewModel SteamPrompt => SteamPromptViewModel.Shared;
+    // PAK-142: the file conflict question is window-level too: an install starts from the
+    // mods page or the catalog, both deep inside the shell.
+    public ConflictDecisionViewModel ConflictDecision => ConflictDecisionViewModel.Shared;
     public RecipeStudioViewModel RecipeStudio { get; }
     public SettingsViewModel Settings { get; }
     // Shared with the settings page ("run initial setup") and the shell's wizard host; App

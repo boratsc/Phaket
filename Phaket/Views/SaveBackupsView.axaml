@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             x:Class="Phaket.Views.SaveBackupsView"
+             x:DataType="vm:SaveBackupsViewModel">
+  <Grid>
+    <Border Classes="card" Padding="12">
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+          <StackPanel Spacing="2">
+            <TextBlock Classes="sectionTitle" Text="{Binding [SaveBackup.Title], Source={x:Static services:LocalizationService.Instance}}"
+                       AutomationProperties.HeadingLevel="2" />
+            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                       Text="{Binding [SaveBackup.Subtitle], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="icon" Command="{Binding LoadCommand}" VerticalAlignment="Center" IsVisible="{Binding HasCopies}"
+                  ToolTip.Tip="{Binding [SaveBackup.Load], Source={x:Static services:LocalizationService.Instance}}"
+                  AutomationProperties.Name="{Binding [SaveBackup.Load], Source={x:Static services:LocalizationService.Instance}}">
+            <mi:MaterialIcon Kind="Refresh" Width="16" Height="16" />
+          </Button>
+        </Grid>
+
+        <StackPanel IsVisible="{Binding IsEmpty}" Spacing="5" Orientation="Horizontal">
+          <mi:MaterialIcon Kind="ContentSaveOutline" Width="16" Height="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+          <TextBlock Classes="muted" TextWrapping="Wrap"
+                     Text="{Binding [SaveBackup.Empty], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+
+        <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding HasItems}"
+                      AutomationProperties.Name="{Binding [SaveBackup.Title], Source={x:Static services:LocalizationService.Instance}}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SaveBackupItem">
+              <Border Classes="selectableRow" Padding="9" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                  <mi:MaterialIcon Grid.Column="0" Kind="ContentSaveMoveOutline" Width="18" Height="18"
+                                   Foreground="{DynamicResource GoldTextBrush}" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DateText}" FontWeight="SemiBold" />
+                    <TextBlock Classes="muted" FontSize="12">
+                      <Run Text="{Binding SizeText}" /><Run Text=" · " /><Run Text="{Binding CopiesHint}" />
+                    </TextBlock>
+                    <TextBlock Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" MaxLines="1"
+                               ToolTip.Tip="{Binding LocationText}" Text="{Binding LocationText}" />
+                  </StackPanel>
+                  <Button Grid.Column="2" Classes="secondary" VerticalAlignment="Center"
+                          Command="{Binding $parent[ItemsControl].((vm:SaveBackupsViewModel)DataContext).RestoreCommand}"
+                          CommandParameter="{Binding}"
+                          AutomationProperties.Name="{Binding [SaveBackup.Restore], Source={x:Static services:LocalizationService.Instance}}"
+                          Content="{Binding [SaveBackup.Restore], Source={x:Static services:LocalizationService.Instance}}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Border IsVisible="{Binding PendingRestore, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource RaisedBrush}" Padding="10" CornerRadius="6"
+                AutomationProperties.LiveSetting="Assertive">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{Binding RestoreQuestion}" TextWrapping="Wrap" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="primary" Command="{Binding ConfirmRestoreCommand}"
+                    AutomationProperties.Name="{Binding [SaveBackup.RestoreConfirm], Source={x:Static services:LocalizationService.Instance}}"
+                    Content="{Binding [SaveBackup.RestoreConfirm], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="secondary" Command="{Binding CancelRestoreCommand}"
+                    AutomationProperties.Name="{Binding [SaveBackup.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                    Content="{Binding [SaveBackup.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </StackPanel>
+        </Border>
+
+        <StackPanel IsVisible="{Binding HasCopies}">
+          <CheckBox IsChecked="{Binding PruneConsent}"
+                    AutomationProperties.Name="{Binding [SaveBackup.PruneConsent], Source={x:Static services:LocalizationService.Instance}}"
+                    Content="{Binding [SaveBackup.PruneConsent], Source={x:Static services:LocalizationService.Instance}}" />
+          <Button Classes="secondary" HorizontalAlignment="Left" IsEnabled="{Binding CanPrune}"
+                  Command="{Binding PruneCommand}"
+                  AutomationProperties.Name="{Binding [SaveBackup.Prune], Source={x:Static services:LocalizationService.Instance}}"
+                  Content="{Binding [SaveBackup.Prune], Source={x:Static services:LocalizationService.Instance}}" />
+        </StackPanel>
+
+        <Border IsVisible="{Binding IsPruneOpen}" Background="{DynamicResource RaisedBrush}" Padding="10" CornerRadius="6"
+                AutomationProperties.LiveSetting="Assertive">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{Binding PruneQuestion}" TextWrapping="Wrap" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="primary" Command="{Binding PruneConfirmedCommand}"
+                    AutomationProperties.Name="{Binding [SaveBackup.PruneConfirm], Source={x:Static services:LocalizationService.Instance}}"
+                    Content="{Binding [SaveBackup.PruneConfirm], Source={x:Static services:LocalizationService.Instance}}" />
+            <Button Classes="secondary" Command="{Binding CancelPruneCommand}"
+                    AutomationProperties.Name="{Binding [SaveBackup.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+                    Content="{Binding [SaveBackup.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+          </StackPanel>
+        </StackPanel>
+        </Border>
+
+        <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

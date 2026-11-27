@@ -28,6 +28,7 @@
     <DataTemplate DataType="{x:Type vm:CommunitiesViewModel}"><views:CommunitiesView /></DataTemplate>
     <DataTemplate DataType="{x:Type vm:DownloadsViewModel}"><views:DownloadsView /></DataTemplate>
     <DataTemplate DataType="{x:Type vm:SelectGameViewModel}"><views:EmptyStateView /></DataTemplate>
+    <DataTemplate DataType="{x:Type vm:SaveBackupsViewModel}"><views:SaveBackupsView /></DataTemplate>
   </Window.DataTemplates>
   <Grid RowDefinitions="62,*,33" ColumnDefinitions="231,*" Background="{DynamicResource AppBackgroundBrush}" x:Name="ShellRoot">
     <Grid.Styles>
@@ -250,6 +251,16 @@
               Background="{DynamicResource RaisedBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
               BoxShadow="0 12 30 0 #44000000">
         <views:SteamPromptDialog DataContext="{Binding SteamPrompt}" />
+      </Border>
+    </Grid>
+
+    <!-- Two-sided file conflict (PAK-142): asked before the install writes anything. -->
+    <Grid Grid.RowSpan="3" Grid.ColumnSpan="2" ZIndex="21" IsVisible="{Binding ConflictDecision.IsOpen}"
+          Background="#99000000">
+      <Border Classes="card" Width="520" MaxWidth="600" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="{DynamicResource RaisedBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+              BoxShadow="0 12 30 0 #44000000">
+        <views:ConflictDecisionDialog DataContext="{Binding ConflictDecision}" />
       </Border>
     </Grid>
 

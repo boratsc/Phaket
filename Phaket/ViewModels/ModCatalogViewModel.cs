@@ -11,6 +11,7 @@ using Phaket.Core.Accounts;
 using Phaket.Core.Catalog;
 using Phaket.Core.Domain;
 using Phaket.Core.Execution;
+using Phaket.Core.Execution.SaveBackup;
 using Phaket.Core.Mods;
 using Phaket.Core.Omrl;
 using Phaket.Core.Platforms;
@@ -350,8 +351,31 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanExecuteInstall))]
     private async Task ExecuteInstallAsync()
     {
-        if (!CanExecuteInstall()) return;
-        var acceptedPlan = preparation!; IsPreparing = true; InstallStatus = ""; InstallProgress = 0;
+        if (preparation is not { } acceptedPlan) return;
+        // A direct call is refused like the disabled button: no accepted plan, nothing runs.
+        if (!PlanAccepted || !HasPreview || IsPreparing) return;
+        // PAK-142: the executor refuses an undecided plan before any write; asking first keeps
+        // the question in one place instead of an exception the user must guess about.
+        var open = InstallConflicts.RequiringDecision(acceptedPlan.Plans);
+        if (open.Count > 0) { await AskForConflictAsync(open); return; }
+        await RunInstallAsync(null);
+    }
+
+    private async Task AskForConflictAsync(IReadOnlyList<OperationPlan> plans)
+    {
+        // The question shows the two-sided files; the answer covers every conflict of those plans.
+        var paths = plans.SelectMany(plan => plan.Conflicts)
+            .Where(conflict => conflict.Resolution == PlanLifecycle.ConflictsRequireDecision)
+            .Select(conflict => conflict.Path).ToArray();
+        var answer = await ConflictDecisionViewModel.Shared.RequestAsync(paths);
+        if (answer is not { } decision) return; // cancelled: nothing ran, nothing is approved
+        await RunInstallAsync(InstallConflicts.Decide(plans, decision));
+    }
+
+    private async Task RunInstallAsync(IReadOnlyDictionary<string, ConflictDecision>? decisions)
+    {
+        if (preparation is not { } acceptedPlan) return;
+        IsPreparing = true; InstallStatus = ""; InstallProgress = 0;
         try
         {
             var progress = new Progress<InstallProgress>(p => InstallProgress = p.Fraction * 100);
@@ -375,14 +399,29 @@ public partial class ModCatalogViewModel : ViewModelBase, IDisposable
                 result = await Task.Run(() => service.ExecuteAsync(acceptedPlan, true, progress));
             }
             var loc = LocalizationService.Instance;
+            // PAK-141: a failed install whose transaction took a save backup says where the
+            // user's saves went, so the copy is not a secret of the state folder.
+            var backup = SaveBackupMessages.LastFor(acceptedPlan.Target.GameRoot, acceptedPlan.StateRoot);
             InstallStatus = result.Success ? loc["ModInstall.Success"]
                 : result.ErrorCode is { } code && ErrorMessages.TryGetTemplate(code, loc.CurrentLanguage, out _)
-                    ? ErrorMessages.Format(code, loc.CurrentLanguage, result.ErrorParameters)
-                    : loc["ModInstall.Failed"];
+                    ? ErrorMessages.Format(code, loc.CurrentLanguage, result.ErrorParameters) + SaveBackupMessages.Suffix(backup)
+                    : loc["ModInstall.Failed"] + SaveBackupMessages.Suffix(backup);
             ClearInstall(); installedChanged?.Invoke();
         }
         catch (Exception) { ClearInstall(); installedChanged?.Invoke(); InstallStatus = LocalizationService.Instance["ModInstall.Failed"]; }
         finally { IsPreparing = false; }
+    }
+
+    private async Task AskForConflictAsync(InstallPreparation acceptedPlan)
+    {
+        var plans = InstallConflicts.RequiringDecision(acceptedPlan.Plans);
+        // The question shows the two-sided files; the answer covers every conflict of those plans.
+        var paths = plans.SelectMany(plan => plan.Conflicts)
+            .Where(conflict => conflict.Resolution == PlanLifecycle.ConflictsRequireDecision)
+            .Select(conflict => conflict.Path).ToArray();
+        var answer = await ConflictDecisionViewModel.Shared.RequestAsync(paths);
+        if (answer is not { } decision) return; // cancelled: nothing ran, nothing is approved
+        await RunInstallAsync(InstallConflicts.Decide(plans, decision));
     }
     [RelayCommand]
     private void OpenPackage()

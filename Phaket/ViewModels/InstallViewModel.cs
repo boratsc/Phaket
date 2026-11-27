@@ -255,6 +255,9 @@ public partial class InstallViewModel : ViewModelBase
                 var plan = OperationPlanner.Plan(recipe, context);
                 // Nothing matched: run no tool and register nothing (PAK-65).
                 if (plan.Operations.Count == 0) throw new PhaketException(ErrorCodes.PlanEmpty);
+                // PAK-142: this page has no per-file decision UI, so it refuses before the
+                // first write instead of asking the executor and failing mid-transaction.
+                if (InstallConflicts.RequiresDecision([plan])) throw new PhaketException(ErrorCodes.FileConflictRequiresDecision);
                 token.ThrowIfCancellationRequested();
                 if (plan.RequiresDownload)
                     await PackageDownloader.EnsureArtifactsAsync(recipe, packages, transport ?? new HttpPackageTransport(),

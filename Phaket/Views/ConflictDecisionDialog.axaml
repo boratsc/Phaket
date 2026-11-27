@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Phaket.ViewModels"
+             xmlns:services="using:Phaket.Services"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             x:Class="Phaket.Views.ConflictDecisionDialog"
+             x:DataType="vm:ConflictDecisionViewModel"
+             KeyboardNavigation.TabNavigation="Cycle">
+  <StackPanel Spacing="12">
+    <TextBlock Text="{Binding [Conflict.Title], Source={x:Static services:LocalizationService.Instance}}"
+               FontSize="18" FontWeight="Bold" TextWrapping="Wrap"
+               AutomationProperties.HeadingLevel="2" AutomationProperties.LiveSetting="Assertive" />
+    <TextBlock Text="{Binding [Conflict.Body], Source={x:Static services:LocalizationService.Instance}}" TextWrapping="Wrap" />
+    <StackPanel Spacing="4" IsVisible="{Binding HasFiles}"
+                AutomationProperties.Name="{Binding [Conflict.FilesTitle], Source={x:Static services:LocalizationService.Instance}}">
+      <TextBlock Classes="muted" FontSize="12" Text="{Binding [Conflict.FilesTitle], Source={x:Static services:LocalizationService.Instance}}" />
+      <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Files}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ConflictFileItem">
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2"
+                          ToolTip.Tip="{Binding LocationHint}"
+                          AutomationProperties.Name="{Binding LocationHint}">
+                <mi:MaterialIcon Kind="FileEditOutline" Width="14" Height="14" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" FontSize="12" Text="{Binding Directory}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+    <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+               Text="{Binding [Conflict.Hint], Source={x:Static services:LocalizationService.Instance}}" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Classes="secondary" Command="{Binding CancelCommand}"
+              AutomationProperties.Name="{Binding [Conflict.Cancel], Source={x:Static services:LocalizationService.Instance}}"
+              Content="{Binding [Conflict.Cancel], Source={x:Static services:LocalizationService.Instance}}" />
+      <Button Classes="secondary" Command="{Binding KeepLocalCommand}"
+              AutomationProperties.Name="{Binding [Conflict.KeepLocal], Source={x:Static services:LocalizationService.Instance}}"
+              Content="{Binding [Conflict.KeepLocal], Source={x:Static services:LocalizationService.Instance}}" />
+      <Button Classes="primary" Command="{Binding TakeRecipeCommand}"
+              AutomationProperties.Name="{Binding [Conflict.TakeRecipe], Source={x:Static services:LocalizationService.Instance}}"
+              Content="{Binding [Conflict.TakeRecipe], Source={x:Static services:LocalizationService.Instance}}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

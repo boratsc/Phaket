@@ -159,14 +159,19 @@ public partial class GameViewModel : ViewModelBase
     private readonly Action openShare;
     private readonly Action openGraph;
     private readonly Action openReport;
+    private readonly string appDataRoot;
     private string? lastBackup;
 
     public GameViewModel(GameCatalogItem game, Action back,
         Action? openMods = null, Action? openProfiles = null, Action? openBackup = null,
         Action? openCompatibility = null, Action? openInstall = null, Action? openBuilds = null,
-        Action? openShare = null, Action? openGraph = null, Action? openReport = null)
+        Action? openShare = null, Action? openGraph = null, Action? openReport = null,
+        // Test seam: the app data root the save copies live under.
+        string? appDataRoot = null)
     {
         Game = game;
+        this.appDataRoot = appDataRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "phaket");
         this.back = back;
         this.openMods = openMods ?? (() => { });
         this.openProfiles = openProfiles ?? (() => { });
@@ -180,7 +185,12 @@ public partial class GameViewModel : ViewModelBase
         var profile = store.Active(game.Definition.Slug);
         Game.ProfileName = profile?.Name ?? "Profil domyślny";
         Game.ModCount = profile?.Mods.Count(m => m.Enabled) ?? 0;
+        // PAK-141: the copies of this game's saves, right where the game's other actions are.
+        SaveBackups = SaveBackupsViewModel.ForGame(this.appDataRoot, game.Definition.Slug);
     }
+
+    // "Your game saves": listed when the section appears (SaveBackupsView), not eagerly.
+    public SaveBackupsViewModel SaveBackups { get; }
 
     public GameCatalogItem Game { get; }
     public string Hero => Game.Hero;

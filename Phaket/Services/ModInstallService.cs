@@ -435,7 +435,10 @@ public sealed class ModInstallService
     }
 
     public async Task<InstallOutcome> ExecuteAsync(InstallPreparation preparation, bool planAccepted,
-        IProgress<InstallProgress>? progress = null, CancellationToken ct = default, string? targetProfileId = null)
+        IProgress<InstallProgress>? progress = null, CancellationToken ct = default, string? targetProfileId = null,
+        // PAK-142: the user's answer for the plans' two-sided conflicts. Without it a plan that
+        // has one is refused by the executor before the first write.
+        IReadOnlyDictionary<string, ConflictDecision>? decisions = null)
     {
         if (!planAccepted) throw new PhaketException("PLAN_NOT_ACCEPTED");
         // PAK-65: a plan with no operations means the recipe did not match this installation.
