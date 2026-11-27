@@ -115,8 +115,8 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
                 ct.ThrowIfCancellationRequested();
                 journal = ExecuteOperation(plan, journal, operation.OpId);
             }
-            // The plan's own verification steps carry the recipe's hash: a file the user kept
-            // would fail it, so those steps are checked for existence only.
+            // A kept file is user-owned, so omit its recipe verification; the baseline still
+            // captures the actual post-install tree.
             return Complete(PlanWithKeptVerification(plan, decisions), journal, decisions);
         }
         catch (OperationCanceledException)
@@ -249,17 +249,15 @@ public sealed class PlanExecutor : IPlanExecutorHost, IPlanLifecycle
         Omrl.BaselineSync.OperationTouches(operation, kept, context.GameRoot,
             operation.Kind is "archive.extract" or "loader.ensure" ? PlanArchiveWrites(operation) : null);
 
-    // The verification a plan really leaves: a kept file cannot carry the recipe's hash as its
-    // post-condition — the user's file is the answer, so only its existence is checked.
+    // A kept file is user-owned: its recipe hash does not apply, so omit its verification step.
     internal OperationPlan PlanWithKeptVerification(OperationPlan plan,
         IReadOnlyDictionary<string, ConflictDecision>? decisions)
     {
         var kept = KeptPaths(plan, decisions);
         return kept.Count == 0 ? plan : plan with
         {
-            Verification = [.. plan.Verification.Select(step =>
-                Omrl.BaselineSync.OperationTouches(step, kept, context.GameRoot, plannedFiles: null)
-                    ? step with { Sha256 = null } : step)],
+            Verification = [.. plan.Verification.Where(step =>
+                !Omrl.BaselineSync.OperationTouches(step, kept, context.GameRoot, plannedFiles: null))],
         };
     }
 

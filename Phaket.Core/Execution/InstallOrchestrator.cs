@@ -66,15 +66,9 @@ public sealed class InstallOrchestrator
             if (receipts is not null) _ = receipts.SendAsync(receiptContext?.GameId ?? "", receiptContext?.ModFullName ?? plan.RecipeRef.Id, plan.RecipeRef.Version, receiptContext?.Store, "failed", (ex as PhaketException)?.Error.Code ?? ex.GetType().Name, cancellationToken);
             throw;
         }
-        // Complete(plan, journal) also records the new agreed baseline. The plan's own
-        // verification steps carry the recipe's hash, so a file the user kept would fail its
-        // step: it is checked for existence only (no hash). A conflict without an answer wrote
-        // no baseline, so that half is not decided here.
-        var verify = plan with
-        {
-            Verification = [.. plan.Verification.Select(step =>
-                operations.Contains(step) || !plan.Operations.Contains(step) ? step : step with { Sha256 = null })],
-        };
+        // Kept files are user-owned, so skip their recipe-hash verification by path; Complete
+        // still captures the baseline from disk. A conflict without an answer writes no baseline.
+        var verify = executor.PlanWithKeptVerification(plan, decisions);
         journal = executor.Complete(verify, journal);
         if (plan.Conflicts.All(c => c.Resolution != PlanLifecycle.ConflictsRequireDecision
                 || decisions?.ContainsKey(c.Path) == true)) executor.SaveBaselineAfter(plan);

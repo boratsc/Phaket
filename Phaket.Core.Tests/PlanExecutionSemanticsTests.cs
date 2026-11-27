@@ -190,8 +190,7 @@ public sealed class PlanExecutionSemanticsTests : IDisposable
 
     // --- #2: the recipe hash of a kept file must not fail Complete ---
 
-    // P1 is separate: verify per-path behavior after KeepLocal is not part of this recovery batch.
-    [Fact(Skip = "P1: verify per-path (R3d #2)")]
+    [Fact]
     public void KeepLocalCompletesDespiteTheRecipeHashVerification()
     {
         File.WriteAllText(Path.Combine(packageRoot, "mod-bundle"), "recipe-v1");
