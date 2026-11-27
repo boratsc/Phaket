@@ -228,13 +228,12 @@ internal static class Helpers
         }
     }
 
-    // The helper keeps running for minutes and dies with Kill: `sleep` on POSIX, cmd's `ping`
-    // on Windows (each count waits ~1 s), so both identity paths are exercised for real.
+    // The helper keeps running for minutes and dies with Kill: `sleep` on POSIX, `ping` (each
+    // count waits ~1 s) on Windows — one process each, no shell wrapper, so both identity
+    // paths are exercised for real and TerminateProcess ends the whole tracked helper.
     internal static Helper Spawn()
     {
-        var process = OperatingSystem.IsWindows()
-            ? Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 300 127.0.0.1 >nul") { UseShellExecute = false })!
-            : Process.Start(new ProcessStartInfo("sleep", "300") { UseShellExecute = false })!;
+        var process = ProcessTestHelper.Start();
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline && !ProcessIdentity.TryGetProcessIdentity(process.Id).found)
             Thread.Sleep(10);

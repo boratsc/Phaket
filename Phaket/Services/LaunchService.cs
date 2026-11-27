@@ -8,6 +8,9 @@ namespace Phaket.Services;
 public sealed record LaunchOutcome(bool Started, bool Tracked, bool SavesShared = false)
 {
     public static LaunchOutcome Failed { get; } = new(false, false);
+
+    // Diagnostic detail for a refused start; null for a successful start. Never shown to users.
+    internal string? Failure { get; init; }
 }
 
 // One-click launch (simplicity): "Graj" opens the game through the Steam
@@ -60,8 +63,12 @@ public sealed class LaunchService
     public LaunchOutcome LaunchExecutable(string? executable, string? workingDirectory, string? appId,
         string? sessionLabel, string? directArguments, IReadOnlyDictionary<string, string>? environment, bool savesShared)
     {
-        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return LaunchOutcome.Failed;
+        // A launcher-installed game runs by name (Steam hands over the exe path with the game's
+        // working directory); only a rooted executable can be checked for existence here.
+        if (string.IsNullOrWhiteSpace(executable) || (Path.IsPathRooted(executable) && !File.Exists(executable)))
+            return LaunchOutcome.Failed with { Failure = $"missing executable '{executable}'" };
         int pid;
+        Process? process = null;
         try
         {
             var info = new ProcessStartInfo
@@ -72,23 +79,41 @@ public sealed class LaunchService
                 UseShellExecute = false,
             };
             foreach (var (key, value) in environment ?? new Dictionary<string, string>()) info.Environment[key] = value;
-            pid = Process.Start(info)?.Id ?? 0;
+            process = Process.Start(info);
+            pid = process?.Id ?? 0;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            return LaunchOutcome.Failed;
+            return LaunchOutcome.Failed with { Failure = $"{e.GetType().Name}: {e.Message}" };
         }
-        if (pid <= 0) return LaunchOutcome.Failed;
+        if (pid <= 0 || process is null) return LaunchOutcome.Failed;
+        using var child = process;
 
         var (found, identity) = ProcessIdentity.TryGetProcessIdentity(pid);
         if (!found || identity is null) return new LaunchOutcome(true, false, savesShared);
         var record = ProcessRecord.FromIdentity(identity, appId, sessionLabel);
         trackers.Save(record);
-        // Not alive right after the start means a launcher handed over and exited.
-        if (trackers.IsAlive(record)) return new LaunchOutcome(true, true, savesShared);
+        // Still alive right after the start means the game is ours to track. On Windows the
+        // image starts suspended and TerminateProcess queues: the exit code stays STILL_ACTIVE
+        // while it lives, so liveness is read from the child itself, not only from the store.
+        // A false here means a launcher handed over and exited.
+        if (trackers.IsAlive(record) || StillActive(process))
+            return new LaunchOutcome(true, true, savesShared);
         trackers.Remove(record);
         return new LaunchOutcome(true, false, savesShared);
     }
+
+    private static bool StillActive(Process process)
+    {
+        try
+        {
+            return !process.HasExited || process.ExitCode == StillActiveExitCode;
+        }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    // Win32 STILL_ACTIVE: also what a suspended process reports before it is resumed.
+    private const int StillActiveExitCode = 259;
 
     // The newest record of this app, or null when Phaket never launched the game directly.
     public ProcessRecord? Tracked(string? appId) =>

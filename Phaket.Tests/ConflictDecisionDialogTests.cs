@@ -15,7 +15,14 @@ namespace Phaket.Tests;
 // names the files in plain words, offers one global answer, and cancelling runs nothing.
 public class ConflictDecisionDialogTests
 {
+    // Windows has no POSIX temp root: a literal "/tmp/..." would land on the current drive.
+    private static string TempPath(string relative) =>
+        Path.Combine(Path.GetTempPath(), "opencode", relative);
+
     private static readonly string ModFile = Path.Combine(Path.GetTempPath(), "game", "BepInEx", "plugins", "NiceMod.dll");
+
+    // The plan's write target is a real path under the sandbox game root (see Sandbox).
+    private static string GamePluginsDirectory => Path.Combine(Path.GetTempPath(), "game", "BepInEx", "plugins");
 
     // A real executor over a temp sandbox: the conflict gate is the one under test.
     private static (PlanExecutor Executor, string GameRoot) Sandbox()
@@ -38,16 +45,18 @@ public class ConflictDecisionDialogTests
     private static OperationPlan ConflictPlan() => new(OperationPlan.CurrentSchemaVersion, new RecipeRef("mod", "2"),
         "installation-1", "install-profile",
         // A write that needs no package: the conflict, not the copy, is what this test drives.
-        [new PlannedOperation("op", "directory.ensure", "game://BepInEx/plugins", null, null, null, [], "", "", "", [])],
+        // TargetPath is an absolute filesystem path (the executor's contract), never a virtual
+        // URI: "game:" as a path segment does not exist on Windows.
+        [new PlannedOperation("op", "directory.ensure", GamePluginsDirectory, null, null, null, [], "", "", "", [])],
         // An overwrite proposal is not the user's call; only the two-sided edit is.
         [new PlanConflict(ModFile, ["local:installation-1", "remote:mod"], PlanLifecycle.ConflictsRequireDecision),
          new PlanConflict(ModFile + ".old", ["op"], "overwrite")],
         [], false, []);
 
     private static InstallPreparation Preparation(OperationPlan plan) => new("among-us", "Owner-Mod", "2.0",
-        "http://127.0.0.1:1", new InstallTarget("/tmp/opencode/pak142-target", "steam", true),
+        "http://127.0.0.1:1", new InstallTarget(TempPath("pak142-target"), "steam", true),
         [plan], [], [], [new InstallPreview("Owner-Mod", "2.0", ["plugins/NiceMod.dll"], 42)],
-        "/tmp/opencode/pak142-sandbox", "", "", "", "");
+        TempPath("pak142-sandbox"), "", "", "", "");
 
     [AvaloniaFact]
     public void TheDialogShowsFriendlyFileNamesAndAnswersTheGlobalChoice()

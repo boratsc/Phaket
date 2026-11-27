@@ -7,31 +7,47 @@ namespace Phaket.Tests;
 // PAK-143 integration: a direct launch is recorded with PID + start time and can be
 // stopped; steam:// leaves no record; the view model stops fail-closed.
 // Tests only ever spawn and stop their own helper process, never a real game.
-// The helper is a POSIX `sleep` or a Windows `cmd /c ping -n 300`; both paths of ProcessTracker
+// The helper is a POSIX `sleep` or a Windows `ping`; both paths of ProcessTracker
 // (pidfd/signal and OpenProcess/GetProcessTimes/TerminateProcess) are exercised for real.
 public class LaunchProcessTrackingTests : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("phaket-launch-track-").FullName;
     private string Store => Path.Combine(root, "processes.json");
 
-    // Helper: a long-running child of ours. cmd's `ping` waits ~1 s per count and needs no
-    // shell, so it dies with TerminateProcess just like the POSIX `sleep`.
-    private static string HelperArgs() => OperatingSystem.IsWindows() ? "/c ping -n 300 127.0.0.1 >nul" : "";
+    // Helper: a long-running process of ours. POSIX: `sleep 300`. Windows: `ping` (each count waits
+    // ~1 s) started directly, never `cmd /c ...`, so the recorded PID is the process that is
+    // tracked and TerminateProcess ends it (a shell wrapper would leave its child running).
+    private static (string executable, string arguments) Helper() =>
+        OperatingSystem.IsWindows() ? ("ping", "-n 300 127.0.0.1") : ("sleep", "300");
 
-    private static (string executable, string arguments) Helper()
+    // Same shape LaunchService builds: a bare file name resolved through PATH, never a directory.
+    private static ProcessStartInfo ServiceStartInfo(string executable, string workingDirectory, string arguments) => new()
     {
-        if (OperatingSystem.IsWindows()) return ("cmd.exe", HelperArgs());
-        var script = Path.Combine(Path.GetTempPath(), $"phaket-launch-helper-{Guid.NewGuid():N}.sh");
-        File.WriteAllText(script, "#!/bin/sh\nsleep 300\n");
-        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return (script, "");
+        FileName = executable,
+        Arguments = arguments,
+        WorkingDirectory = workingDirectory,
+        UseShellExecute = false,
+    };
+
+    [Fact]
+    public void TheHelperIsALoneProcessTheServiceCanLaunch()
+    {
+        var (executable, arguments) = Helper();
+
+        Assert.False(Path.IsPathRooted(executable));
+        Assert.DoesNotContain('>', arguments);
+        var startInfo = ServiceStartInfo(executable, Path.GetTempPath(), arguments);
+        Assert.Equal(executable, startInfo.FileName);
+        Assert.False(startInfo.UseShellExecute);
     }
 
     // Launch and wait until the record is readable: under load the child may not be in /proc yet.
     private static Phaket.Core.Execution.ProcessRecord LaunchAndTrack(LaunchService service, string appId)
     {
         var (executable, arguments) = Helper();
-        service.LaunchExecutable(executable, null, appId, "fixture", arguments);
+        var outcome = service.LaunchExecutable(executable, null, appId, "fixture", arguments);
+        // Started=false only ever means "refused before starting anything": nothing is left to kill.
+        Assert.True(outcome.Started, $"the service refused to start {executable} {arguments}: {outcome.Failure}");
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (true)
         {
