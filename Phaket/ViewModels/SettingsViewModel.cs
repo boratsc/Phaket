@@ -600,7 +600,10 @@ public partial class SettingsViewModel : ViewModelBase
                 try { await activeStore.DeleteAsync(key, CancellationToken.None); }
                 catch (SecretStoreException ex) { error = Describe(ex.Code).Error; }
                 catch (CryptographicException ex) { error = Describe(CodeOf(ex)).Error; }
-                try { File.Delete(Path.Combine(secretDirectory, key + ".bin")); }
+                // A session-only fallback store is not the whole picture: the platform store may still hold the key.
+                if (!EncryptedStore.TryDeleteFromStore(SecretStoreFactory.Create(), key))
+                    error = error.Length > 0 ? error : Loc("Settings.Secrets.Error.Unavailable");
+                try { EncryptedStore.DeleteFiles(Path.Combine(secretDirectory, key + ".bin")); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { error = Loc("Settings.Secrets.Error.Unavailable"); }
             }
             SecretStatusText = error.Length > 0 ? error : Loc("Settings.Secrets.Deleted");

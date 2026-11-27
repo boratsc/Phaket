@@ -457,7 +457,7 @@
   "Account.SteamCred.Deleted": "Steam credentials were removed from the secret store.",
   "Account.SteamCred.Username": "Steam account name",
   "Account.SteamCred.Password": "Password",
-  "Account.SteamCred.Remember": "Keep these credentials in the system's native secret store.",
+  "Account.SteamCred.Remember": "Keep these credentials in the system's native secret store (optional).",
   "Account.SteamCred.Confirm": "Save and use",
   "Account.SteamCred.Error.Username": "Enter a valid Steam account name (no control characters).",
   "Account.SteamCred.Error.Password": "Enter the password — one line without line breaks.",

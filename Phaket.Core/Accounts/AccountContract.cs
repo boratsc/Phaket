@@ -143,17 +143,46 @@ internal sealed class EncryptedStore(string path, ISecretStore? store = null)
         try
         {
             Task.Run(() => protector.DeleteAsync()).GetAwaiter().GetResult();
-            try { File.Delete(path); }
-            catch (DirectoryNotFoundException) { }
-            string metadata = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "secrets-meta");
-            string name = Path.GetFileNameWithoutExtension(path);
-            if (Directory.Exists(metadata))
-            {
-                File.Delete(Path.Combine(metadata, name + ".pending"));
-                File.Delete(Path.Combine(metadata, name + ".migrated"));
-            }
+            DeleteFiles(path);
             NeedsMigration = false;
         }
         finally { SecretMigration.Gate.Release(); }
     }
+
+    // Erasing a secret must leave nothing that decrypts it back (PAK-61): the legacy blob, the encrypted
+    // backup that migration made and the legacy key file. A file that cannot be erased throws, so the
+    // caller never reports a deletion that left a decryptable copy behind.
+    internal static void DeleteFiles(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string directory = Path.GetDirectoryName(fullPath)!;
+        string name = Path.GetFileNameWithoutExtension(fullPath);
+        DeleteFile(fullPath);
+        DeleteFile(Path.Combine(directory, "migrated", name + ".bak"));
+        DeleteFile(Path.Combine(directory, "key.bin"));
+        string metadata = Path.Combine(directory, "secrets-meta");
+        if (Directory.Exists(metadata))
+        {
+            DeleteFile(Path.Combine(metadata, name + ".pending"));
+            DeleteFile(Path.Combine(metadata, name + ".migrated"));
+        }
+    }
+
+    private static void DeleteFile(string file)
+    {
+        try { File.Delete(file); }
+        catch (DirectoryNotFoundException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { throw new SecretStoreException("SECRET_STORE_UNAVAILABLE", "Nie można usunąć pliku sekretu / Cannot delete a secret file.", ex); }
+    }
+
+    // "Delete secrets" must also drop the store entries that back the same keys; a provider without
+    // a delete operation leaves them to the active store alone.
+    internal static bool TryDeleteFromStore(ISecretStore store, string key) => store is not ISecretKeyDeleter deleter || deleter.TryDelete(key);
+}
+
+// Implemented by stores that can erase a key without the current session's password.
+internal interface ISecretKeyDeleter
+{
+    bool TryDelete(string key);
 }

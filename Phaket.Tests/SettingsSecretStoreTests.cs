@@ -233,6 +233,31 @@ public class SettingsSecretStoreTests
     }
 
     [AvaloniaFact]
+    public async Task Delete_after_migration_leaves_no_decryptable_copy()
+    {
+        using var h = Create();
+        string legacy = CreateLegacy(h.Directory), original = File.ReadAllText(legacy);
+        h.ViewModel.MigrationConsent = true;
+        await h.ViewModel.MigrateSecretsCommand.ExecuteAsync(null);
+        string backup = Path.Combine(h.Directory, "migrated", "epic.bak"), legacyKey = Path.Combine(h.Directory, "key.bin");
+        Assert.Equal(original, File.ReadAllText(backup));
+        if (!OperatingSystem.IsWindows()) Assert.True(File.Exists(legacyKey));
+
+        h.ViewModel.ConfirmDelete = true;
+        await h.ViewModel.DeleteSecretsCommand.ExecuteAsync(null);
+        Assert.Equal(LocalizationService.Instance["Settings.Secrets.Deleted"], h.ViewModel.SecretStatusText);
+        Assert.False(File.Exists(legacy));
+        Assert.False(File.Exists(backup));
+        Assert.False(File.Exists(legacyKey));
+        Assert.False(File.Exists(Path.Combine(h.Directory, "secrets-meta", "epic.migrated")));
+        Assert.False(File.Exists(Path.Combine(h.Directory, "secrets-meta", "epic.pending")));
+        // The store entry is gone too: nothing can read the secret back.
+        Assert.Null(await h.Store.GetAsync("epic", TestContext.Current.CancellationToken));
+        var reader = new EncryptedStore(Path.Combine(h.Directory, "epic.bin"), h.Store);
+        Assert.Null(await reader.LoadAsync(TestContext.Current.CancellationToken));
+    }
+
+    [AvaloniaFact]
     public async Task Delete_reports_store_failure_and_still_clears_confirmation()
     {
         using var h = Create(new FakeStore("SECRET_STORE_LOCKED"), keys: ["epic", "steam"]);

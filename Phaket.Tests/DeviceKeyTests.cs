@@ -35,6 +35,17 @@ public sealed class DeviceKeyTests
 
     private sealed record CapturedRequest(string Method, string Path, IReadOnlyDictionary<string, string> Headers, byte[] Body);
 
+    // A key store that cannot be opened: every read fails, as a locked or missing secret store does.
+    private sealed class UnavailableSecretStore : ISecretStore
+    {
+        public Task<byte[]?> GetAsync(string key, CancellationToken cancellationToken = default) =>
+            throw new SecretStoreException("SECRET_STORE_LOCKED", "Magazyn jest zablokowany / The secret store is locked.");
+        public Task SetAsync(string key, byte[] value, CancellationToken cancellationToken = default) =>
+            throw new SecretStoreException("SECRET_STORE_LOCKED", "Magazyn jest zablokowany / The secret store is locked.");
+        public Task DeleteAsync(string key, CancellationToken cancellationToken = default) =>
+            throw new SecretStoreException("SECRET_STORE_LOCKED", "Magazyn jest zablokowany / The secret store is locked.");
+    }
+
     private sealed class CaptureHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond,
         List<CapturedRequest>? requests = null) : HttpMessageHandler
     {
@@ -206,6 +217,75 @@ public sealed class DeviceKeyTests
             using var body = JsonDocument.Parse(published.Body);
             Assert.Equal(1, body.RootElement.GetProperty("snapshot").GetProperty("schemaVersion").GetInt32());
             Assert.Equal("github", body.RootElement.GetProperty("snapshot").GetProperty("items")[0].GetProperty("source").GetString());
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    // PAK-83: the production composition is App -> DeviceIdentityServices.Current -> SignedHttpHandler ->
+    // DeviceKeyStore. A failed device registration must stop the publication before anything beyond the
+    // refused registration reaches the network.
+    [Fact]
+    public async Task Modpack_publish_is_blocked_before_http_when_device_registration_fails()
+    {
+        string root = TestAccounts.TempPath();
+        Directory.CreateDirectory(root);
+        var secretStore = new MemorySecretStore();
+        var keys = new DeviceKeyStore(secretStore, Path.Combine(root, "settings.json"));
+        try
+        {
+            await secretStore.SetAsync(DeviceKeyStore.SecretKey, new byte[32], cancellationToken: TestContext.Current.CancellationToken);
+            var requests = new List<CapturedRequest>();
+            var handler = new CaptureHandler((_, _) => Task.FromResult(JsonResponse("{}")), requests);
+            var identity = new DeviceIdentityServices(keys, new DeviceKeySigner(keys), () => handler);
+            DeviceIdentityServices.SetCurrent(identity);
+            const string endpoint = "https://api.example.test/";
+            // The server answered without the device fingerprint: registration counts as failed.
+            await Assert.ThrowsAsync<InvalidDataException>(() => identity.RegisterDeviceAsync(endpoint, TestContext.Current.CancellationToken));
+            Assert.Equal(["/devices"], requests.Select(request => request.Path));
+
+            // Same route the app takes when it has no signer of its own to hand.
+            using var api = new ModpackApiClient(endpoint, root);
+            var pack = new ModpackDefinition
+            {
+                Name = "Mod pack", Description = "Snapshot", GameId = "among-us",
+                Items = [new ModpackMod { Name = "Mod A", Version = "1.0", Source = "github", Repository = "owner/repo", Tag = "v1", AssetId = "mod.zip" }]
+            };
+            await Assert.ThrowsAsync<InvalidDataException>(() => api.PublishAsync(pack, "mod-pack", cancellationToken: TestContext.Current.CancellationToken));
+            // Only refused registrations left the device: the publication itself was never sent.
+            Assert.DoesNotContain(requests, request => request.Path.StartsWith("/packages", StringComparison.Ordinal));
+            Assert.All(requests, request => Assert.Equal("/devices", request.Path));
+        }
+        finally
+        {
+            // Fresh context: a Current left set here would register a deleted identity in later tests.
+            DeviceIdentityServices.SetCurrent(new DeviceIdentityServices(keys, new DeviceKeySigner(keys, registerBeforeSigning: false)));
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    // PAK-83: a key store that cannot hand out the device key stops the request before the signer
+    // would have sent it — no half-signed publication ever reaches the server.
+    [Fact]
+    public async Task Unavailable_key_store_stops_signed_publish_before_any_http()
+    {
+        string root = TestAccounts.TempPath();
+        Directory.CreateDirectory(root);
+        try
+        {
+            var keys = new DeviceKeyStore(new UnavailableSecretStore(), Path.Combine(root, "settings.json"));
+            var requests = new List<CapturedRequest>();
+            using var api = new ModpackApiClient(
+                new HttpClient(new SignedHttpHandler(new CaptureHandler((_, _) => Task.FromResult(JsonResponse("{}")), requests),
+                    keys, new DeviceKeySigner(keys), new Uri("https://api.example.test/")))
+                { BaseAddress = new Uri("https://api.example.test/") },
+                root, new DeviceKeySigner(keys));
+            var pack = new ModpackDefinition
+            {
+                Name = "Mod pack", Description = "Snapshot", GameId = "among-us",
+                Items = [new ModpackMod { Name = "Mod A", Version = "1.0", Source = "github", Repository = "owner/repo", Tag = "v1", AssetId = "mod.zip" }]
+            };
+            await Assert.ThrowsAsync<SecretStoreException>(() => api.PublishAsync(pack, "mod-pack", cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Empty(requests);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

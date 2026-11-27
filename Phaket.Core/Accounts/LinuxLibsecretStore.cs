@@ -7,7 +7,7 @@ public interface ILibsecretNative
     string? Invoke(string operation, string key, string? value, CancellationToken cancellationToken);
 }
 
-public sealed class LinuxLibsecretStore(ILibsecretNative? native = null, TimeSpan? timeout = null) : ISecretStore
+public sealed class LinuxLibsecretStore(ILibsecretNative? native = null, TimeSpan? timeout = null) : ISecretStore, ISecretKeyDeleter
 {
     private readonly ILibsecretNative _native = native ?? new LibsecretNative();
     private readonly TimeSpan _timeout = timeout ?? TimeSpan.FromSeconds(10);
@@ -24,6 +24,14 @@ public sealed class LinuxLibsecretStore(ILibsecretNative? native = null, TimeSpa
         await Run("set", key, Convert.ToBase64String(value), cancellationToken);
     }
     public async Task DeleteAsync(string key, CancellationToken cancellationToken = default) => await Run("delete", key, null, cancellationToken);
+
+    // A keyring has no session password to re-enter, so "delete secrets" reaches it here too (PAK-61).
+    // A locked keyring can still refuse; the active store's own deletion is reported separately.
+    public bool TryDelete(string key)
+    {
+        try { DeleteAsync(key).GetAwaiter().GetResult(); return true; }
+        catch (Exception e) when (e is SecretStoreException or OperationCanceledException) { return false; }
+    }
 
     private async Task<string?> Run(string operation, string key, string? value, CancellationToken cancellationToken)
     {

@@ -20,7 +20,7 @@ public partial class SteamSigninDialogViewModel : ObservableObject
     [ObservableProperty] private string username = "";
     [ObservableProperty] private string password = "";
     [ObservableProperty] private string statusMessage = "";
-    [ObservableProperty] private bool remember = true;
+    [ObservableProperty] private bool remember;
     [ObservableProperty] private bool hasCredentials;
     [ObservableProperty] private string credentialUsername = "";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(DeleteCommand))] private bool confirmDelete;
@@ -73,8 +73,10 @@ public partial class SteamSigninDialogViewModel : ObservableObject
         pending = waiting;
         Username = prefilledUsername;
         Password = "";
+        // Fresh status line: a message from the previous attempt must not block the next save.
         StatusMessage = "";
-        Remember = true;
+        // Storing credentials is a choice, not a default: every opening starts unchecked (PAK-60).
+        Remember = false;
         IsOpen = true;
         SteamInstallCredentials? answer;
         try { answer = await waiting.Task.WaitAsync(TimeSpan.FromMinutes(5)).ConfigureAwait(false); }

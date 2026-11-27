@@ -192,6 +192,8 @@ public sealed class SessionPrivacyTests : IDisposable
         if (stale)
         {
             var old = DateTimeOffset.UtcNow.AddDays(-2);
+            // A user settings file carries the age of the session as well.
+            File.SetLastWriteTimeUtc(Path.Combine(session, "user.json"), old.UtcDateTime);
             Directory.SetLastWriteTimeUtc(session, old.UtcDateTime);
             Directory.SetCreationTimeUtc(session, old.UtcDateTime);
         }
@@ -236,6 +238,50 @@ public sealed class SessionPrivacyTests : IDisposable
         Assert.True(Directory.Exists(fresh));
         Assert.True(Directory.Exists(foreign));
         Assert.False(Directory.Exists(stale));
+    }
+
+    // PAK-60: a long download or a wait for the Steam Guard code writes its tool files without touching
+    // the session directory itself, so an active session can look days old. Only a session whose whole
+    // tree was last written long ago is an orphan.
+    private sealed class FixedTimeSweepRoot : IDisposable
+    {
+        public string Root { get; }
+        public FixedTimeSweepRoot(string name)
+        {
+            Root = Path.Combine(Path.GetTempPath(), $"phaket-sweep-{name}-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Root);
+            DirTimes(Root, DateTimeOffset.UtcNow.AddDays(-3));
+        }
+        public void Dispose() { try { Directory.Delete(Root, true); } catch (IOException) { } }
+    }
+
+    [Theory]
+    [InlineData(true)]   // tool file written a minute ago: the session is alive
+    [InlineData(false)]  // nothing written for days: orphan
+    public void SweepKeepsSessionWhoseToolFilesAreStillBeingWritten(bool active)
+    {
+        using var sweepRoot = new FixedTimeSweepRoot("active-" + active);
+        var session = Path.Combine(sweepRoot.Root, Guid.NewGuid().ToString("N"));
+        var toolData = Path.Combine(session, "data", "DepotDownloader");
+        Directory.CreateDirectory(toolData);
+        string toolFile = Path.Combine(toolData, "ticket.bin");
+        File.WriteAllText(toolFile, "x");
+
+        var old = DateTimeOffset.UtcNow.AddDays(-3);
+        // Dated as if written long ago; the live session gets a recent ticket write.
+        File.SetLastWriteTimeUtc(toolFile, (active ? DateTimeOffset.UtcNow.AddMinutes(-1) : old).UtcDateTime);
+        DirTimes(toolData, old);
+        DirTimes(session, old);
+
+        SessionSweep.SweepOrphans(sweepRoot.Root, TimeSpan.FromHours(24));
+        Assert.Equal(active, Directory.Exists(session));
+    }
+
+    // Created now, but every entry is dated as if written long ago.
+    private static void DirTimes(string path, DateTimeOffset time)
+    {
+        Directory.SetLastWriteTimeUtc(path, time.UtcDateTime);
+        Directory.SetCreationTimeUtc(path, time.UtcDateTime);
     }
 
     public void Dispose() => Directory.Delete(root, recursive: true);

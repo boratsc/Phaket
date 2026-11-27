@@ -304,8 +304,10 @@ public sealed class SteamInstallFlowViewModelTests : IDisposable
         var install = h.Flow.ExecuteCommand.ExecuteAsync(null);
         Assert.True(h.Flow.SigninDialog!.IsOpen);
         Assert.False(h.Flow.DialogCredentialOpen);
-        Assert.True(h.Flow.SigninDialog.Remember);
+        Assert.False(h.Flow.SigninDialog.Remember);
         h.Flow.SigninDialog.Password = "fresh-password";
+        // Storing the sign-in is opt-in (PAK-60): only this explicit tick saves it.
+        h.Flow.SigninDialog.Remember = true;
         await h.Flow.SigninDialog.ConfirmCommand.ExecuteAsync(null);
         await install;
         Assert.True(h.Flow.Success);

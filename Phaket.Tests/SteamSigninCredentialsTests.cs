@@ -41,7 +41,8 @@ public class SteamSigninCredentialsTests
         var vm = Vm(out var store);
         var asked = vm.AskAsync("");
         Assert.True(vm.IsOpen);
-        Assert.True(vm.Remember);
+        Assert.False(vm.Remember);
+        vm.Remember = true;
         vm.Username = " tester ";
         vm.Password = "secret123";
         await vm.ConfirmCommand.ExecuteAsync(null);
@@ -54,6 +55,40 @@ public class SteamSigninCredentialsTests
         Assert.Equal("secret123", (await store.ReadAsync(Ct))!.Password);
         // The dialog clears the typed password.
         Assert.Equal("", vm.Password);
+    }
+
+    [Fact]
+    public async Task RememberStartsUncheckedAndResetsOnEveryOpen()
+    {
+        var vm = Vm(out var store);
+        Assert.False(vm.Remember);
+        var first = vm.AskAsync("");
+        vm.Remember = true;
+        vm.Username = "tester";
+        vm.Password = "secret123";
+        await vm.ConfirmCommand.ExecuteAsync(null);
+        Assert.NotNull(await first);
+        // Reopening never assumes consent from the previous answer.
+        var second = vm.AskAsync("");
+        Assert.False(vm.Remember);
+        vm.Username = "tester";
+        vm.Password = "secret123";
+        await vm.ConfirmCommand.ExecuteAsync(null);
+        Assert.NotNull(await second);
+        Assert.Equal("secret123", (await store.ReadAsync(Ct))!.Password);
+    }
+
+    [Fact]
+    public async Task WithoutExplicitConsentNothingIsStored()
+    {
+        var vm = Vm(out var store);
+        var asked = vm.AskAsync("");
+        vm.Username = "tester";
+        vm.Password = "secret123";
+        await vm.ConfirmCommand.ExecuteAsync(null);
+        Assert.NotNull(await asked);
+        Assert.False(vm.HasCredentials);
+        Assert.Null(await store.ReadAsync(Ct));
     }
 
     [Fact]
@@ -75,6 +110,7 @@ public class SteamSigninCredentialsTests
     {
         var vm = Vm(out var store);
         var asked = vm.AskAsync("");
+        vm.Remember = true;
         vm.Password = "secret123";
         vm.CancelCommand.Execute(null);
         Assert.Null(await asked);
@@ -91,6 +127,7 @@ public class SteamSigninCredentialsTests
     {
         var vm = Vm(out var store);
         var asked = vm.AskAsync("");
+        vm.Remember = true;
         vm.Username = username;
         vm.Password = password;
         await vm.ConfirmCommand.ExecuteAsync(null);
@@ -129,6 +166,7 @@ public class SteamSigninCredentialsTests
         Assert.Equal(Loc["Account.SteamCred.Error.Locked"], vm.StatusMessage);
         Assert.False(vm.HasCredentials);
         var asked = vm.AskAsync("tester");
+        vm.Remember = true;
         vm.Password = "secret123";
         await vm.ConfirmCommand.ExecuteAsync(null);
         Assert.Equal(Loc["Account.SteamCred.Error.Locked"], vm.StatusMessage);
@@ -148,6 +186,7 @@ public class SteamSigninCredentialsTests
         await store.SaveAsync("tester", "secret123", Ct);
         await vm.RefreshCommand.ExecuteAsync(null);
         var asked = vm.AskAsync("tester");
+        vm.Remember = true;
         vm.Username = "tester";
         vm.Password = "new secret456";
         await vm.ConfirmCommand.ExecuteAsync(null);

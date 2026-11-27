@@ -457,7 +457,7 @@
   "Account.SteamCred.Deleted": "Usunięto poświadczenia Steam z magazynu sekretów.",
   "Account.SteamCred.Username": "Nazwa konta Steam",
   "Account.SteamCred.Password": "Hasło",
-  "Account.SteamCred.Remember": "Zapamiętaj poświadczenia w natywnym magazynie sekretów systemu.",
+  "Account.SteamCred.Remember": "Zapamiętaj poświadczenia w natywnym magazynie sekretów systemu (opcjonalnie).",
   "Account.SteamCred.Confirm": "Zapisz i użyj",
   "Account.SteamCred.Error.Username": "Podaj prawidłową nazwę konta Steam (bez znaków sterujących).",
   "Account.SteamCred.Error.Password": "Podaj hasło — jedna linia bez znaków nowej linii.",

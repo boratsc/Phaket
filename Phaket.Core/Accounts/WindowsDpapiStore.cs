@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Phaket.Core.Accounts;
 
-public sealed class WindowsDpapiStore(string directory) : ISecretStore
+public sealed class WindowsDpapiStore(string directory) : ISecretStore, ISecretKeyDeleter
 {
     private static readonly byte[] Header = "PHKT2\x01"u8.ToArray();
     private static readonly byte[] Entropy = SHA256.HashData("org.phaket.secretstore.v1"u8);
@@ -66,6 +66,13 @@ public sealed class WindowsDpapiStore(string directory) : ISecretStore
         try { File.Delete(path); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { throw Unavailable(ex); }
         return Task.CompletedTask;
+    }
+
+    // DPAPI unlocks with the logged-in user, so "delete secrets" needs no extra password here (PAK-61).
+    public bool TryDelete(string key)
+    {
+        try { DeleteAsync(key).GetAwaiter().GetResult(); return true; }
+        catch (Exception e) when (e is SecretStoreException or OperationCanceledException) { return false; }
     }
 
     private static SecretStoreException UnavailablePlatform() => new("SECRET_STORE_UNAVAILABLE", "Magazyn DPAPI jest niedostępny / DPAPI store is unavailable.");
